@@ -4,37 +4,30 @@ Updated: 2026-09-15.
 
 ## Current milestone
 
-Documentation foundation. User authorized development and asked to start with agent documents/context. Application implementation has not started.
+P1 Core Domain + Persistent Job Model is complete. The application remains one modular monolith; the overall P1/MVP is not complete.
 
-## Completed
+## Implemented
 
-- Inspected workspace: initially empty, no Git repository or existing source/configuration.
-- Initialized local Git repository on `main`; no remote, commit, or push created.
-- Copied original PRD unchanged into `docs/product/`; added section index and SHA-256 provenance.
-- Added root agent guidance, compact project summary, architecture baseline, decisions, incremental backlog, Figma handoff, README, and artifact/secret ignore rules.
-
-## Next development slice
-
-DEV-01 in [PLAN](../development/PLAN.md): inspect installed .NET/Node/PostgreSQL tooling, scaffold API and project persistence, configure local data root, and verify create/read/update across restart. Choose and record exact compatible dependency versions at that time.
-
-Backend/domain work does not depend on Figma. Implement visual UI against the user's handoff once supplied. Do not treat documentation completion as MVP completion.
-
-## Pending inputs and limitations
-
-- Figma: in progress with user; file/frame references, tokens, and assets not supplied. Needed for faithful visual implementation.
-- Production PC: OS/CPU/GPU/RAM/free disk and recording device unknown; this workspace path does not establish the production hardware.
-- Development toolchain: not inventoried; no packages, services, or models installed by this task.
-- Pilot: no kickoff, source media, benchmark, publication, audience data, or revenue recorded.
-- Runtime licenses/model revisions: candidates from PRD only; no local activation decision yet.
+- Persistent WSL toolchain: .NET SDK 10.0.401 in `~/.dotnet`; Node.js 24.17.0 LTS and npm 11.13.0 through nvm. `global.json`, `.nvmrc`, package engines, and Microsoft.Testing.Platform pin the repository workflow.
+- PostgreSQL development runtime upgraded from 16.10 to 18.6 Alpine. The verified-empty local volume was recreated and mounted at the PostgreSQL 18 layout `/var/lib/postgresql`; loopback-only exposure and the named volume remain.
+- `ContentProject`: application-generated UUID, title/brief, full content lifecycle, explicit valid/rework transitions, and UTC `DateTimeOffset` timestamps.
+- `Job`: business-oriented type, queued/running/succeeded/failed/cancelled lifecycle, bounded retry behavior, input hash, JSONB payload/result, error details, UTC timestamps, and minimal worker/lease fields for the next claiming slice.
+- Explicit EF Core mappings provide snake_case tables/columns, string enums, UUID keys, JSONB, FK restriction, retry constraints, and minimal status/created-time polling indexes.
+- First real migration `20260915160805_InitialCoreDomain` creates only `content_projects`, `jobs`, and EF migration history.
+- One test project covers content transitions, Job lifecycle/retries/JSON validation, and real PostgreSQL persistence/query/JSONB round-trips. `ContentItem` remains deferred because this slice has no separate persisted artifact requiring it.
 
 ## Verification
 
-- Passed: inline `python3` verification of byte-for-byte source copy and SHA-256, all 15 local Markdown links, and startup files below 600 words each.
-- Passed: `git diff --no-index --check` against each generated Markdown file; original PRD preserved unchanged.
-- Passed: `git check-ignore` covers local secrets, runtime media/models, and build artifacts. Agent/context docs and `.env.example` remain eligible for Git (expected exit 1 when none match).
-- `git status --short`: new documentation and `.gitignore` are untracked; no application source or existing user changes.
-- Application build/tests: not run; no application code exists.
+- PASS - persistent toolchain: .NET 10.0.401, Node 24.17.0 LTS, npm 11.13.0, Docker 29.1.3, Compose v2.40.3, PostgreSQL 18.6.
+- PASS - `dotnet restore AIStudio.slnx` and Release build; 0 warnings/errors.
+- PASS - `dotnet format AIStudio.slnx --verify-no-changes --no-restore`; 0 files changed.
+- PASS - `dotnet test AIStudio.slnx --no-build --configuration Release`; 11 passed, 0 failed.
+- PASS - NuGet vulnerability, deprecation, and outdated checks; none reported.
+- PASS - `npm ci`, production build, `npm audit`, and direct outdated check; 0 vulnerabilities/updates.
+- PASS - Compose validation, PostgreSQL health, migration apply/list, table/column verification, and zero pending migrations.
+- PASS - persistence test inserted, queried, round-tripped, and removed disposable rows; final project/job row counts are zero.
+- PASS - API startup/DI/configuration and PostgreSQL connectivity; root, liveness, and readiness returned HTTP 200.
 
-## Update discipline
+## Known issues and next task
 
-Replace current status after meaningful work. Record actual verification commands/results and a concrete next task. Move lengthy evidence into the relevant document; do not append transcripts or mark unimplemented features complete.
+Docker Desktop's saved registry credentials still reject normal pulls; the official PostgreSQL 18.6 image was pulled anonymously with an isolated temporary Docker config. No product API/worker execution was added. Next recommended milestone: **P1 Persistent Worker Execution + Safe PostgreSQL Job Claiming**, only under a separate instruction.

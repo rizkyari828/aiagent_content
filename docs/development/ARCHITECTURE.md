@@ -1,6 +1,6 @@
 # Architecture baseline
 
-Status: intended design from PRD v0.7, not implemented. Read PRD §§11–19 and §§24–26 for full contracts.
+Status: P1 Foundation implemented; later product modules remain intended design. Read PRD §§11–19 and §§24–26 for full contracts.
 
 ## Runtime boundaries
 
@@ -14,22 +14,36 @@ Browser (React + TypeScript + Vite)
 Operator → YouTube Studio manually → record publication ID
 ```
 
-Modules: Content, Research, AI, Assets, Production, Publishing, Measurement. Use internal interfaces and small adapters. Begin with folders where separate assemblies add no value; no microservices or queue broker required. Python is a media runner, not a second general application backend.
+Modules: Content, Research, AI, Assets, Production, Publishing, Measurement. The initial deployment is a modular monolith with explicit module boundaries and contracts. The intended evolution is **Modular Core + Specialized Workers**: resource-intensive or independently scalable workloads may later be extracted without turning the core product into distributed infrastructure prematurely.
 
-Proposed source layout when scaffolding starts:
+Likely extraction candidates are AI inference/Ollama, research/crawling, TTS, Whisper, image/video generation, FFmpeg rendering, media processing, publishing workers, and analytics ingestion. Keep orchestration and product rules in the modular core; isolate workload adapters behind application-owned contracts and pass serializable, versioned inputs rather than sharing infrastructure implementation details.
+
+P1 remains a single deployable core. Do not add RabbitMQ, Kafka, Redis messaging, service discovery, an API gateway, Kubernetes, per-module databases, distributed tracing, or microservice networking without demonstrated need. PostgreSQL and in-process calls are the initial coordination mechanisms. Python remains a bounded media runner, not a second general application backend.
+
+Implemented source layout:
 
 ```text
-src/AIStudio.Api/       # API, host, initially folder-based application/domain/infrastructure
+src/AIStudio.Api/       # ASP.NET Core composition root
 src/AIStudio.Web/       # React UI, aligned to user Figma
+src/AIStudio.Application/ # Use cases and core-owned contracts
+src/AIStudio.Domain/    # Domain rules and models
+src/AIStudio.Infrastructure/ # PostgreSQL/EF Core and external adapters
 media/                 # transcription/media runners when needed
 tests/                 # behavior/integration checks as features land
 docs/                  # specification, current context, decisions, runbooks
 data/                  # ignored runtime root
 ```
 
+## Local development topology
+
+Windows hosts the browser and Docker Desktop. Source code, .NET/Node tooling, API, and Web run inside WSL2. Docker Desktop exposes its WSL2-backed engine to the distribution, and development containers must be reachable from WSL.
+
+PostgreSQL development uses root `compose.yaml` with the official `postgres:16-alpine` image, environment-provided database credentials/port, and named volume `aistudio-postgres-data`. It is the only development container.
+
 ## Data and lifecycle
 
 - Add entities per slice. PRD entities: Content, ResearchSource/Claim, ScriptVersion, Asset/AssetUsage, RenderManifest, Approval, Job, Publication, MetricObservation, TimeEntry, CostEntry, RevenueEntry, ExperimentNote.
+- EF Core and Npgsql are isolated in Infrastructure. `ApplicationDbContext` currently has no entity sets, so no empty migration exists; the first migration waits for a real persistent domain model.
 - Store media on disk using paths relative to a configured root. Database holds metadata/references and selected JSONB fields; no media blobs.
 - Content lifecycle: Draft → Researching → IdeaReview → Scripting → ScriptReview → Producing → FinalReview → ReadyToPublish → Published; Archived is separate. Define allowed transitions and revisions as implemented; do not assume a generic status setter is sufficient.
 - Jobs: Queued, Running, Succeeded, Failed, Cancelled. Atomic claim/lease, reconciliation after expiry, input hashes, bounded retry, output reuse, controlled child-process cancellation. GPU-heavy concurrency one.

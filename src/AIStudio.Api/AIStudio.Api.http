@@ -1,0 +1,16 @@
+@AIStudio.Api_HostAddress = http://localhost:5002
+
+GET {{AIStudio.Api_HostAddress}}/
+Accept: application/json
+
+###
+
+GET {{AIStudio.Api_HostAddress}}/health/live
+Accept: application/json
+
+###
+
+GET {{AIStudio.Api_HostAddress}}/health/ready
+Accept: application/json
+
+###

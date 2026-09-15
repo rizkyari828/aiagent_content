@@ -2,24 +2,133 @@
 
 Studio produksi konten lokal untuk satu operator dan satu channel YouTube, berdasarkan PRD v0.7.
 
-**Status:** dokumentasi awal tersedia; aplikasi belum diimplementasikan. Pengguna sedang mengerjakan desain Figma secara paralel.
+**Status:** P1 Foundation, P1.1 Local Development Runtime, dan milestone Core Domain + Persistent Job Model selesai. P1/MVP secara keseluruhan belum selesai; workflow konten dan UI produk masih menunggu milestone berikutnya serta handoff Figma.
 
 ## Mulai dari sini
 
-- [Panduan agent](AGENTS.md)
-- [Ringkasan proyek dan peta bacaan](docs/context/PROJECT.md)
-- [Status pekerjaan dan langkah berikutnya](docs/context/STATE.md)
-- [Backlog implementasi](docs/development/PLAN.md)
+- [Checkpoint agent](docs/agent/CHECKPOINT.md)
+- [Peta arsitektur](docs/agent/ARCHITECTURE_MAP.md)
+- [Ringkasan proyek](docs/context/PROJECT.md)
+- [Status dan verifikasi](docs/context/STATE.md)
+- [Backlog](docs/development/PLAN.md)
 - [Arsitektur](docs/development/ARCHITECTURE.md)
-- [Handoff Figma](docs/design/FIGMA-HANDOFF.md)
-- [PRD dan indeks bagian](docs/product/INDEX.md)
+- [PRD dan indeks](docs/product/INDEX.md)
 
-## Konteks tersimpan
+## Environment development
 
-`AGENTS.md` mengarahkan agent untuk membaca dua ringkasan kecil, kemudian membuka spesifikasi sesuai tugas. Pendekatan ini mengurangi pembacaan ulang dokumen panjang. File-file tersebut tetap memakai token ketika dibaca; tidak ada jaminan penghematan persentase tertentu atau cache token penyedia yang dikonfigurasi.
+Topology default:
 
-Panduan root menggunakan mekanisme [AGENTS.md dalam dokumentasi resmi OpenAI](https://learn.chatgpt.com/docs/agent-configuration/agents-md). Dokumen di `docs/` dibaca sesuai arahan dan kebutuhan tugas, bukan diasumsikan semuanya otomatis dimuat.
+```text
+Browser Windows
+  -> AIStudio.Web + AIStudio.Api di WSL2
+      -> PostgreSQL di Docker Desktop melalui WSL integration
+```
 
-## Setup aplikasi
+Source dan semua perintah `dotnet`/`npm` dijalankan di WSL. Baseline persisten:
 
-Perintah install, run, dan test akan ditambahkan bersama scaffold yang sudah diverifikasi. Target stack tercatat di dokumen arsitektur; tidak ada dependency aplikasi atau model yang diunduh pada tahap dokumentasi ini.
+- .NET SDK 10.0.401 di `~/.dotnet`, dipin oleh `global.json`
+- Node.js 24.17.0 LTS melalui nvm, dipin oleh `.nvmrc`
+- npm 11.13.0
+- Docker CLI dan Docker Compose v2 melalui Docker Desktop WSL integration
+
+Shell baru memuat toolchain dari `~/.profile`/`~/.bashrc`. Di repository, gunakan `nvm use` bila versi aktif belum mengikuti `.nvmrc`. Periksa dengan:
+
+```bash
+dotnet --version
+dotnet --info
+nvm use
+node --version
+npm --version
+docker --version
+docker compose version
+```
+
+## PostgreSQL lokal
+
+Dari root repository di WSL:
+
+```bash
+cp --no-clobber .env.example .env
+# Ganti POSTGRES_PASSWORD di .env dengan nilai development lokal.
+docker compose config
+docker compose up --detach --wait postgres
+```
+
+`.env` diabaikan Git. Compose menjalankan PostgreSQL 18.6 saja, memublikasikan port dari `POSTGRES_PORT` hanya pada loopback, dan menyimpan cluster pada named volume `aistudio-postgres-data`.
+
+Inspeksi runtime:
+
+```bash
+docker compose ps
+docker compose logs postgres
+docker compose exec postgres postgres --version
+```
+
+Menghentikan dan menyalakan kembali service tanpa menghapus data:
+
+```bash
+docker compose stop postgres
+docker compose up --detach --wait postgres
+```
+
+`docker compose down` menghapus container dan network; named volume tetap ada. Jangan gunakan `--volumes` jika data development perlu dipertahankan. Volume PostgreSQL tidak boleh dipasang langsung ke image major lain; gunakan backup/restore atau `pg_upgrade` bila database sudah berisi data bermakna.
+
+## Backend
+
+Muat environment yang sama lalu jalankan API:
+
+```bash
+set -a
+source .env
+set +a
+
+dotnet tool restore
+dotnet restore AIStudio.slnx
+dotnet build AIStudio.slnx --configuration Release
+dotnet test AIStudio.slnx --configuration Release
+dotnet run --project src/AIStudio.Api/AIStudio.Api.csproj
+```
+
+`ConnectionStrings__DefaultConnection` dibentuk dari `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, dan `POSTGRES_PORT` di `.env`. Jangan commit nilai nyata.
+
+Endpoint:
+
+- `GET /health/live`: HTTP 200 ketika proses API hidup.
+- `GET /health/ready`: HTTP 200 ketika PostgreSQL dapat dihubungi; HTTP 503 ketika tidak tersedia.
+- `GET /health`: seluruh pemeriksaan.
+
+## Frontend
+
+```bash
+cd src/AIStudio.Web
+nvm use
+npm ci
+npm run build
+npm run dev
+```
+
+Vite mengikat ke `127.0.0.1:5173` dan mem-proxy `/api` ke API lokal `127.0.0.1:5002`.
+
+## EF Core dan migrasi
+
+Migration pertama berisi tabel `content_projects`, `jobs`, relasi, constraint retry, JSONB, dan indeks polling. Terapkan migration ke database lokal:
+
+```bash
+set -a
+source .env
+set +a
+
+dotnet tool restore
+dotnet ef database update \
+  --project src/AIStudio.Infrastructure/AIStudio.Infrastructure.csproj \
+  --startup-project src/AIStudio.Api/AIStudio.Api.csproj
+```
+
+Untuk migration domain berikutnya:
+
+```bash
+dotnet ef migrations add <MigrationName> \
+  --project src/AIStudio.Infrastructure/AIStudio.Infrastructure.csproj \
+  --startup-project src/AIStudio.Api/AIStudio.Api.csproj \
+  --output-dir Persistence/Migrations
+```

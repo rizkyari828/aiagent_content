@@ -1,10 +1,12 @@
 # Incremental implementation plan
 
-Status: working breakdown of PRD v0.7; all development slices pending. This orders delivery without removing P1 requirements or promising an unbenchmarked schedule.
+Status: working breakdown of PRD v0.7; infrastructure foundation is complete, while product behavior in DEV-01 onward remains pending. This orders delivery without removing P1 requirements or promising an unbenchmarked schedule.
 
 ## Immediate scope
 
 DOC-01: repo agent guide, compact context, source PRD, architecture, backlog, and Figma handoff. No application scaffold is part of this documentation task.
+
+P1-FND: solution boundaries, API/Web scaffold, PostgreSQL/EF tooling, diagnostics, configuration, and startup validation — complete. No product entity or persistence behavior is claimed.
 
 ## Pilot track — PRD P0
 
