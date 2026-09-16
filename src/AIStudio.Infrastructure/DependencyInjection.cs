@@ -1,4 +1,6 @@
 using AIStudio.Application.Abstractions.Persistence;
+using AIStudio.Application.Jobs;
+using AIStudio.Infrastructure.Jobs;
 using AIStudio.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -21,6 +23,23 @@ public static class DependencyInjection
 
         services.AddScoped<IApplicationDbContext>(serviceProvider =>
             serviceProvider.GetRequiredService<ApplicationDbContext>());
+
+        services
+            .AddOptions<JobWorkerOptions>()
+            .Bind(configuration.GetSection(JobWorkerOptions.SectionName))
+            .Validate(
+                options => options.PollInterval > TimeSpan.Zero,
+                "JobWorker:PollInterval must be greater than zero.")
+            .Validate(
+                options => options.LeaseDuration >= TimeSpan.FromSeconds(3),
+                "JobWorker:LeaseDuration must be at least three seconds.")
+            .ValidateOnStart();
+
+        services.AddSingleton(TimeProvider.System);
+        services.AddScoped<IJobQueue, PostgreSqlJobQueue>();
+        services.AddSingleton<IJobHandler, PlaceholderJobHandler>();
+        services.AddScoped<JobProcessor>();
+        services.AddHostedService<JobWorker>();
 
         return services;
     }

@@ -3,14 +3,15 @@
 Updated: 2026-09-16
 
 - Current Phase: P1
-- Current Milestone: Core Domain + Persistent Job Model - complete
-- Last Completed Task: implemented ContentProject and persistent Job models, first real migration, PostgreSQL integration tests, and persistent WSL tooling.
-- Toolchain Versions: .NET SDK 10.0.401; Node.js 24.17.0 LTS; npm 11.13.0; Docker 29.1.3; Compose v2.40.3; PostgreSQL 18.6; EF Core 10.0.12; Npgsql provider 10.0.3.
-- Build Status: PASS - Release build, 0 warnings/errors; format PASS; web production build PASS.
-- Test Status: PASS - 11/11 unit and PostgreSQL integration tests; NuGet/npm audits report no vulnerabilities.
-- Migration Status: PASS - `20260915160805_InitialCoreDomain` applied; no pending migration.
-- PostgreSQL Status: PASS - 18.6 container healthy on `127.0.0.1:5432`; named volume `aistudio-postgres-data`.
-- Important Files: `.nvmrc`, `global.json`, `compose.yaml`, `src/AIStudio.Domain/Content/`, `src/AIStudio.Domain/Jobs/`, `src/AIStudio.Infrastructure/Persistence/`, `tests/AIStudio.Tests/`.
-- Known Issues: Docker Desktop saved registry credentials reject normal pulls; anonymous isolated pull succeeded. ContentItem remains deferred. No worker loop or atomic claiming exists yet.
-- Next Recommended Task: P1 Persistent Worker Execution + Safe PostgreSQL Job Claiming.
-- Relevant Areas For Next Task: Job entity/mapping/tests, PRD sections 13 and 24, Application/Infrastructure boundaries.
+- Current Milestone: Persistent Worker Execution + Safe PostgreSQL Job Claiming - complete.
+- Worker Status: hosted BackgroundService, explicit placeholder handler, configurable polling/lease, lease renewal, graceful cancellation, and structured lifecycle logging implemented; disabled by default.
+- Claiming Strategy: one PostgreSQL transaction uses FOR UPDATE SKIP LOCKED plus UPDATE RETURNING to claim one deterministic queued or expired-lease job. Completion/failure/renewal require matching Job ID, Running status, and Worker ID.
+- Concurrency Test: PASS - two concurrent real PostgreSQL claims returned the single job to exactly one worker.
+- Build Status: PASS - Release build and format verification, 0 warnings/errors.
+- Test Status: PASS - 19/19 domain, worker, and PostgreSQL integration tests.
+- Migration Status: PASS - no schema change required; 20260915160805_InitialCoreDomain remains applied with no pending migration.
+- PostgreSQL Status: PASS - 18.6 healthy; integration rows cleaned.
+- Important Files: src/AIStudio.Application/Jobs/, src/AIStudio.Infrastructure/Jobs/, src/AIStudio.Infrastructure/DependencyInjection.cs, tests/AIStudio.Tests/Jobs/JobWorkerTests.cs, tests/AIStudio.Tests/Persistence/PostgreSqlJobQueueTests.cs.
+- Known Issues: placeholder handler performs no real workload and worker remains disabled by default. Future side-effect handlers require workload-specific idempotency. Docker Desktop saved registry credentials still reject normal pulls.
+- Next Recommended Task: P1 AI Gateway + Ollama integration under a separate instruction.
+- Relevant Areas For Next Task: Application Jobs contracts, JobProcessor handler resolution, Infrastructure adapters, PRD local-AI contracts.

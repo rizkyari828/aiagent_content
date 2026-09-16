@@ -17,5 +17,6 @@ Use short entries with date, status, basis, and consequence. Source requirements
 | D-011 | 2026-09-15 | Implemented | Local PostgreSQL uses PostgreSQL 18.6 Alpine. The prior volume was verified empty of business tables before clean recreation for the PostgreSQL 18 data layout; loopback exposure and one named volume remain. |
 | D-012 | 2026-09-15 | Implemented | WSL uses persistent per-user .NET SDK 10.0.401 and Node.js 24.17.0 LTS/npm 11.13.0, pinned by repository version files. Temporary SDK installs are not part of validation. |
 | D-013 | 2026-09-15 | Implemented | ContentProject and Job use application-generated UUIDs, UTC DateTimeOffset, string-backed enums, and explicit EF mappings; Job payload/result use JSONB. Only WorkerId and LeaseExpiresAt prepare for PostgreSQL claiming. ContentItem is deferred. |
+| D-014 | 2026-09-16 | Implemented | Persistent jobs are claimed one at a time in a PostgreSQL Read Committed transaction using deterministic ordering, FOR UPDATE SKIP LOCKED, and UPDATE RETURNING. Completion, failure, and lease renewal are ownership-guarded; no broker or distributed lock is introduced. |
 
 Future decisions: API contracts, target hardware, model/license activation, and any baseline changes. Record evidence when those are made; do not invent approvals or benchmark results.

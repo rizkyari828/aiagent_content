@@ -90,6 +90,7 @@ dotnet run --project src/AIStudio.Api/AIStudio.Api.csproj
 ```
 
 `ConnectionStrings__DefaultConnection` dibentuk dari `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, dan `POSTGRES_PORT` di `.env`. Jangan commit nilai nyata.
+nPersistent worker default-nya nonaktif. Untuk validasi lokal terkontrol, gunakan environment JobWorker__Enabled=true; polling dan lease dapat diubah melalui JobWorker__PollInterval dan JobWorker__LeaseDuration. Placeholder handler belum menjalankan workload bisnis.
 
 Endpoint:
 
