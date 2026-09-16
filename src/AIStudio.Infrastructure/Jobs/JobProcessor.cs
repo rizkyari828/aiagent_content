@@ -91,6 +91,18 @@ public sealed class JobProcessor(
                 "Job {JobId} execution was cancelled after its lease ownership was lost.",
                 job.Id);
         }
+        catch (JobExecutionException exception)
+        {
+            var summary = string.IsNullOrWhiteSpace(exception.Message)
+                ? exception.GetType().Name
+                : exception.Message;
+            await RecordFailureAsync(
+                job,
+                workerId,
+                exception.ErrorCode,
+                summary[..Math.Min(summary.Length, Job.MaxErrorSummaryLength)],
+                stoppingToken);
+        }
         catch (Exception exception)
         {
             var summary = string.IsNullOrWhiteSpace(exception.Message)

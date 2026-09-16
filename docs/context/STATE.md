@@ -4,27 +4,28 @@ Updated: 2026-09-16.
 
 ## Current milestone
 
-P1 AI Gateway + Ollama Integration is complete. The application remains one modular monolith; no real AI job handler or separate service was added.
+P1 GenerateIdea Job Handler + First AI Vertical Slice is complete. The modular monolith now has one real AI workload path; GenerateScript and all later workflows remain deferred.
 
 ## Implemented
 
-- Application owns a focused `IAiTextGenerator` contract plus serializable request/response DTOs for plain text or JSON-object output.
-- Infrastructure implements the contract with a typed `HttpClient` against Ollama `/api/chat`; Ollama transport DTOs do not leak into Application.
-- Configuration validates provider, absolute base URL, default model, and timeout at startup. Environment-variable overrides use the existing .NET configuration system.
-- Provider failures map to application-level unavailable, timeout, model-not-found, invalid-request, malformed-response, or provider-error categories.
-- Cancellation propagates, full prompts are not logged, and no SDK, retry framework, secret, AI workflow, or worker handler was added.
-- Development defaults to `gemma3:4b`; Ollama and the model must be installed separately.
+- `GenerateIdea` uses a small JSON payload containing project ID, topic, optional audience/language, and optional provider-neutral model override.
+- The Application handler loads a focused ContentProject projection, builds a provider-neutral prompt, and calls `IAiTextGenerator` with JSON-object output.
+- AI output is validated against title, hook, summary, angle, targetAudience, and suggestedFormat, then serialized canonically.
+- The existing worker owns claim, completion, retry, and failure transitions. Typed handler errors preserve useful error codes without duplicating retry logic.
+- Successful output is persisted and queryable through the existing `Job.Result` JSONB column; no Idea table or migration was added.
+- Infrastructure DI resolves exactly one GenerateIdea handler; the placeholder no longer claims that job type.
 
 ## Verification
 
 - PASS - Release build; 0 warnings/errors.
-- PASS - 10/10 targeted AI Gateway/Ollama tests.
-- PASS - format verification.
-- PASS - NuGet vulnerability audit; no vulnerable packages reported.
-- PASS - API startup and dependency injection; root, liveness, and PostgreSQL readiness returned HTTP 200.
-- NOT AVAILABLE - live Ollama smoke test because Ollama is not installed/reachable in the current WSL environment.
-- NOT RUN - unrelated worker/PostgreSQL concurrency, frontend, and migration validation because those areas were unchanged.
+- PASS - 12/12 targeted GenerateIdea tests, including DI, payload/schema, prompt/model mapping, errors, and cancellation.
+- PASS - 4/4 affected worker lifecycle tests.
+- PASS - real PostgreSQL worker pipeline with fake AI persisted and queried structured Job.Result; test rows cleaned.
+- PASS - API startup/DI; root, liveness, and readiness returned HTTP 200.
+- PASS - format and whitespace checks.
+- NOT AVAILABLE - live Ollama generation because Ollama CLI/API is not installed or reachable in current WSL.
+- NOT RUN - migration checks, unrelated PostgreSQL concurrency suite, frontend, and dependency audit because those areas were unchanged.
 
 ## Known issues and next task
 
-Ollama is not currently installed/reachable and `gemma3:4b` is not pulled, so no live generation was executed. Next recommended task: P1 GenerateIdea Job Handler + First AI Vertical Slice, only under a separate instruction.
+Live `gemma3:4b` generation remains unverified, and there is not yet an API command/endpoint to enqueue GenerateIdea jobs. Next recommended task: P1 GenerateIdea enqueue/query API vertical slice, under separate instruction; GenerateScript remains out of scope.

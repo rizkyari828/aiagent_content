@@ -1,7 +1,10 @@
 using AIStudio.Application.Abstractions.Persistence;
 using AIStudio.Application.AI;
+using AIStudio.Application.Content;
 using AIStudio.Application.Jobs;
+using AIStudio.Application.Jobs.GenerateIdea;
 using AIStudio.Infrastructure.AI;
+using AIStudio.Infrastructure.Content;
 using AIStudio.Infrastructure.Jobs;
 using AIStudio.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -50,6 +53,8 @@ public static class DependencyInjection
 
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<IJobQueue, PostgreSqlJobQueue>();
+        services.AddScoped<IContentProjectReader, ContentProjectReader>();
+        services.AddScoped<IJobHandler, GenerateIdeaJobHandler>();
         services.AddSingleton<IJobHandler, PlaceholderJobHandler>();
         services.AddScoped<JobProcessor>();
         services.AddHostedService<JobWorker>();

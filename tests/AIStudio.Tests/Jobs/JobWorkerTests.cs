@@ -52,6 +52,25 @@ public sealed class JobWorkerTests
     }
 
     [Fact]
+    public async Task Processor_PreservesTypedHandlerErrorCode()
+    {
+        var queue = new RecordingJobQueue(CreateClaimedJob());
+        var processor = new JobProcessor(
+            queue,
+            [new TypedThrowingHandler()],
+            TimeProvider.System,
+            NullLogger<JobProcessor>.Instance);
+
+        await processor.ProcessNextAsync(
+            "worker-typed-failure",
+            TimeSpan.FromMinutes(1),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(queue.Failed);
+        Assert.Equal("ai_timeout", queue.ErrorCode);
+    }
+
+    [Fact]
     public async Task Worker_StopCancelsLongPollingDelay()
     {
         var queue = new RecordingJobQueue(null);
@@ -88,7 +107,7 @@ public sealed class JobWorkerTests
         new(
             Guid.NewGuid(),
             Guid.NewGuid(),
-            JobType.GenerateIdea,
+            JobType.ResearchTopic,
             "input-v1",
             """{"topic":"worker"}""",
             0,
@@ -103,6 +122,16 @@ public sealed class JobWorkerTests
             ClaimedJob job,
             CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Expected handler failure.");
+    }
+
+    private sealed class TypedThrowingHandler : IJobHandler
+    {
+        public bool CanHandle(JobType type) => true;
+
+        public Task<string> ExecuteAsync(
+            ClaimedJob job,
+            CancellationToken cancellationToken) =>
+            throw new JobExecutionException("ai_timeout", "Expected timeout.");
     }
 
     private sealed class RecordingJobQueue(ClaimedJob? job) : IJobQueue
