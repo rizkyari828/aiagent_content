@@ -1,4 +1,5 @@
 using AIStudio.Api.ErrorHandling;
+using AIStudio.Api.Endpoints;
 using AIStudio.Api.Health;
 using AIStudio.Infrastructure;
 using AIStudio.Infrastructure.Health;
@@ -56,6 +57,8 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
     Predicate = registration => registration.Tags.Contains("ready"),
     ResponseWriter = HealthResponseWriter.WriteAsync
 });
+
+app.MapGenerateIdeaApi();
 
 app.Run();
 

@@ -54,7 +54,9 @@ public static class DependencyInjection
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<IJobQueue, PostgreSqlJobQueue>();
         services.AddScoped<IContentProjectReader, ContentProjectReader>();
+        services.AddScoped<IJobReader, JobReader>();
         services.AddScoped<IJobHandler, GenerateIdeaJobHandler>();
+        services.AddScoped<GenerateIdeaWorkflow>();
         services.AddSingleton<IJobHandler, PlaceholderJobHandler>();
         services.AddScoped<JobProcessor>();
         services.AddHostedService<JobWorker>();

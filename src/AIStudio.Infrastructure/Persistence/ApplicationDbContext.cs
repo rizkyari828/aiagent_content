@@ -12,6 +12,18 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     public DbSet<Job> Jobs => Set<Job>();
 
+    public void Add(ContentProject project)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        ContentProjects.Add(project);
+    }
+
+    public void Add(Job job)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        Jobs.Add(job);
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);

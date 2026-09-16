@@ -44,5 +44,8 @@ public sealed class GenerateIdeaDependencyInjectionTests
 
         var handler = Assert.Single(handlers);
         Assert.IsType<GenerateIdeaJobHandler>(handler);
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IJobReader>());
+        Assert.NotNull(
+            scope.ServiceProvider.GetRequiredService<GenerateIdeaWorkflow>());
     }
 }
