@@ -21,6 +21,10 @@
 - Avoid speculative abstractions and unrelated edits. Do not change architecture, security, concurrency, migrations, durable-job semantics, or `global.json` unless the current task explicitly requires it.
 - Preserve user changes. Do not spawn subagents unless the user explicitly requests delegation; the user's parallel Figma work is not such a request.
 
+## Editing fallback
+
+- If the built-in editor or patch helper fails because bubblewrap is unavailable, do not retry it. Use an available system patch/edit utility immediately, preserve the requested scope, inspect the resulting diff, and run the requested validation. Treat bubblewrap absence as a tooling limitation, not a repository failure.
+
 ## Verification and handoff
 
 - Run checks appropriate to the changed behavior. Verify risk-bearing paths: job recovery, stale approvals, asset eligibility, metric/cost correctness, and project restore.
