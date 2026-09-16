@@ -1,6 +1,6 @@
 # Architecture baseline
 
-Status: P1 Foundation implemented; later product modules remain intended design. Read PRD §§11–19 and §§24–26 for full contracts.
+Status: P1 Foundation, local PostgreSQL runtime, Core Domain, and Persistent Job Model implemented; later product modules remain intended design. Read PRD §§11–19 and §§24–26 for full contracts.
 
 ## Runtime boundaries
 
@@ -38,15 +38,15 @@ data/                  # ignored runtime root
 
 Windows hosts the browser and Docker Desktop. Source code, .NET/Node tooling, API, and Web run inside WSL2. Docker Desktop exposes its WSL2-backed engine to the distribution, and development containers must be reachable from WSL.
 
-PostgreSQL development uses root `compose.yaml` with the official `postgres:16-alpine` image, environment-provided database credentials/port, and named volume `aistudio-postgres-data`. It is the only development container.
+PostgreSQL development uses the root Compose file with official PostgreSQL 18.6 Alpine, environment-provided credentials/port, and named volume aistudio-postgres-data mounted at /var/lib/postgresql. It is the only development container.
 
 ## Data and lifecycle
 
-- Add entities per slice. PRD entities: Content, ResearchSource/Claim, ScriptVersion, Asset/AssetUsage, RenderManifest, Approval, Job, Publication, MetricObservation, TimeEntry, CostEntry, RevenueEntry, ExperimentNote.
-- EF Core and Npgsql are isolated in Infrastructure. `ApplicationDbContext` currently has no entity sets, so no empty migration exists; the first migration waits for a real persistent domain model.
+- Add entities per slice. ContentProject and Job are the first implemented roots; ContentItem remains deferred until a separate persisted artifact is required. Other PRD entities remain future slice work.
+- EF Core and Npgsql are isolated in Infrastructure. ApplicationDbContext exposes the two implemented sets, and migration 20260915160805_InitialCoreDomain creates only their real schema plus EF migration history.
 - Store media on disk using paths relative to a configured root. Database holds metadata/references and selected JSONB fields; no media blobs.
 - Content lifecycle: Draft → Researching → IdeaReview → Scripting → ScriptReview → Producing → FinalReview → ReadyToPublish → Published; Archived is separate. Define allowed transitions and revisions as implemented; do not assume a generic status setter is sufficient.
-- Jobs: Queued, Running, Succeeded, Failed, Cancelled. Atomic claim/lease, reconciliation after expiry, input hashes, bounded retry, output reuse, controlled child-process cancellation. GPU-heavy concurrency one.
+- Jobs: Queued, Running, Succeeded, Failed, Cancelled. The persistent model includes input hashes, bounded retry, JSONB input/output, and minimal worker/lease fields. Atomic claiming, lease reconciliation, execution, output reuse, and cancellation remain the next milestone.
 - A1 references brief/angle; A2 script/claims; A3 rendered artifact and publication metadata. Material edits invalidate affected approvals/outputs. Retry alone does not invalidate unchanged inputs.
 - Unknown metrics are null with reason, not zero. Snapshots are not summed. Money has explicit currency and actual/estimated/refunded distinctions; human and machine time stay separate.
 
@@ -61,4 +61,4 @@ PostgreSQL development uses root `compose.yaml` with the official `postgres:16-a
 
 ## Decisions still open
 
-Exact dependency pins, package manager, API routes/DTOs, ports, migration tooling, production OS, available accelerators, and model configuration are selected during the relevant slice. Figma does not define database entities or override domain safeguards. No unmeasured hardware performance is assumed.
+API routes/DTOs, production OS, available accelerators, and model configuration are selected during the relevant slice. Figma does not define database entities or override domain safeguards. No unmeasured hardware performance is assumed.

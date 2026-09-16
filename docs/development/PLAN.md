@@ -1,12 +1,14 @@
 # Incremental implementation plan
 
-Status: working breakdown of PRD v0.7; infrastructure foundation is complete, while product behavior in DEV-01 onward remains pending. This orders delivery without removing P1 requirements or promising an unbenchmarked schedule.
+Status: working breakdown of PRD v0.7; infrastructure foundation and the first persistent domain/job slice are complete, while the broader product behavior remains pending. This orders delivery without removing P1 requirements or promising an unbenchmarked schedule.
 
 ## Immediate scope
 
 DOC-01: repo agent guide, compact context, source PRD, architecture, backlog, and Figma handoff. No application scaffold is part of this documentation task.
 
-P1-FND: solution boundaries, API/Web scaffold, PostgreSQL/EF tooling, diagnostics, configuration, and startup validation — complete. No product entity or persistence behavior is claimed.
+P1-FND: solution boundaries, API/Web scaffold, PostgreSQL/EF tooling, diagnostics, configuration, and startup validation — complete.
+
+P1-CORE: ContentProject, persistent Job, explicit EF mappings, first real migration, domain tests, and PostgreSQL integration validation — complete. Project API CRUD and worker execution remain future slices.
 
 ## Pilot track — PRD P0
 
