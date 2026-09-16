@@ -2,7 +2,7 @@
 
 Studio produksi konten lokal untuk satu operator dan satu channel YouTube, berdasarkan PRD v0.7.
 
-**Status:** P1 Foundation, P1.1 Local Development Runtime, dan milestone Core Domain + Persistent Job Model selesai. P1/MVP secara keseluruhan belum selesai; workflow konten dan UI produk masih menunggu milestone berikutnya serta handoff Figma.
+**Status:** Foundation, local runtime, core domain/persistent jobs, safe PostgreSQL worker claiming, dan AI Gateway/Ollama integration selesai. P1/MVP secara keseluruhan belum selesai; workflow konten dan UI produk masih menunggu milestone berikutnya serta handoff Figma.
 
 ## Mulai dari sini
 
@@ -22,6 +22,7 @@ Topology default:
 Browser Windows
   -> AIStudio.Web + AIStudio.Api di WSL2
       -> PostgreSQL di Docker Desktop melalui WSL integration
+      -> Ollama lokal melalui HTTP (opsional sampai workload AI diaktifkan)
 ```
 
 Source dan semua perintah `dotnet`/`npm` dijalankan di WSL. Baseline persisten:
@@ -90,13 +91,28 @@ dotnet run --project src/AIStudio.Api/AIStudio.Api.csproj
 ```
 
 `ConnectionStrings__DefaultConnection` dibentuk dari `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, dan `POSTGRES_PORT` di `.env`. Jangan commit nilai nyata.
-nPersistent worker default-nya nonaktif. Untuk validasi lokal terkontrol, gunakan environment JobWorker__Enabled=true; polling dan lease dapat diubah melalui JobWorker__PollInterval dan JobWorker__LeaseDuration. Placeholder handler belum menjalankan workload bisnis.
+
+Persistent worker default-nya nonaktif. Untuk validasi lokal terkontrol, gunakan environment `JobWorker__Enabled=true`; polling dan lease dapat diubah melalui `JobWorker__PollInterval` dan `JobWorker__LeaseDuration`. Placeholder handler belum menjalankan workload bisnis.
 
 Endpoint:
 
 - `GET /health/live`: HTTP 200 ketika proses API hidup.
 - `GET /health/ready`: HTTP 200 ketika PostgreSQL dapat dihubungi; HTTP 503 ketika tidak tersedia.
 - `GET /health`: seluruh pemeriksaan.
+
+## Ollama lokal
+
+AI Gateway menggunakan kontrak Application yang provider-agnostic dan adapter HTTP Ollama di Infrastructure. Default development adalah `http://127.0.0.1:11434` dengan model `gemma3:4b`; tidak ada model yang diunduh otomatis.
+
+Setelah Ollama terpasang dan API-nya dapat dijangkau dari WSL:
+
+```bash
+ollama list
+ollama pull gemma3:4b
+curl http://127.0.0.1:11434/api/version
+```
+
+Konfigurasi dapat dioverride melalui `Ai__Provider`, `Ollama__BaseUrl`, `Ollama__DefaultModel`, dan `Ollama__TimeoutSeconds`. API tetap dapat startup saat Ollama tidak tersedia; kegagalan baru dipetakan saat generation dipanggil. Endpoint Ollama lokal default tidak membutuhkan secret.
 
 ## Frontend
 

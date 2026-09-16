@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/AIStudio.Domain/AIStudio.Domain.csproj" />
+    <ProjectReference Include="../../src/AIStudio.Application/AIStudio.Application.csproj" />
     <ProjectReference Include="../../src/AIStudio.Infrastructure/AIStudio.Infrastructure.csproj" />
   </ItemGroup>
 

@@ -19,13 +19,15 @@
 
 - src/AIStudio.Domain/Content/: ContentProject root and explicit content lifecycle.
 - src/AIStudio.Domain/Jobs/: persistent Job lifecycle, retry rules, JSON validation, and lease fields.
+- src/AIStudio.Application/AI/: provider-neutral text-generation contract, serializable request/response DTOs, response format, and application-level errors.
 - src/AIStudio.Application/Jobs/: serializable claimed-job DTO plus focused queue and handler contracts.
+- src/AIStudio.Infrastructure/AI/: typed HTTP Ollama adapter, provider DTO mapping, configuration, validation, and error translation.
 - src/AIStudio.Infrastructure/Persistence/: EF Core context, mappings, and first real migration.
 - src/AIStudio.Infrastructure/Jobs/PostgreSqlJobQueue.cs: parameterized PostgreSQL atomic claim, ownership-guarded completion/failure, retry, and lease operations.
 - src/AIStudio.Infrastructure/Jobs/JobProcessor.cs: handler resolution, execution, lease renewal, and lifecycle logging.
 - src/AIStudio.Infrastructure/Jobs/JobWorker.cs: hosted polling loop and graceful cancellation.
 - src/AIStudio.Infrastructure/Jobs/PlaceholderJobHandler.cs: orchestration-only placeholder; no business workload.
-- tests/AIStudio.Tests/: domain, worker, and real PostgreSQL concurrency/integration checks.
+- tests/AIStudio.Tests/: domain, worker, real PostgreSQL concurrency/integration, and isolated Ollama adapter checks.
 
 ## Navigation
 

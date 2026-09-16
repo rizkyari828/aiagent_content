@@ -4,30 +4,27 @@ Updated: 2026-09-16.
 
 ## Current milestone
 
-P1 Persistent Worker Execution + Safe PostgreSQL Job Claiming is complete. The application remains one modular monolith; no AI workload or separate service was added.
+P1 AI Gateway + Ollama Integration is complete. The application remains one modular monolith; no real AI job handler or separate service was added.
 
 ## Implemented
 
-- A standard .NET hosted BackgroundService polls without busy-spinning, honors cancellation, creates one scope per job, and is disabled by default.
-- Application-owned DTO/contracts define one claimed job, queue persistence operations, and a minimal handler interface.
-- PostgreSQL claiming is isolated in Infrastructure. One Read Committed transaction selects one deterministic eligible row with FOR UPDATE SKIP LOCKED and changes it to Running through UPDATE RETURNING.
-- Completion, failure, and lease renewal use ownership-guarded updates requiring Job ID, Running status, and Worker ID.
-- Worker leases renew while a handler runs. Expired Running jobs are reclaimed when retries remain; recovery consumes one retry. Expired jobs with no retry allowance become Failed.
-- Handler failures requeue deterministically while retry allowance remains and preserve concise error details; exhausted jobs become Failed.
-- A placeholder handler validates orchestration only. It does not implement AI, research, media, publishing, or analytics work.
-- Existing WorkerId and LeaseExpiresAt columns were sufficient, so no migration was created.
+- Application owns a focused `IAiTextGenerator` contract plus serializable request/response DTOs for plain text or JSON-object output.
+- Infrastructure implements the contract with a typed `HttpClient` against Ollama `/api/chat`; Ollama transport DTOs do not leak into Application.
+- Configuration validates provider, absolute base URL, default model, and timeout at startup. Environment-variable overrides use the existing .NET configuration system.
+- Provider failures map to application-level unavailable, timeout, model-not-found, invalid-request, malformed-response, or provider-error categories.
+- Cancellation propagates, full prompts are not logged, and no SDK, retry framework, secret, AI workflow, or worker handler was added.
+- Development defaults to `gemma3:4b`; Ollama and the model must be installed separately.
 
 ## Verification
 
-- PASS - dotnet restore and Release build; 0 warnings/errors.
-- PASS - dotnet format verification and git diff whitespace check.
-- PASS - 19/19 automated tests.
-- PASS - real PostgreSQL concurrent-claim test: two simultaneous claim attempts produced exactly one owner.
-- PASS - PostgreSQL claim, Running/Succeeded transitions, retry/exhaustion, lease recovery, and cleanup.
-- PASS - API startup and dependency injection; root, liveness, and readiness returned HTTP 200.
-- PASS - migration list remains 20260915160805_InitialCoreDomain with no pending schema change.
-- NOT RUN - frontend validation because frontend was not changed.
+- PASS - Release build; 0 warnings/errors.
+- PASS - 10/10 targeted AI Gateway/Ollama tests.
+- PASS - format verification.
+- PASS - NuGet vulnerability audit; no vulnerable packages reported.
+- PASS - API startup and dependency injection; root, liveness, and PostgreSQL readiness returned HTTP 200.
+- NOT AVAILABLE - live Ollama smoke test because Ollama is not installed/reachable in the current WSL environment.
+- NOT RUN - unrelated worker/PostgreSQL concurrency, frontend, and migration validation because those areas were unchanged.
 
 ## Known issues and next task
 
-The placeholder handler has no external side effects; future handlers must define their own idempotency strategy. The worker is intentionally disabled by default until a real handler milestone enables it deliberately. Next recommended task: P1 AI Gateway + Ollama integration, only under a separate instruction.
+Ollama is not currently installed/reachable and `gemma3:4b` is not pulled, so no live generation was executed. Next recommended task: P1 GenerateIdea Job Handler + First AI Vertical Slice, only under a separate instruction.
