@@ -10,6 +10,7 @@
 ## Development rules
 
 - Baseline: .NET 10 modular monolith, React/TypeScript/Vite, PostgreSQL, local filesystem, Ollama, FFmpeg, and a Python transcription runner. See `docs/development/ARCHITECTURE.md` before changing boundaries.
+- Treat PostgreSQL as the durable job authority. Preserve claiming, leases, retry, ownership, and recovery semantics; `IAiTextGenerator` is the current product-AI boundary.
 - Default development topology is Windows host/browser with source, .NET, Node, API, and Web running in WSL2; Docker Desktop provides containers through WSL integration.
 - Deliver one working slice at a time. Keep all PRD P1 acceptance criteria; intermediate slices are not a completed MVP.
 - The user is designing Figma in parallel. Backend/domain work can proceed independently. Follow `docs/design/FIGMA-HANDOFF.md` for UI work; do not invent final branding or treat absent Figma as a backend blocker.
@@ -17,6 +18,7 @@
 - Bind services to loopback by default. Validate paths, media, and scene schemas. Pass structured process arguments; never execute model-generated shell commands.
 - Persist jobs and their inputs; keep content state separate from job state. Preserve versioned approvals, eligible asset checks, and recoverable exports.
 - Do not add deferred infrastructure or autonomous publishing without a current need and authorization. Repo development does not itself authorize public uploads, purchases, or external messages.
+- Avoid speculative abstractions and unrelated edits. Do not change architecture, security, concurrency, migrations, durable-job semantics, or `global.json` unless the current task explicitly requires it.
 - Preserve user changes. Do not spawn subagents unless the user explicitly requests delegation; the user's parallel Figma work is not such a request.
 
 ## Verification and handoff
