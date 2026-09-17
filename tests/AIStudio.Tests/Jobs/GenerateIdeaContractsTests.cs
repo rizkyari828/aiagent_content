@@ -58,11 +58,78 @@ public sealed class GenerateIdeaContractsTests
     }
 
     [Fact]
+    public void Result_Serialize_NormalizesAllFields()
+    {
+        var result = new GenerateIdeaResult(
+            Title: "  Title  ",
+            Hook: "  Hook  ",
+            Summary: "  Summary  ",
+            Angle: "  Angle  ",
+            TargetAudience: "  Audience  ",
+            SuggestedFormat: "  Format  ");
+
+        var roundTrip = GenerateIdeaResult.Deserialize(result.Serialize());
+
+        Assert.Equal("Title", roundTrip.Title);
+        Assert.Equal("Hook", roundTrip.Hook);
+        Assert.Equal("Summary", roundTrip.Summary);
+        Assert.Equal("Angle", roundTrip.Angle);
+        Assert.Equal("Audience", roundTrip.TargetAudience);
+        Assert.Equal("Format", roundTrip.SuggestedFormat);
+    }
+
+    [Fact]
     public void Result_RejectsMalformedSchema()
     {
         var exception = Assert.Throws<JobExecutionException>(
             () => GenerateIdeaResult.Deserialize("""{"title":"Incomplete"}"""));
 
+        Assert.Equal("generate_idea_invalid_result", exception.ErrorCode);
+    }
+
+    [Fact]
+    public void Result_Serialize_RejectsBlankField()
+    {
+        var result = new GenerateIdeaResult(
+            Title: "Valid",
+            Hook: "",
+            Summary: "Valid",
+            Angle: "Valid",
+            TargetAudience: "Valid",
+            SuggestedFormat: "Valid");
+
+        var exception = Assert.Throws<JobExecutionException>(() => result.Serialize());
+        Assert.Equal("generate_idea_invalid_result", exception.ErrorCode);
+    }
+
+    [Fact]
+    public void Result_Serialize_RejectsWhitespaceOnlyField()
+    {
+        var result = new GenerateIdeaResult(
+            Title: "   ",
+            Hook: "Valid",
+            Summary: "Valid",
+            Angle: "Valid",
+            TargetAudience: "Valid",
+            SuggestedFormat: "Valid");
+
+        var exception = Assert.Throws<JobExecutionException>(() => result.Serialize());
+        Assert.Equal("generate_idea_invalid_result", exception.ErrorCode);
+    }
+
+    [Fact]
+    public void Result_Serialize_RejectsOverLengthField()
+    {
+        var longString = new string('x', 2_001);
+        var result = new GenerateIdeaResult(
+            Title: longString,
+            Hook: "Valid",
+            Summary: "Valid",
+            Angle: "Valid",
+            TargetAudience: "Valid",
+            SuggestedFormat: "Valid");
+
+        var exception = Assert.Throws<JobExecutionException>(() => result.Serialize());
         Assert.Equal("generate_idea_invalid_result", exception.ErrorCode);
     }
 }

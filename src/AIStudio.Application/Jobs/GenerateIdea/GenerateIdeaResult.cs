@@ -49,7 +49,20 @@ public sealed record GenerateIdeaResult(
         };
     }
 
-    public string Serialize() => JsonSerializer.Serialize(this, JsonOptions);
+    public string Serialize()
+    {
+        var canonical = this with
+        {
+            Title = RequireText(this.Title, "title"),
+            Hook = RequireText(this.Hook, "hook"),
+            Summary = RequireText(this.Summary, "summary"),
+            Angle = RequireText(this.Angle, "angle"),
+            TargetAudience = RequireText(this.TargetAudience, "targetAudience"),
+            SuggestedFormat = RequireText(this.SuggestedFormat, "suggestedFormat")
+        };
+
+        return JsonSerializer.Serialize(canonical, JsonOptions);
+    }
 
     private static string RequireText(string? value, string fieldName)
     {
