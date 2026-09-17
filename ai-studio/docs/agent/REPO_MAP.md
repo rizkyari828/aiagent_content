@@ -2,6 +2,8 @@
 
 Use this for navigation, then inspect current code.
 
+Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, paths below are relative to the `ai-studio/` directory.
+
 ## GenerateIdea
 
 - `src/AIStudio.Application/Jobs/GenerateIdea/GenerateIdeaWorkflow.cs` — enqueue workflow.
@@ -35,4 +37,4 @@ Use this for navigation, then inspect current code.
 
 ## Agent context
 
-- `AGENTS.md`, `QWEN.md`, `docs/agent/CHECKPOINT.md`, `LESSONS.md` — rules, current state, and validated knowledge.
+- `../AGENTS.md`, `AGENTS.md`, `QWEN.md`, `docs/agent/CHECKPOINT.md`, `docs/agent/LESSONS.md` — monorepo rules, Studio rules, current state, and validated knowledge.

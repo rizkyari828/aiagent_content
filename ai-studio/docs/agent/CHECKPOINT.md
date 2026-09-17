@@ -2,6 +2,8 @@
 
 Updated: 2026-09-17
 
+- Repository Layout: Content Studio now lives in `ai-studio/`; run its build, test, Compose, and documentation commands from that directory. Application behavior is unchanged.
+
 - Current Phase: P1.
 - AI Infrastructure Foundation v1: DONE / RUNTIME VALIDATED / FROZEN.
 - API Surface: `POST /api/content-projects`, `POST /api/content-projects/{contentProjectId}/generate-idea-jobs`, `POST /api/content-projects/{contentProjectId}/generate-script-jobs`, and `GET /api/jobs/{jobId}`.

@@ -1,35 +1,25 @@
-# Agent guide — Local AI Content Studio
+# Agent guide — AI monorepo
 
-## Start small
+## Start with the owning solution
 
-- Read `docs/agent/CHECKPOINT.md`, then the relevant parts of `docs/context/PROJECT.md` and `docs/context/STATE.md` at session start unless already in context. Consult relevant sections of `docs/agent/LESSONS.md` for validated knowledge and `docs/agent/REPO_MAP.md` for navigation. Inspect Git status before editing; cached state can be stale.
-- Use the task routing table in PROJECT, `rg`, and bounded reads. Do not read the entire PRD, all docs, generated files, LESSONS, or REPO_MAP by default.
-- Source hierarchy: the latest user request authorizes scope; code defines current behavior; the latest PRD defines intended behavior; CHECKPOINT/PROJECT/STATE summarize current execution. Distinguish verified implementation, requirements, proposals, and environment state.
-- A missing SDK, container, model, or tool is an environment blocker, not a repository defect. Never change `global.json` or architecture merely to bypass it.
+- Inspect `git status` before editing, then scope the task to exactly one solution unless the request explicitly crosses boundaries.
+- For Content Studio work, enter `ai-studio/` and follow `ai-studio/AGENTS.md`. Its checkpoint, project state, lessons, and repository map are authoritative for the product.
+- For reusable local runtime tooling, enter `local-ai-infra/` and follow `local-ai-infra/AGENTS.md`.
+- Use targeted reads and searches. Do not scan both solutions or read full specifications by default.
 - Communicate in Indonesian; use English code identifiers. Keep updates and handoffs concise.
 
-## Development rules
+## Repository boundaries
 
-- Baseline: .NET 10 modular monolith, React/TypeScript/Vite, PostgreSQL, local filesystem, Ollama, FFmpeg, and a Python transcription runner. See `docs/development/ARCHITECTURE.md` before changing boundaries.
-- Treat PostgreSQL as the durable job authority. Persist job inputs, separate content/job state, and preserve claiming, leases, retry, ownership, and recovery; `IAiTextGenerator` is the product-AI boundary.
-- The user is designing Figma in parallel. Backend/domain work can proceed independently. Follow `docs/design/FIGMA-HANDOFF.md` for UI work; do not invent final branding or treat absent Figma as a backend blocker.
-- Keep product AI local, with no cloud/paid fallback. The developer coding model (`qwen3.6:27b-coding`) and validated Content Studio runtime model (`qwen3.8:27b-q4_K_M`) have separate roles. Record actual checks; never invent benchmarks or approvals.
-- Bind services to loopback by default. Validate paths, media, and scene schemas. Pass structured process arguments; never execute model-generated shell commands.
-- Do not add deferred infrastructure or autonomous publishing without a current need and authorization. Repo development does not itself authorize public uploads, purchases, or external messages.
-- Avoid speculative abstractions and unrelated edits. Do not change architecture, security, concurrency, migrations, durable-job semantics, or `global.json` unless the current task explicitly requires it.
-- Preserve existing worktree changes and never let agents edit it concurrently. Do not spawn subagents unless the user explicitly requests delegation.
+- `ai-studio/` owns the Content Studio product, domain knowledge, application configuration, durable jobs, API, web client, tests, and product documentation.
+- `local-ai-infra/` owns reusable local AI configuration, profiles, verification, benchmarks, telemetry formats, evals, and learning-data conventions.
+- Local AI infrastructure describes **how** local AI runs. Content Studio describes **what** the product does and which model it requests.
+- Content Studio must not acquire a runtime dependency on `local-ai-infra/` without an explicit architectural decision.
+- Keep repository-wide files at the root. Keep solution-specific guidance and configuration inside the owning solution.
 
-## Editing fallback
+## Shared safety and verification
 
-- If the built-in editor or patch helper fails because bubblewrap is unavailable, do not retry it. Use an available system patch/edit utility immediately, preserve the requested scope, inspect the resulting diff, and run the requested validation. Treat bubblewrap absence as a tooling limitation, not a repository failure.
-
-## Verification and handoff
-
-- Run targeted, risk-based checks. Escalate architecture, security, schema/migration, concurrency, durable-job, destructive, and ambiguous cross-cutting work.
-- Record exact commands and results in STATE; distinguish passed, failed, unavailable, and not run.
-- Update STATE after meaningful work: completed work, current task, next step, checks, blockers. Replace stale detail; do not append full conversation logs.
-- Update PROJECT when stable facts change and `docs/development/DECISIONS.md` for architectural decisions. Keep proposed choices explicitly labeled.
-- Handoffs state changed files, behavior, validation, blockers, and uncommitted work. Add a LESSON only after review when it is stable and evidence-backed; never store speculation as established knowledge.
-- When the source PRD changes, refresh affected summaries and the checksum/section index in `docs/product/INDEX.md`. Code establishes current behavior; PRD establishes intended behavior. Report discrepancies.
-- Keep AGENTS and each startup context file compact (target at most 600 words each). Store detailed evidence in linked task documents only when useful.
-- Keep secrets, local media, model weights, logs, and build artifacts out of Git. Context documents contain summaries and safe references only.
+- Preserve user changes and untracked files. Never expose secrets, local media, model weights, logs, or credentials.
+- Do not create nested Git repositories or rewrite history. Avoid unrelated edits and speculative infrastructure.
+- Treat missing SDKs, containers, models, or tools as environment limitations; do not alter architecture to bypass them.
+- Run targeted validation from the owning solution directory and record exact results in that solution's state/checkpoint documentation when required by its guide.
+- Commit only the intended scope. No force push.

@@ -19,9 +19,11 @@ Updated: 2026-09-15. Derived summary; canonical requirements: PRD v0.7, indexed 
 
 ## Technical baseline
 
+Content Studio is rooted at `ai-studio/` in the monorepo. The sibling `local-ai-infra/` solution is reusable runtime tooling, not an application runtime dependency.
+
 .NET 10 modular monolith + React/TypeScript/Vite + PostgreSQL metadata + filesystem media. Maintain explicit module/contracts boundaries so demonstrated resource-heavy workloads can later become specialized workers; P1 remains one core deployment without distributed-system infrastructure. Ollama/Qwen3-8B quantized candidate; recorded human narration; faster-whisper multilingual small candidate; validated manifests rendered with FFmpeg. Actual model digests, hardware suitability, and licenses still need implementation-time verification.
 
-Default development is Windows host/browser plus WSL2-hosted source, .NET, Node, API, and Web. Persistent tooling is .NET SDK 10.0.401 and Node.js 24.17.0 LTS/npm 11.13.0. Docker Desktop supplies the WSL-integrated engine; root Compose provides PostgreSQL 18.6 with environment credentials, loopback exposure, and a named volume.
+Default development is Windows host/browser plus WSL2-hosted source, .NET, Node, API, and Web. Persistent tooling is .NET SDK 10.0.401 and Node.js 24.17.0 LTS/npm 11.13.0. Docker Desktop supplies the WSL-integrated engine; `compose.yaml` in `ai-studio/` provides PostgreSQL 18.6 with environment credentials, loopback exposure, and a named volume.
 
 Implemented persistence includes ContentProject and Job with application-generated UUIDs, UTC timestamps, string lifecycle states, JSONB job payload/result, bounded retries, minimal lease metadata, explicit EF mappings, and a real migration. ContentItem is deferred until a separate persisted content artifact is required.
 
