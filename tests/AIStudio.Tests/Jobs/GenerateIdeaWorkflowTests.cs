@@ -124,8 +124,42 @@ public sealed class GenerateIdeaWorkflowTests
 
         Assert.NotNull(job);
         Assert.Equal(JobStatus.Succeeded, job.Status);
-        Assert.Equal("Local AI Content", job.Result?.Title);
-        Assert.Equal("Tutorial", job.Result?.SuggestedFormat);
+        var result = Assert.IsType<GenerateIdeaResult>(job.Result);
+        Assert.Equal("Local AI Content", result.Title);
+        Assert.Equal("Tutorial", result.SuggestedFormat);
+    }
+
+    [Fact]
+    public async Task FindJob_DeserializesCompletedGenerateScriptResult()
+    {
+        var jobId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
+        var snapshot = new JobSnapshot(
+            jobId,
+            projectId,
+            JobType.GenerateScript,
+            JobStatus.Succeeded,
+            0,
+            2,
+            GenerateScriptTestData.ValidResult,
+            null,
+            null,
+            Now,
+            Now,
+            Now,
+            Now);
+        var workflow = CreateWorkflow(
+            new RecordingDbContext(),
+            jobSnapshot: snapshot);
+
+        var job = await workflow.FindJobAsync(
+            jobId,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(job);
+        var result = Assert.IsType<AIStudio.Application.Jobs.GenerateScript.GenerateScriptResult>(job.Result);
+        Assert.Equal("Local AI Tutorial", result.Title);
+        Assert.Equal(2, result.Sections.Count);
     }
 
     [Fact]

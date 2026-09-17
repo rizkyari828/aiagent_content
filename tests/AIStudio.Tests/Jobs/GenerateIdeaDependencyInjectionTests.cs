@@ -1,5 +1,6 @@
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.GenerateIdea;
+using AIStudio.Application.Jobs.GenerateScript;
 using AIStudio.Domain.Jobs;
 using AIStudio.Infrastructure;
 using Microsoft.Extensions.Configuration;

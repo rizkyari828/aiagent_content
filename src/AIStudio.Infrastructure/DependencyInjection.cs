@@ -3,6 +3,7 @@ using AIStudio.Application.AI;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.GenerateIdea;
+using AIStudio.Application.Jobs.GenerateScript;
 using AIStudio.Infrastructure.AI;
 using AIStudio.Infrastructure.Content;
 using AIStudio.Infrastructure.Jobs;
@@ -56,7 +57,9 @@ public static class DependencyInjection
         services.AddScoped<IContentProjectReader, ContentProjectReader>();
         services.AddScoped<IJobReader, JobReader>();
         services.AddScoped<IJobHandler, GenerateIdeaJobHandler>();
+        services.AddScoped<IJobHandler, GenerateScriptJobHandler>();
         services.AddScoped<GenerateIdeaWorkflow>();
+        services.AddScoped<GenerateScriptWorkflow>();
         services.AddSingleton<IJobHandler, PlaceholderJobHandler>();
         services.AddScoped<JobProcessor>();
         services.AddHostedService<JobWorker>();

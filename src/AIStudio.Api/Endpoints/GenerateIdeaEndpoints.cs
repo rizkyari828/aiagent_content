@@ -1,5 +1,6 @@
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.GenerateIdea;
+using AIStudio.Application.Jobs.GenerateScript;
 using AIStudio.Domain.Jobs;
 
 namespace AIStudio.Api.Endpoints;
@@ -20,6 +21,14 @@ public static class GenerateIdeaEndpoints
                 "/content-projects/{contentProjectId}/generate-idea-jobs",
                 EnqueueGenerateIdeaAsync)
             .WithName("EnqueueGenerateIdea")
+            .Produces<EnqueueJobResponse>(StatusCodes.Status202Accepted)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesValidationProblem();
+
+        api.MapPost(
+                "/content-projects/{contentProjectId}/generate-script-jobs",
+                EnqueueGenerateScriptAsync)
+            .WithName("EnqueueGenerateScript")
             .Produces<EnqueueJobResponse>(StatusCodes.Status202Accepted)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesValidationProblem();
@@ -107,6 +116,53 @@ public static class GenerateIdeaEndpoints
         }
     }
 
+    private static async Task<IResult> EnqueueGenerateScriptAsync(
+        string contentProjectId,
+        EnqueueGenerateScriptRequest request,
+        GenerateScriptWorkflow workflow,
+        CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(contentProjectId, out var parsedContentProjectId)
+            || parsedContentProjectId == Guid.Empty)
+        {
+            return InvalidIdentifier("contentProjectId");
+        }
+
+        try
+        {
+            var jobId = await workflow.EnqueueAsync(
+                parsedContentProjectId,
+                request.SelectedIdea,
+                request.Language,
+                cancellationToken);
+
+            if (jobId is null)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Content project not found.",
+                    detail: $"Content project '{parsedContentProjectId}' does not exist.");
+            }
+
+            return Results.Accepted(
+                $"/api/jobs/{jobId}",
+                new EnqueueJobResponse(jobId.Value, "queued"));
+        }
+        catch (JobExecutionException exception)
+            when (exception.ErrorCode == "generate_script_invalid_payload")
+        {
+            return Results.ValidationProblem(
+                new Dictionary<string, string[]>
+                {
+                    ["request"] = [exception.Message]
+                });
+        }
+        catch (ArgumentException exception)
+        {
+            return InvalidRequest(exception);
+        }
+    }
+
     private static async Task<IResult> GetJobAsync(
         string jobId,
         GenerateIdeaWorkflow workflow,
@@ -162,6 +218,10 @@ public sealed record EnqueueGenerateIdeaRequest(
     string? TargetAudience,
     string? Language);
 
+public sealed record EnqueueGenerateScriptRequest(
+    GenerateIdeaResult SelectedIdea,
+    string? Language);
+
 public sealed record EnqueueJobResponse(Guid JobId, string Status);
 
 public sealed record JobResponse(
@@ -171,7 +231,7 @@ public sealed record JobResponse(
     string Status,
     int RetryCount,
     int MaxRetries,
-    GenerateIdeaResult? Result,
+    object? Result,
     string? ErrorCode,
     string? ErrorSummary,
     DateTimeOffset CreatedAt,

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using AIStudio.Application.Abstractions.Persistence;
 using AIStudio.Application.Content;
+using AIStudio.Application.Jobs.GenerateScript;
 using AIStudio.Domain.Content;
 using AIStudio.Domain.Jobs;
 
@@ -91,11 +92,14 @@ public sealed class GenerateIdeaWorkflow(
             return null;
         }
 
-        var generateIdeaResult = job.Type == JobType.GenerateIdea
-            && job.Status == JobStatus.Succeeded
-            && job.Result is not null
-                ? GenerateIdeaResult.Deserialize(job.Result)
-                : null;
+        object? result = job.Status == JobStatus.Succeeded && job.Result is not null
+            ? job.Type switch
+            {
+                JobType.GenerateIdea => GenerateIdeaResult.Deserialize(job.Result),
+                JobType.GenerateScript => GenerateScriptResult.Deserialize(job.Result),
+                _ => null
+            }
+            : null;
 
         return new JobDetails(
             job.Id,
@@ -104,7 +108,7 @@ public sealed class GenerateIdeaWorkflow(
             job.Status,
             job.RetryCount,
             job.MaxRetries,
-            generateIdeaResult,
+            result,
             job.ErrorCode,
             job.ErrorSummary,
             job.CreatedAt,
@@ -121,7 +125,7 @@ public sealed record JobDetails(
     JobStatus Status,
     int RetryCount,
     int MaxRetries,
-    GenerateIdeaResult? Result,
+    object? Result,
     string? ErrorCode,
     string? ErrorSummary,
     DateTimeOffset CreatedAt,
