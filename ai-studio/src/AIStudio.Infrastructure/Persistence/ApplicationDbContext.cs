@@ -1,6 +1,7 @@
 using AIStudio.Application.Abstractions.Persistence;
 using AIStudio.Domain.Content;
 using AIStudio.Domain.Jobs;
+using AIStudio.Domain.Scripts;
 using Microsoft.EntityFrameworkCore;
 
 namespace AIStudio.Infrastructure.Persistence;
@@ -11,6 +12,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<ContentProject> ContentProjects => Set<ContentProject>();
 
     public DbSet<Job> Jobs => Set<Job>();
+
+    public DbSet<ReviewedScript> ReviewedScripts => Set<ReviewedScript>();
 
     public void Add(ContentProject project)
     {

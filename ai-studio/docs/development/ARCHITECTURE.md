@@ -42,8 +42,8 @@ PostgreSQL development uses the root Compose file with official PostgreSQL 18.6 
 
 ## Data and lifecycle
 
-- Add entities per slice. ContentProject and Job are the first implemented roots; ContentItem remains deferred until a separate persisted artifact is required. Other PRD entities remain future slice work.
-- EF Core and Npgsql are isolated in Infrastructure. ApplicationDbContext exposes the two implemented sets, and migration 20260915160805_InitialCoreDomain creates only their real schema plus EF migration history.
+- Add entities per slice. ContentProject and Job are the initial roots; ReviewedScript now stores the separate canonical human-reviewed script required before Storyboard. Other ContentItem/artifact entities remain deferred until their slices require them.
+- EF Core and Npgsql are isolated in Infrastructure. ApplicationDbContext exposes ContentProject, Job, and ReviewedScript; migration `20260917113100_AddReviewedScripts` adds only the review table, provenance relationships, and constraints.
 - Store media on disk using paths relative to a configured root. Database holds metadata/references and selected JSONB fields; no media blobs.
 - Content lifecycle: Draft → Researching → IdeaReview → Scripting → ScriptReview → Producing → FinalReview → ReadyToPublish → Published; Archived is separate. Define allowed transitions and revisions as implemented; do not assume a generic status setter is sufficient.
 - Jobs: Queued, Running, Succeeded, Failed, Cancelled. The persistent model includes input hashes, bounded retry, JSONB input/output, and minimal worker/lease fields. Atomic claiming, lease reconciliation, execution, output reuse, and cancellation remain the next milestone.

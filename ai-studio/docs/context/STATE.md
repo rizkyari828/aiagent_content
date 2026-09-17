@@ -4,26 +4,25 @@ Updated: 2026-09-17.
 
 ## Current milestone
 
-The repository layout migration is complete: Content Studio is rooted at `ai-studio/`, reusable local AI tooling remains at `local-ai-infra/`, and application behavior is unchanged.
+Manual Script Review/Edit is complete. The next product slice is Basic Storyboard generation from an explicitly approved reviewed script.
 
 ## Implemented
 
-- Moved the Studio solution, source, tests, product documentation, SDK/tool pins, Compose configuration, environment example, local environment file, Qwen guidance, and generated test output under `ai-studio/`.
-- Added concise root monorepo routing in `AGENTS.md` and `README.md`; Studio-specific guidance remains with the product.
-- Preserved GenerateIdea, GenerateScript, durable-job behavior, API contracts, migrations, namespaces, and project names without source changes.
-- Preserved the untracked `.qwen/settings.json` and `docs/Local_AI_Ecosystem_PRD_v0.9.2.md` under `ai-studio/`; neither is staged.
-- No nested Git repository exists and `local-ai-infra/` behavior was not changed.
+- Completed GenerateScript `Job.Result` remains immutable historical AI evidence.
+- One `ReviewedScript` per ContentProject stores the canonical human-reviewed GenerateScript contract in JSONB and retains `SourceJobId` provenance.
+- Lifecycle is only `Draft -> Approved`; canonical content changes increment `Revision`, identical edits are no-ops, approval is idempotent, approved scripts cannot be edited, and a different source job cannot silently replace the current script.
+- HTTP supports starting review from a completed GenerateScript job, retrieving the current reviewed script, editing it, and approving it. No reject state or generic approval framework was added.
+- Migration `20260917113100_AddReviewedScripts` is additive and does not alter Job persistence or durable-job semantics.
 
 ## Verification
 
-- PASS — `dotnet build src/AIStudio.Api/AIStudio.Api.csproj --configuration Release --no-restore`: 0 warnings, 0 errors on .NET SDK 10.0.401.
-- PASS — `dotnet sln AIStudio.slnx list`: all five project references resolve from `ai-studio/`.
-- PASS — focused GenerateIdea, GenerateScript, and worker unit/fake-AI tests excluding optional persistence integration: 45/45.
-- PASS — `python3 -m unittest discover -s tests -v` in `local-ai-infra/`: 3/3.
-- PASS — nested-Git, protected-file presence, stale absolute-path, and `git diff --check` checks.
-- ENVIRONMENT UNAVAILABLE — Docker CLI/WSL integration, so `docker compose config` could not run. Static inspection found no build context or relative file path in the PostgreSQL-only Compose file.
-- ENVIRONMENT UNAVAILABLE — an initial broad test filter selected two optional PostgreSQL vertical tests; 45 tests passed and those two stopped because `ConnectionStrings__DefaultConnection` was unset. No repository defect was indicated.
+- PASS — 58/58 focused Script Review, GenerateScript, GenerateIdea, API contract, DI, EF model, and worker tests; optional PostgreSQL vertical tests were excluded.
+- PASS — Release API build on .NET SDK 10.0.401 with 0 warnings and 0 errors.
+- PASS — `dotnet format AIStudio.slnx --verify-no-changes --no-restore`.
+- PASS — EF reports no pending model changes after `AddReviewedScripts`; migration SQL generation contains only the new table, constraints, foreign keys, indexes, and migration-history insert.
+- UNAVAILABLE — applying the migration and DB-backed verification: PostgreSQL connection to `127.0.0.1:5432` was refused and Docker Desktop WSL integration was unavailable.
+- NOT RUN — real 27B inference; review behavior reuses persisted structured output and required no model call.
 
 ## Known issues and next task
 
-Implement the smallest manual script review/edit milestone before storyboard generation.
+Implement the smallest Basic Storyboard slice, accepting only the canonical `ReviewedScript` whose status is `Approved`.

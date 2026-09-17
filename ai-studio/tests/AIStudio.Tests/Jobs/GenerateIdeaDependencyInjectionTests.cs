@@ -1,6 +1,7 @@
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.GenerateIdea;
 using AIStudio.Application.Jobs.GenerateScript;
+using AIStudio.Application.Scripts;
 using AIStudio.Domain.Jobs;
 using AIStudio.Infrastructure;
 using Microsoft.Extensions.Configuration;
@@ -46,6 +47,8 @@ public sealed class GenerateIdeaDependencyInjectionTests
         var handler = Assert.Single(handlers);
         Assert.IsType<GenerateIdeaJobHandler>(handler);
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IJobReader>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IScriptReviewRepository>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ScriptReviewWorkflow>());
         Assert.NotNull(
             scope.ServiceProvider.GetRequiredService<GenerateIdeaWorkflow>());
     }
