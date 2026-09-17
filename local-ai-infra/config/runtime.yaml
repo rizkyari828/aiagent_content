@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "runtime_version": "0.1.0",
+  "providers_version": "0.1.0",
+  "default_provider": "ollama",
+  "providers": {
+    "ollama": {
+      "provider": "ollama",
+      "base_url": "http://localhost:11434",
+      "model": "qwen3.6:27b-coding",
+      "keep_alive": "5m"
+    },
+    "deepseek": {
+      "provider": "deepseek",
+      "base_url": "https://api.deepseek.com",
+      "model": "deepseek-flash",
+      "reasoning_profile": "high",
+      "api_key_env": "DEEPSEEK_API_KEY"
+    },
+    "fake": {
+      "provider": "fake",
+      "model": "fake-model",
+      "scenario": "success"
+    }
+  },
+  "escalation": {
+    "enabled": false,
+    "mode": "manual",
+    "hosted_allowed": false,
+    "fallback_provider": "deepseek",
+    "eligible_categories": ["model_reasoning_failure", "validation_failure"],
+    "max_depth": 1
+  },
+  "notes": "Agent Runtime provider selection and bounded escalation policy. Ollama is an independent inference service reached over localhost; DeepSeek is the first hosted fallback and reads its key only from the environment (DEEPSEEK_API_KEY). Escalation is disabled, manual, and hosted-blocked by default. This file must never contain credentials."
+}

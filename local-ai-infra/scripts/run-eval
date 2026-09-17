@@ -13,18 +13,25 @@ import urllib.request
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "common"))
 import infra  # noqa: E402
+import telemetry  # noqa: E402
+
+
+def discover_suites() -> dict[str, pathlib.Path]:
+    """Map every eval id under evals/<group>/<id>.yaml to its definition path."""
+    return {path.stem: path for path in sorted((infra.ROOT / "evals").glob("*/*.yaml"))}
 
 
 def main() -> int:
+    suites = discover_suites()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("suite", choices=("coding-small", "studio-structured-output"))
+    parser.add_argument("suite", choices=sorted(suites))
     parser.add_argument("--model", required=True)
     parser.add_argument("--profile", required=True)
     parser.add_argument("--confirm-run", action="store_true")
     args = parser.parse_args()
     if not args.confirm_run:
         parser.error("--confirm-run is required; eval inference never runs implicitly")
-    definition = infra.load_json(infra.ROOT / f"evals/{'coding' if args.suite == 'coding-small' else 'studio'}/{args.suite}.yaml")
+    definition = infra.load_json(suites[args.suite])
     profile = infra.load_profile(args.profile)
     if args.model != profile["model"]["id"]:
         parser.error("model must match the selected profile")
@@ -35,6 +42,7 @@ def main() -> int:
     }
     if request_body["format"] is None:
         request_body.pop("format")
+    timeout_seconds = telemetry.load_limits()["timeouts"]["model_timeout_seconds"]
     started = time.perf_counter()
     response, status, error_category, error_code = {}, "failed", None, None
     compliant, score = False, 0.0
@@ -43,7 +51,7 @@ def main() -> int:
             profile["ollama"]["endpoint"].rstrip("/") + "/api/generate",
             data=json.dumps(request_body).encode(), headers={"Content-Type": "application/json"}, method="POST",
         )
-        with urllib.request.urlopen(request, timeout=900) as raw:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as raw:
             response = json.load(raw)
         text = response.get("response", "")
         if definition["assertions"].get("valid_json"):
@@ -71,6 +79,11 @@ def main() -> int:
         test_status="passed" if compliant else "failed", profile_version=profile["version"],
         hardware_profile=profile["hardware_profile"], config_version="v0.1",
     )
+    try:
+        telemetry.validate_ai_run_event(event)
+    except infra.InfraError as exc:
+        print(f"error: refusing to persist malformed telemetry: {exc}", file=sys.stderr)
+        return 1
     destination = infra.ROOT / "evals/results/runs.jsonl"
     infra.append_jsonl(destination, event)
     print(json.dumps(event, indent=2))

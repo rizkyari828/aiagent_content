@@ -12,6 +12,18 @@
 - Ollama uses one generated systemd drop-in. Only its installation/restart crosses the `sudo` boundary.
 - JSONL runtime records are append-only local files. Schemas, evals, curated baselines, and docs are versioned; raw runs are ignored.
 - Inference tools require an explicit `--confirm-run`; validation never launches a 27B workload.
+- A minimal Agent Runtime executes one local-model task through a provider (Ollama),
+  emitting validated spans automatically, enforcing configured limits, honoring
+  timeout/cancellation, and classifying failures. Ollama remains an independent
+  inference service. See [Agent runtime](AGENT_RUNTIME.md).
+- A bounded Tool Runtime (`file.read`, `file.search`, `file.write`, `shell.exec`,
+  `test.run`) executes within one session trace, confined to an explicit workspace
+  root, with automatic tool spans and a tool-call budget. See
+  [Tool runtime](TOOL_RUNTIME.md).
+- A `DeepSeekProvider` and a conservative, opt-in `EscalationController` allow at
+  most one Qwen -> DeepSeek hop for classified model-capability failures, keeping
+  the original trace and the remaining runtime budget. See
+  [Escalation](ESCALATION.md).
 
 No server process exists. Commands are short-lived and state is inspectable. Active application files remain at `~/.qwen/settings.json` and `/etc/systemd/system/ollama.service.d/override.conf`; no symlinks are used.
 
@@ -23,4 +35,4 @@ Backups may contain Qwen credentials, so they live in a mode-0700 state director
 
 ## Deliberately absent
 
-There is no PostgreSQL, ClickHouse, DuckDB dependency, Redis/Valkey, pgvector, HTTP API, UI, daemon, broker, RAG, Docker stack, scheduler, agent orchestrator, fine-tuning, LoRA, or cloud management in v0.1.
+There is no PostgreSQL, ClickHouse, DuckDB dependency, Redis/Valkey, pgvector, HTTP API, UI, daemon, broker, RAG, Docker stack, scheduler, multi-agent orchestrator, multi-hop routing, provider scoring, cost optimizer, fine-tuning, LoRA, or cloud management in v0.1. The Agent Runtime is a single-task execution layer, the Tool Runtime executes one explicitly requested call at a time, and escalation is a single reviewed hop; none of them is an autonomous platform.
