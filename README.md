@@ -102,13 +102,13 @@ Endpoint:
 
 ## Ollama lokal
 
-AI Gateway menggunakan kontrak Application yang provider-agnostic dan adapter HTTP Ollama di Infrastructure. Default development adalah `http://127.0.0.1:11434` dengan model `gemma3:4b`; tidak ada model yang diunduh otomatis.
+AI Gateway menggunakan kontrak Application yang provider-agnostic dan adapter HTTP Ollama di Infrastructure. Default development adalah `http://127.0.0.1:11434` dengan model `qwen3.8:27b-q4_K_M`; tidak ada model yang diunduh otomatis.
 
 Setelah Ollama terpasang dan API-nya dapat dijangkau dari WSL:
 
 ```bash
 ollama list
-ollama pull gemma3:4b
+ollama pull qwen3.8:27b-q4_K_M
 curl http://127.0.0.1:11434/api/version
 ```
 

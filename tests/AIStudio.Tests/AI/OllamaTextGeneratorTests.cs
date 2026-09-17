@@ -15,6 +15,14 @@ namespace AIStudio.Tests.AI;
 public sealed class OllamaTextGeneratorTests
 {
     [Fact]
+    public void OllamaOptions_DefaultModel_IsValidatedStudioRuntimeModel()
+    {
+        var options = new OllamaOptions();
+
+        Assert.Equal("qwen3.8:27b-q4_K_M", options.DefaultModel);
+    }
+
+    [Fact]
     public async Task GenerateAsync_MapsStructuredRequestAndResponseMetadata()
     {
         string? requestBody = null;
@@ -84,7 +92,7 @@ public sealed class OllamaTextGeneratorTests
             return JsonResponse(
                 """
                 {
-                  "model": "gemma3:4b",
+                  "model": "qwen3.8:27b-q4_K_M",
                   "message": { "role": "assistant", "content": "Hello" },
                   "done": true
                 }
@@ -98,7 +106,7 @@ public sealed class OllamaTextGeneratorTests
 
         using var requestJson = JsonDocument.Parse(requestBody!);
         var root = requestJson.RootElement;
-        Assert.Equal("gemma3:4b", root.GetProperty("model").GetString());
+        Assert.Equal("qwen3.8:27b-q4_K_M", root.GetProperty("model").GetString());
         Assert.False(root.TryGetProperty("format", out _));
         Assert.False(root.TryGetProperty("options", out _));
         Assert.Equal("Hello", response.Text);
@@ -195,7 +203,7 @@ public sealed class OllamaTextGeneratorTests
             (_, _) => Task.FromResult(JsonResponse(
                 """
                 {
-                  "model": "gemma3:4b",
+                  "model": "qwen3.8:27b-q4_K_M",
                   "message": { "role": "assistant", "content": "not-json" },
                   "done": true
                 }
@@ -257,7 +265,7 @@ public sealed class OllamaTextGeneratorTests
             Options.Create(new OllamaOptions
             {
                 BaseUrl = "http://127.0.0.1:11434",
-                DefaultModel = "gemma3:4b",
+                DefaultModel = "qwen3.8:27b-q4_K_M",
                 TimeoutSeconds = (int)client.Timeout.TotalSeconds
             }),
             NullLogger<OllamaTextGenerator>.Instance);
