@@ -183,6 +183,49 @@ public sealed class FfmpegVideoRendererTests : IDisposable
         Assert.Equal("render_output_invalid", exception.ErrorCode);
     }
 
+    [Fact]
+    public async Task RenderAsync_DerivesSubtitleTimingWithoutTouchingCanonical()
+    {
+        var narration = WriteNarration([1, 2, 3]);
+        var canonical = Path.Combine(root, "canonical.srt");
+        var canonicalBytes = "1\n00:00:00,000 --> 00:00:01,000\nOriginal\n"u8.ToArray();
+        File.WriteAllBytes(canonical, canonicalBytes);
+
+        string? derivedPath = null;
+        string? derivedContent = null;
+        var processRunner = FakeFfmpeg.WritingOutput(
+            [9, 9],
+            durationSeconds: 24,
+            onFfmpeg: request =>
+            {
+                derivedPath = SubtitlePath(Filter(request.Arguments));
+                derivedContent = derivedPath is null ? null : File.ReadAllText(derivedPath);
+            });
+
+        var scenes = new List<SceneMediaInput>
+        {
+            new("/root/scene-0.png", AssetType.Image, Weight: 1),
+            new("/root/scene-1.png", AssetType.Image, Weight: 3)
+        };
+
+        await CreateRenderer(processRunner).RenderAsync(
+            new VideoRenderRequest(
+                scenes,
+                narration,
+                "renders/out.mp4",
+                canonical,
+                ["Scene one", "Scene two"]),
+            TestContext.Current.CancellationToken);
+
+        var durations = FfmpegCommandPlan.ResolveContentDurations(scenes, 24);
+        Assert.NotNull(derivedContent);
+        Assert.Contains("Scene one", derivedContent);
+        Assert.Contains("Scene two", derivedContent);
+        Assert.Contains(SubtitleTimeline.Timestamp(durations[0]), derivedContent);
+        Assert.False(File.Exists(derivedPath!));
+        Assert.Equal(canonicalBytes, File.ReadAllBytes(canonical));
+    }
+
     private FfmpegVideoRenderer CreateRenderer(IProcessRunner processRunner) =>
         new(
             Options.Create(new RenderingOptions()),
@@ -198,5 +241,22 @@ public sealed class FfmpegVideoRendererTests : IDisposable
         Directory.CreateDirectory(root);
         File.WriteAllBytes(path, bytes);
         return path;
+    }
+
+    private static string Filter(IReadOnlyList<string> arguments) =>
+        arguments[arguments.ToList().IndexOf("-filter_complex") + 1];
+
+    private static string? SubtitlePath(string filter)
+    {
+        const string marker = "subtitles=filename='";
+        var start = filter.IndexOf(marker, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return null;
+        }
+
+        start += marker.Length;
+        var end = filter.IndexOf('\'', start);
+        return end < 0 ? null : filter[start..end];
     }
 }

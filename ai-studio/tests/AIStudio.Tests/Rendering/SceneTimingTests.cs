@@ -76,6 +76,53 @@ public sealed class SceneTimingTests
         Assert.True(SceneTiming.AnimationMinimumSeconds > SceneTiming.DefaultMinimumSeconds);
     }
 
+    [Fact]
+    public void AllocateForScenes_UsesAnimatedFloorAndSumsToNarration()
+    {
+        var result = SceneTiming.AllocateForScenes(
+            ["Opening", "Install"],
+            ["a much longer visual description", "short"],
+            [true, false],
+            24);
+
+        Assert.Equal(24, result.Sum(), 3);
+        Assert.True(result[0] >= SceneTiming.AnimationMinimumSeconds - 1e-9);
+        Assert.True(result[1] >= SceneTiming.DefaultMinimumSeconds - 1e-9);
+    }
+
+    [Fact]
+    public void AllocateForScenes_RejectsMismatchedLengths()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            SceneTiming.AllocateForScenes(["a"], ["b", "c"], [true, false], 10));
+    }
+
+    [Fact]
+    public void SubtitleTimeline_DerivesCumulativeBoundaries()
+    {
+        var srt = SubtitleTimeline.Build(["A", "B"], [2.5, 3.5]);
+
+        Assert.Contains("00:00:00,000 --> 00:00:02,500", srt);
+        Assert.Contains("00:00:02,500 --> 00:00:06,000", srt);
+        Assert.Contains("A", srt);
+        Assert.Contains("B", srt);
+    }
+
+    [Fact]
+    public void SubtitleTimeline_RejectsMismatchedLengths()
+    {
+        Assert.Throws<ArgumentException>(() => SubtitleTimeline.Build(["A"], [1, 2]));
+    }
+
+    [Fact]
+    public void SubtitleTimeline_ReadsCanonicalCueTexts()
+    {
+        var cues = SubtitleTimeline.ReadCueTexts(
+            "1\n00:00:00,000 --> 00:00:02,000\nHello\n\n2\n00:00:02,000 --> 00:00:04,000\nWorld\nline two\n");
+
+        Assert.Equal(["Hello", "World\nline two"], cues);
+    }
+
     private static void AssertClose(IReadOnlyList<double> expected, IReadOnlyList<double> actual)
     {
         Assert.Equal(expected.Count, actual.Count);

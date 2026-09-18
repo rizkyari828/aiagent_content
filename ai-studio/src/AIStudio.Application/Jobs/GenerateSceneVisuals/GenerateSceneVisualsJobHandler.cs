@@ -1,6 +1,7 @@
 using AIStudio.Application.Assets;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs.GenerateStoryboard;
+using AIStudio.Application.Narration;
 using AIStudio.Application.Rendering;
 using AIStudio.Application.Rendering.Visuals;
 using AIStudio.Domain.Assets;
@@ -14,14 +15,19 @@ namespace AIStudio.Application.Jobs.GenerateSceneVisuals;
 /// the approved asset root, and registers the result as a canonical
 /// <see cref="SceneAsset"/>. Scenes that already have an asset are skipped, so a
 /// re-run is idempotent and manually registered or canonical assets are preserved.
+/// Animated clips use the same derived <see cref="SceneTiming"/> duration the
+/// renderer later uses; when narration is unavailable the deterministic animation
+/// floor is kept.
 /// </summary>
 public sealed class GenerateSceneVisualsJobHandler(
     IContentProjectReader contentProjects,
     IJobReader jobs,
     IAssetRepository assets,
+    INarrationRepository narrations,
     IAssetFileStore fileStore,
     ISceneVisualRenderer svgRenderer,
     IManimSceneRenderer manimRenderer,
+    IMediaInspector mediaInspector,
     TimeProvider timeProvider) : IJobHandler
 {
     public bool CanHandle(JobType type) => type == JobType.GenerateSceneVisuals;
@@ -64,6 +70,12 @@ public sealed class GenerateSceneVisualsJobHandler(
             cancellationToken);
 
         var plans = SceneVisualPlanner.PlanAll(storyboard, manimRenderer.IsEnabled);
+        var animationDurations = await TryResolveAnimationDurationsAsync(
+            job.ContentProjectId,
+            payload.StoryboardJobId,
+            storyboard,
+            plans,
+            cancellationToken);
         var registered = await assets.ListByProjectAsync(
             job.ContentProjectId,
             cancellationToken);
@@ -87,6 +99,7 @@ public sealed class GenerateSceneVisualsJobHandler(
                 sceneIndex,
                 job.ContentProjectId,
                 payload.StoryboardJobId,
+                animationDurations?[sceneIndex],
                 cancellationToken);
 
             AssetFileInfo file;
@@ -163,11 +176,59 @@ public sealed class GenerateSceneVisualsJobHandler(
         }
     }
 
+    /// <summary>
+    /// Derives the animation clip duration from the same narration-aware allocation
+    /// the renderer uses. Narration is optional here: if it is absent or unreadable,
+    /// the deterministic animation floor remains the fallback.
+    /// </summary>
+    private async Task<double[]?> TryResolveAnimationDurationsAsync(
+        Guid contentProjectId,
+        Guid storyboardJobId,
+        GenerateStoryboardResult storyboard,
+        IReadOnlyList<SceneVisualPlan> plans,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var narration = await narrations.FindByProjectIdAsync(
+                contentProjectId,
+                cancellationToken);
+            if (narration is null || narration.SourceJobId != storyboardJobId)
+            {
+                return null;
+            }
+
+            var narrationFile = fileStore.Register(narration.Path);
+            var inspection = await mediaInspector.InspectAsync(
+                narrationFile.AbsolutePath,
+                cancellationToken);
+            if (inspection.DurationSeconds <= 0)
+            {
+                return null;
+            }
+
+            return SceneTiming.AllocateForScenes(
+                storyboard.Scenes.Select(scene => scene.Heading).ToArray(),
+                storyboard.Scenes.Select(scene => scene.Visual).ToArray(),
+                plans.Select(plan => plan.Engine == SceneVisualEngine.ManimAnimation).ToArray(),
+                inspection.DurationSeconds);
+        }
+        catch (AssetCollectionException)
+        {
+            return null;
+        }
+        catch (ProcessExecutionException)
+        {
+            return null;
+        }
+    }
+
     private async Task<(string RelativePath, byte[] Bytes, AssetType Type)> GenerateAsync(
         SceneVisualPlan plan,
         int sceneIndex,
         Guid contentProjectId,
         Guid storyboardJobId,
+        double? animationDurationSeconds,
         CancellationToken cancellationToken)
     {
         var animated = plan.Engine == SceneVisualEngine.ManimAnimation;
@@ -177,15 +238,27 @@ public sealed class GenerateSceneVisualsJobHandler(
 
         try
         {
-            var bytes = animated
-                ? await manimRenderer.RenderAsync(
+            byte[] bytes;
+            if (animated)
+            {
+                var animation = plan.Animation
+                    ?? throw new JobExecutionException(
+                        "visual_plan_invalid",
+                        $"Scene {sceneIndex} selected animation without parameters.");
+                if (animationDurationSeconds is > 0)
+                {
+                    animation = animation with { DurationSeconds = animationDurationSeconds.Value };
+                }
+
+                bytes = await manimRenderer.RenderAsync(
                     plan.Template,
-                    plan.Animation
-                        ?? throw new JobExecutionException(
-                            "visual_plan_invalid",
-                            $"Scene {sceneIndex} selected animation without parameters."),
-                    cancellationToken)
-                : await svgRenderer.RenderPngAsync(plan.Brief, cancellationToken);
+                    animation,
+                    cancellationToken);
+            }
+            else
+            {
+                bytes = await svgRenderer.RenderPngAsync(plan.Brief, cancellationToken);
+            }
 
             return (
                 relativePath,

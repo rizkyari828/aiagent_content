@@ -21,6 +21,42 @@ public static class SceneTiming
     public static double WeightFor(string? heading, string? visual) =>
         Math.Max(MinimumWeight, (heading?.Length ?? 0) + (visual?.Length ?? 0));
 
+    /// <summary>Per-scene floor: animated scenes need the higher animation floor.</summary>
+    public static double MinimumFor(bool animated) =>
+        animated ? AnimationMinimumSeconds : DefaultMinimumSeconds;
+
+    /// <summary>
+    /// Single deterministic allocation shared by the demo harness and the durable
+    /// pipeline: text-length weights with the animated floor for animated scenes.
+    /// The result sums to <paramref name="narrationSeconds"/>; crossfade overlap is
+    /// compensated later by the renderer.
+    /// </summary>
+    public static double[] AllocateForScenes(
+        IReadOnlyList<string?> headings,
+        IReadOnlyList<string?> visuals,
+        IReadOnlyList<bool> animated,
+        double narrationSeconds)
+    {
+        ArgumentNullException.ThrowIfNull(headings);
+        ArgumentNullException.ThrowIfNull(visuals);
+        ArgumentNullException.ThrowIfNull(animated);
+        if (headings.Count != visuals.Count || headings.Count != animated.Count)
+        {
+            throw new ArgumentException(
+                "Headings, visuals, and animated flags must have the same length.");
+        }
+
+        var weights = new double[headings.Count];
+        var minimums = new double[headings.Count];
+        for (var index = 0; index < headings.Count; index++)
+        {
+            weights[index] = WeightFor(headings[index], visuals[index]);
+            minimums[index] = MinimumFor(animated[index]);
+        }
+
+        return Allocate(weights, narrationSeconds, minimums);
+    }
+
     /// <summary>
     /// Splits <paramref name="totalSeconds"/> in proportion to
     /// <paramref name="weights"/>, then raises any scene below its

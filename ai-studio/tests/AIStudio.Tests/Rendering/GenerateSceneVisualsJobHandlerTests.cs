@@ -2,7 +2,10 @@ using AIStudio.Application.Assets;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.GenerateSceneVisuals;
+using AIStudio.Application.Jobs.GenerateStoryboard;
+using AIStudio.Application.Narration;
 using AIStudio.Application.Rendering;
+using AIStudio.Application.Rendering.Visuals;
 using AIStudio.Domain.Assets;
 using AIStudio.Domain.Jobs;
 using AIStudio.Infrastructure.Assets;
@@ -138,6 +141,53 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task Handler_UsesNarrationDerivedDurationForAnimatedClips()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateSceneVisualsTestData.AnimatedStoryboard);
+        var parsed = GenerateStoryboardResult.Deserialize(
+            GenerateSceneVisualsTestData.AnimatedStoryboard);
+        var assets = new RecordingAssetRepository();
+        var svg = new StubSceneVisualRenderer();
+        var manim = new StubManimSceneRenderer(isEnabled: true);
+        var narrationBytes = new byte[] { 1, 2, 3 };
+        WriteFile("narration.wav", narrationBytes);
+        var narration = RenderVideoTestData.Narration(
+            projectId,
+            storyboard.Id,
+            "narration.wav",
+            narrationBytes);
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            assets,
+            svg,
+            manim,
+            new StubNarrationRepository(narration),
+            FakeMediaInspector.Returning(
+                new MediaInspection(24, true, true, false, 0, 0)));
+
+        await handler.ExecuteAsync(
+            GenerateSceneVisualsTestData.Job(projectId, storyboard.Id),
+            TestContext.Current.CancellationToken);
+
+        var expected = SceneTiming.AllocateForScenes(
+            parsed.Scenes.Select(scene => scene.Heading).ToArray(),
+            parsed.Scenes.Select(scene => scene.Visual).ToArray(),
+            [true, true],
+            24);
+
+        Assert.Equal(2, manim.Calls.Count);
+        Assert.Equal(expected[0], manim.Calls[0].Parameters.DurationSeconds, 3);
+        Assert.Equal(expected[1], manim.Calls[1].Parameters.DurationSeconds, 3);
+        Assert.NotEqual(
+            SceneVisualPlanner.AnimationDurationSeconds,
+            manim.Calls[0].Parameters.DurationSeconds);
+    }
+
+    [Fact]
     public async Task Handler_MapsRendererFailureToJobErrorCode()
     {
         var projectId = Guid.NewGuid();
@@ -211,10 +261,12 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
             new StubContentProjectReader(null),
             new StubJobReader(storyboard),
             new RecordingAssetRepository(),
+            new StubNarrationRepository(null),
             new LocalAssetFileStore(
                 Options.Create(new AssetStorageOptions { RootPath = root })),
             new StubSceneVisualRenderer(),
             new StubManimSceneRenderer(isEnabled: false),
+            FakeMediaInspector.Returning(new MediaInspection(0, false, false, false, 0, 0)),
             new AssetStubTimeProvider(AssetTestData.Now));
 
         var exception = await Assert.ThrowsAsync<JobExecutionException>(
@@ -230,16 +282,21 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
         JobSnapshot? storyboard,
         IAssetRepository assets,
         StubSceneVisualRenderer svg,
-        StubManimSceneRenderer? manim = null) =>
+        StubManimSceneRenderer? manim = null,
+        INarrationRepository? narrations = null,
+        IMediaInspector? mediaInspector = null) =>
         new(
             new StubContentProjectReader(
                 new ContentProjectSnapshot(projectId, "Project", "Brief")),
             new StubJobReader(storyboard),
             assets,
+            narrations ?? new StubNarrationRepository(null),
             new LocalAssetFileStore(
                 Options.Create(new AssetStorageOptions { RootPath = root })),
             svg,
             manim ?? new StubManimSceneRenderer(isEnabled: false),
+            mediaInspector ?? FakeMediaInspector.Returning(
+                new MediaInspection(0, false, false, false, 0, 0)),
             new AssetStubTimeProvider(AssetTestData.Now));
 
     private void WriteFile(string relativePath, byte[] bytes)

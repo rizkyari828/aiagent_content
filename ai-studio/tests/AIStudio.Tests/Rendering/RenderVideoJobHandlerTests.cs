@@ -1,6 +1,7 @@
 using AIStudio.Application.Assets;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs;
+using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Application.Jobs.RenderVideo;
 using AIStudio.Application.Rendering;
 using AIStudio.Domain.Assets;
@@ -283,10 +284,14 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
         var storyboard = AssetTestData.StoryboardJob(
             projectId,
             GenerateStoryboardTestData.ValidResult);
+        var storyboardScenes = GenerateStoryboardResult
+            .Deserialize(GenerateStoryboardTestData.ValidResult)
+            .Scenes;
         var scene0 = new byte[] { 1 };
         var scene1 = new byte[] { 2 };
         var narrationBytes = new byte[] { 3 };
-        var subtitleBytes = "1\n00:00:00,000 --> 00:00:02,000\nHello\n"u8.ToArray();
+        var subtitleBytes =
+            "1\n00:00:00,000 --> 00:00:02,000\nHello\n\n2\n00:00:02,000 --> 00:00:04,000\nWorld\n"u8.ToArray();
         WriteFile("scene-0.png", scene0);
         WriteFile("scene-1.png", scene1);
         WriteFile("narration.wav", narrationBytes);
@@ -303,7 +308,18 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
             null,
             null,
             AssetTestData.Now);
-        var processRunner = FakeFfmpeg.WritingOutput([42, 42]);
+        var canonicalSubtitle = Path.Combine(root, "subtitle.srt");
+        string? derivedSubtitlePath = null;
+        string? derivedSubtitle = null;
+        var processRunner = FakeFfmpeg.WritingOutput(
+            [42, 42],
+            onFfmpeg: request =>
+            {
+                derivedSubtitlePath = SubtitlePath(Filter(request.Arguments));
+                derivedSubtitle = derivedSubtitlePath is null
+                    ? null
+                    : File.ReadAllText(derivedSubtitlePath);
+            });
         var handler = CreateHandler(
             projectId,
             storyboard,
@@ -329,10 +345,35 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
         Assert.True(result.SubtitleBurnedIn);
 
         var ffmpegArguments = processRunner.Requests[1].Arguments;
-        var filter = ffmpegArguments[ffmpegArguments.ToList().IndexOf("-filter_complex") + 1];
-        Assert.Contains(Path.Combine(root, "subtitle.srt"), filter);
+        var filter = Filter(ffmpegArguments);
         Assert.Contains("subtitles=", filter);
         Assert.DoesNotContain("mov_text", ffmpegArguments);
+
+        // Durable rendering re-times the canonical cues from SceneTiming and burns
+        // that derived file in; the canonical subtitle asset must stay untouched.
+        Assert.NotNull(derivedSubtitle);
+        Assert.NotEqual(canonicalSubtitle, derivedSubtitlePath);
+        Assert.Contains("Hello", derivedSubtitle);
+        Assert.Contains("World", derivedSubtitle);
+        Assert.DoesNotContain("Why local AI", derivedSubtitle);
+        var contentDurations = FfmpegCommandPlan.ResolveContentDurations(
+            [
+                new SceneMediaInput(
+                    Path.Combine(root, "scene-0.png"),
+                    AssetType.Image,
+                    Weight: SceneTiming.WeightFor(
+                        storyboardScenes[0].Heading,
+                        storyboardScenes[0].Visual)),
+                new SceneMediaInput(
+                    Path.Combine(root, "scene-1.png"),
+                    AssetType.Image,
+                    Weight: SceneTiming.WeightFor(
+                        storyboardScenes[1].Heading,
+                        storyboardScenes[1].Visual))
+            ],
+            12);
+        Assert.Contains(SubtitleTimeline.Timestamp(contentDurations[0]), derivedSubtitle);
+        Assert.Equal(subtitleBytes, File.ReadAllBytes(canonicalSubtitle));
     }
 
     [Fact]
@@ -516,10 +557,24 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
         Assert.DoesNotContain("fadeblack", filter);
     }
 
-    private static string Filter(FakeProcessRunner processRunner)
+    private static string Filter(FakeProcessRunner processRunner) =>
+        Filter(processRunner.Requests[1].Arguments);
+
+    private static string Filter(IReadOnlyList<string> arguments) =>
+        arguments[arguments.ToList().IndexOf("-filter_complex") + 1];
+
+    private static string? SubtitlePath(string filter)
     {
-        var arguments = processRunner.Requests[1].Arguments;
-        return arguments[arguments.ToList().IndexOf("-filter_complex") + 1];
+        const string marker = "subtitles=filename='";
+        var start = filter.IndexOf(marker, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return null;
+        }
+
+        start += marker.Length;
+        var end = filter.IndexOf('\'', start);
+        return end < 0 ? null : filter[start..end];
     }
 
     private RenderVideoJobHandler CreateHandler(

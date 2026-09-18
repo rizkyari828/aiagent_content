@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using AIStudio.Application.Jobs.GenerateStoryboard;
 
 namespace AIStudio.Application.Rendering.Visuals;
@@ -9,11 +10,17 @@ namespace AIStudio.Application.Rendering.Visuals;
 /// predefined animation template. It is pure and heuristic based on explicit
 /// keywords; the eventual creative-director model can replace it behind the same
 /// plan shape without changing the engines.
+/// <para>
+/// Display text is resolved <em>only</em> from the canonical heading and explicit
+/// on-screen strings (quoted labels plus a small concept vocabulary). The raw
+/// <c>visual</c> field is creative direction, so it is never truncated into
+/// user-facing card/bubble/heading text.
+/// </para>
 /// </summary>
 public static class SceneVisualPlanner
 {
     /// <summary>Bump when the mapping changes so job input hashes change.</summary>
-    public const int PlannerVersion = 1;
+    public const int PlannerVersion = 2;
 
     /// <summary>Animation templates must fit their scene; aligned with the timing floor.</summary>
     public const double AnimationDurationSeconds = SceneTiming.AnimationMinimumSeconds;
@@ -32,17 +39,51 @@ public static class SceneVisualPlanner
     private static readonly string[] ChatFlowKeywords =
         ["chat", "percakapan", "prompt", "jawaban", "assistant"];
 
+    // Layout intent comes from the heading (canonical, user-facing), not from the
+    // creative-direction prose where nouns like "terminal" may only be described.
     private static readonly string[] ChatLayoutKeywords =
-        ["chat", "percakapan", "bubble", "jawaban", "asisten"];
+        ["chat", "percakapan", "obrol"];
 
     private static readonly string[] WindowLayoutKeywords =
-    [
-        "terminal", "perintah", "install", "download", "unduh",
-        "progress", "browser", "address", "ollama", "pull", "run"
-    ];
+        ["terminal", "install", "download", "unduh"];
 
     private static readonly string[] CardsLayoutKeywords =
-        ["panel", "checklist", "daftar", "tiga", "opsi", "langkah", "kartu", "tips", "poin"];
+    [
+        "tips", "checklist", "daftar", "panel", "kartu", "opsi", "langkah",
+        "butuh", "kebutuhan", "syarat", "persiapan", "model", "tarik"
+    ];
+
+    /// <summary>
+    /// Small reusable concept vocabulary. Each entry is a generic communication
+    /// pattern (a requirement/option card), not a per-video special case.
+    /// </summary>
+    private static readonly Concept[] Concepts =
+    [
+        new("Laptop", SceneVisualIcon.Laptop, ["laptop", "ram"]),
+        new("Ruang Disk", SceneVisualIcon.Disk, ["disk", "penyimpanan", "hard disk"]),
+        new("Koneksi", SceneVisualIcon.Download, ["internet", "koneksi", "wifi", "wi-fi", "kabel", "unduh", "download"]),
+        new("Ollama", SceneVisualIcon.Model, ["ollama"]),
+        new("Model AI", SceneVisualIcon.Model, ["model"]),
+        new("Chat", SceneVisualIcon.Chat, ["chat", "percakapan", "obrol"]),
+        new("GPU", SceneVisualIcon.Bolt, ["gpu"]),
+        new("Privasi", SceneVisualIcon.Shield, ["privasi", "gembok", "aman"]),
+        new("Tips", SceneVisualIcon.Bulb, ["tips", "ide"])
+    ];
+
+    private static readonly string[] DetailCues =
+        ["gb", "mb", "ram", "download", "unduh", "minimal", "sekitar", "kosong", "menit"];
+
+    private static readonly Regex QuotedLabelPattern = new(
+        "(?<q>['\"])(?<text>[^'\"]{2,80})\\k<q>",
+        RegexOptions.Compiled);
+
+    private static readonly Regex CommandPattern = new(
+        @"\bollama\s+(?:--version|pull|run|serve|list|install|show|rm|ps)\b(?:\s+[A-Za-z0-9._:\-]+)?",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex ModelPullPattern = new(
+        @"\bollama\s+pull\s+(?<model>[A-Za-z0-9][A-Za-z0-9._:\-]*)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     public static IReadOnlyList<SceneVisualPlan> PlanAll(
         GenerateStoryboardResult storyboard,
@@ -89,21 +130,33 @@ public static class SceneVisualPlanner
     public static SceneVisualLayout ClassifyLayout(StoryboardScene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        var text = SceneText(scene);
+        var heading = scene.Heading;
 
-        if (ContainsAny(text, ChatLayoutKeywords))
+        if (ContainsAny(heading, ChatLayoutKeywords))
         {
             return SceneVisualLayout.Chat;
         }
 
-        if (ContainsAny(text, WindowLayoutKeywords))
+        if (ContainsAny(heading, WindowLayoutKeywords))
         {
             return SceneVisualLayout.Window;
         }
 
-        if (ContainsAny(text, CardsLayoutKeywords))
+        // Two or more concrete model options read as a selection grid even when
+        // the heading does not say "cards".
+        if (ExtractModelNames(scene.Visual).Count >= 2)
         {
             return SceneVisualLayout.Cards;
+        }
+
+        if (ContainsAny(heading, CardsLayoutKeywords))
+        {
+            return SceneVisualLayout.Cards;
+        }
+
+        if (ExtractCommand(scene.Visual) is not null)
+        {
+            return SceneVisualLayout.Window;
         }
 
         return SceneVisualLayout.Hero;
@@ -115,13 +168,28 @@ public static class SceneVisualPlanner
         SceneVisualLayout layout,
         SceneVisualPalette palette)
     {
-        var cards = BuildCards(scene);
-        var command = layout == SceneVisualLayout.Window
-            ? ExtractCommand(scene.Visual)
-            : null;
-        var progress = layout == SceneVisualLayout.Window && HasProgress(scene.Visual)
-            ? 0.72
-            : 0;
+        IReadOnlyList<SceneVisualCard> cards;
+        string? note = null;
+        string? command = null;
+        var progress = 0d;
+
+        switch (layout)
+        {
+            case SceneVisualLayout.Window:
+                command = ExtractCommand(scene.Visual);
+                progress = HasProgress(scene.Visual) ? 0.72 : 0;
+                cards = [];
+                break;
+            case SceneVisualLayout.Chat:
+                cards = BuildChatCards(scene);
+                break;
+            case SceneVisualLayout.Cards:
+                (cards, note) = BuildCardContent(scene);
+                break;
+            default:
+                cards = BuildHeroCards(scene);
+                break;
+        }
 
         return new SceneVisualBrief(
             index,
@@ -130,46 +198,144 @@ public static class SceneVisualPlanner
             layout,
             palette,
             cards,
-            Note: null,
-            Command: command,
-            Progress: progress);
+            note,
+            command,
+            progress);
     }
 
-    private static IReadOnlyList<SceneVisualCard> BuildCards(StoryboardScene scene)
+    private static SceneAnimationParameters BuildAnimationParameters(
+        SceneVisualBrief brief,
+        SceneVisualPalette palette)
     {
-        var cards = new List<SceneVisualCard>();
-        foreach (var segment in SplitSegments(scene.Visual))
+        // Animation parameters are display text too. Only quoted dialogue from a
+        // chat scene is safe to surface; everything else stays on the template's
+        // own fallback labels.
+        var secondary = brief.Layout == SceneVisualLayout.Chat && brief.Cards.Count > 0
+            ? brief.Cards[0].Title
+            : null;
+        var tertiary = brief.Layout == SceneVisualLayout.Chat && brief.Cards.Count > 1
+            ? brief.Cards[1].Title
+            : null;
+
+        return new(
+            brief.Kicker,
+            brief.Heading,
+            secondary,
+            tertiary,
+            palette,
+            AnimationDurationSeconds);
+    }
+
+    private static (IReadOnlyList<SceneVisualCard> Cards, string? Note) BuildCardContent(
+        StoryboardScene scene)
+    {
+        var models = ExtractModelNames(scene.Visual);
+        if (models.Count >= 2)
+        {
+            var modelCards = models
+                .Take(4)
+                .Select(model => new SceneVisualCard(model, null, SceneVisualIcon.Model))
+                .ToArray();
+            return (modelCards, ExtractCommand(scene.Visual));
+        }
+
+        var concepts = ExtractConceptCards(scene.Visual);
+        if (concepts.Count > 0)
+        {
+            return (concepts, null);
+        }
+
+        var labels = ExtractDisplayLabels(scene.Visual);
+        if (labels.Count > 0)
+        {
+            return (labels
+                .Take(4)
+                .Select(label => new SceneVisualCard(Truncate(label, 34)))
+                .ToArray(), null);
+        }
+
+        return ([new SceneVisualCard(Truncate(scene.Heading, 34))], null);
+    }
+
+    private static IReadOnlyList<SceneVisualCard> ExtractConceptCards(string visual)
+    {
+        var cards = new List<SceneVisualCard>(4);
+        foreach (var concept in Concepts)
         {
             if (cards.Count == 4)
             {
                 break;
             }
 
-            var title = Shorten(segment);
-            if (title.Length > 0)
+            var keywordIndex = FirstMatchIndex(visual, concept.Keywords);
+            if (keywordIndex < 0)
             {
-                cards.Add(new SceneVisualCard(title, null, IconFor(segment)));
+                continue;
             }
-        }
 
-        if (cards.Count == 0)
-        {
-            cards.Add(new SceneVisualCard(Shorten(scene.Heading)));
+            cards.Add(new SceneVisualCard(
+                concept.Title,
+                DetailFor(visual, keywordIndex),
+                concept.Icon));
         }
 
         return cards;
     }
 
-    private static SceneAnimationParameters BuildAnimationParameters(
-        SceneVisualBrief brief,
-        SceneVisualPalette palette) =>
-        new(
-            brief.Kicker,
-            brief.Heading,
-            brief.Cards.Count > 0 ? brief.Cards[0].Title : null,
-            brief.Cards.Count > 1 ? brief.Cards[1].Title : null,
-            palette,
-            AnimationDurationSeconds);
+    private static IReadOnlyList<SceneVisualCard> BuildHeroCards(StoryboardScene scene)
+    {
+        var labels = ExtractDisplayLabels(scene.Visual);
+        var primary = labels
+            .Where(label => label.Length >= 12)
+            .OrderByDescending(label => label.Length)
+            .FirstOrDefault();
+
+        var cards = new List<SceneVisualCard>
+        {
+            primary is not null
+                ? new SceneVisualCard(Headline(primary))
+                : new SceneVisualCard(Truncate(scene.Heading, 34))
+        };
+
+        foreach (var label in labels)
+        {
+            if (cards.Count == 4)
+            {
+                break;
+            }
+
+            if (label.Length is < 4 or > 24
+                || string.Equals(label, primary, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            cards.Add(new SceneVisualCard(Truncate(label, 24)));
+        }
+
+        return cards;
+    }
+
+    private static IReadOnlyList<SceneVisualCard> BuildChatCards(StoryboardScene scene)
+    {
+        var labels = ExtractDisplayLabels(scene.Visual)
+            .Where(IsDialogue)
+            .Take(2)
+            .Select(label => new SceneVisualCard(Truncate(label, 80)))
+            .ToList();
+
+        if (labels.Count == 0)
+        {
+            labels.Add(new SceneVisualCard(Truncate(scene.Heading, 40)));
+        }
+
+        return labels;
+    }
+
+    private static bool IsDialogue(string label) =>
+        label.Length >= 8
+        && label.Contains(' ')
+        && !CommandPattern.IsMatch(label);
 
     private static string SceneText(StoryboardScene scene) =>
         $"{scene.Heading} {scene.Visual}";
@@ -177,112 +343,106 @@ public static class SceneVisualPlanner
     private static bool ContainsAny(string text, string[] keywords) =>
         keywords.Any(keyword => text.Contains(keyword, StringComparison.OrdinalIgnoreCase));
 
-    private static IReadOnlyList<string> SplitSegments(string visual) =>
-        visual
-            .Split(
-                ['.', ';', '\n'],
-                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(segment => segment.Length >= 3)
-            .ToArray();
-
-    private static string Shorten(string text)
+    private static int FirstMatchIndex(string text, string[] keywords)
     {
-        var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var trimmed = words.Length > 5 ? string.Join(' ', words[..5]) : string.Join(' ', words);
-        return trimmed.Length > 34 ? trimmed[..34].TrimEnd() : trimmed;
+        var best = -1;
+        foreach (var keyword in keywords)
+        {
+            var index = text.IndexOf(keyword, StringComparison.OrdinalIgnoreCase);
+            if (index >= 0 && (best < 0 || index < best))
+            {
+                best = index;
+            }
+        }
+
+        return best;
     }
 
-    private static SceneVisualIcon IconFor(string text)
+    private static string? DetailFor(string visual, int keywordIndex)
     {
-        var value = text.ToLowerInvariant();
-        if (value.Contains("laptop", StringComparison.Ordinal))
+        foreach (var label in ExtractDisplayLabels(visual))
         {
-            return SceneVisualIcon.Laptop;
+            var labelIndex = visual.IndexOf(label, keywordIndex, StringComparison.OrdinalIgnoreCase);
+            if (labelIndex >= 0
+                && labelIndex - keywordIndex <= 80
+                && IsQuantitativeDetail(label))
+            {
+                return label;
+            }
         }
 
-        if (value.Contains("cloud", StringComparison.Ordinal)
-            || value.Contains("server", StringComparison.Ordinal)
-            || value.Contains("awan", StringComparison.Ordinal))
+        return null;
+    }
+
+    private static bool IsQuantitativeDetail(string label) =>
+        label.Any(char.IsDigit) || ContainsAny(label, DetailCues);
+
+    private static IReadOnlyList<string> ExtractDisplayLabels(string visual)
+    {
+        var labels = new List<string>();
+        foreach (Match match in QuotedLabelPattern.Matches(visual))
         {
-            return SceneVisualIcon.Cloud;
+            var text = match.Groups["text"].Value.Trim();
+            if (text.Length > 0 && !labels.Contains(text, StringComparer.OrdinalIgnoreCase))
+            {
+                labels.Add(text);
+            }
         }
 
-        if (value.Contains("gembok", StringComparison.Ordinal)
-            || value.Contains("privasi", StringComparison.Ordinal)
-            || value.Contains("aman", StringComparison.Ordinal))
+        return labels;
+    }
+
+    private static IReadOnlyList<string> ExtractModelNames(string visual)
+    {
+        var models = new List<string>();
+        foreach (Match match in ModelPullPattern.Matches(visual))
         {
-            return SceneVisualIcon.Shield;
+            var model = match.Groups["model"].Value;
+            if (!models.Contains(model, StringComparer.OrdinalIgnoreCase))
+            {
+                models.Add(model);
+            }
         }
 
-        if (value.Contains("chat", StringComparison.Ordinal)
-            || value.Contains("percakapan", StringComparison.Ordinal))
-        {
-            return SceneVisualIcon.Chat;
-        }
-
-        if (value.Contains("download", StringComparison.Ordinal)
-            || value.Contains("unduh", StringComparison.Ordinal)
-            || value.Contains("install", StringComparison.Ordinal))
-        {
-            return SceneVisualIcon.Download;
-        }
-
-        if (value.Contains("model", StringComparison.Ordinal))
-        {
-            return SceneVisualIcon.Model;
-        }
-
-        if (value.Contains("centang", StringComparison.Ordinal)
-            || value.Contains("check", StringComparison.Ordinal))
-        {
-            return SceneVisualIcon.Check;
-        }
-
-        if (value.Contains("gpu", StringComparison.Ordinal)
-            || value.Contains("suhu", StringComparison.Ordinal))
-        {
-            return SceneVisualIcon.Bolt;
-        }
-
-        if (value.Contains("disk", StringComparison.Ordinal)
-            || value.Contains("gb", StringComparison.Ordinal)
-            || value.Contains("penyimpanan", StringComparison.Ordinal))
-        {
-            return SceneVisualIcon.Disk;
-        }
-
-        if (value.Contains("tips", StringComparison.Ordinal)
-            || value.Contains("ide", StringComparison.Ordinal))
-        {
-            return SceneVisualIcon.Bulb;
-        }
-
-        return SceneVisualIcon.None;
+        return models;
     }
 
     private static string? ExtractCommand(string visual)
     {
-        var index = visual.IndexOf("ollama", StringComparison.OrdinalIgnoreCase);
-        if (index < 0)
+        var match = CommandPattern.Match(visual);
+        if (!match.Success)
         {
             return null;
         }
 
-        var snippet = visual[index..];
-        var stop = snippet.IndexOfAny(['\'', '"', '\n']);
-        if (stop > 0)
-        {
-            snippet = snippet[..stop];
-        }
-
-        var tokens = snippet.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (tokens.Length > 4)
-        {
-            tokens = tokens[..4];
-        }
-
-        var command = string.Join(' ', tokens).Trim();
+        var command = match.Value.Trim().TrimEnd('.', ',', ';', ':');
         return command.Length is > 0 and <= 60 ? command : null;
+    }
+
+    private static string Headline(string text)
+    {
+        var trimmed = text.Trim();
+        var stop = trimmed.IndexOfAny([',', ';', ':', '.']);
+        var clause = stop > 0 ? trimmed[..stop] : trimmed;
+        return Truncate(clause, 34);
+    }
+
+    private static string Truncate(string text, int maxLength)
+    {
+        var trimmed = text.Trim();
+        if (trimmed.Length <= maxLength)
+        {
+            return trimmed;
+        }
+
+        var cut = trimmed[..maxLength];
+        var lastSpace = cut.LastIndexOf(' ');
+        if (lastSpace > 0)
+        {
+            cut = cut[..lastSpace];
+        }
+
+        return cut.TrimEnd(' ', ',', ';', ':', '.');
     }
 
     private static bool HasProgress(string visual) =>
@@ -290,4 +450,6 @@ public static class SceneVisualPlanner
         || visual.Contains("download", StringComparison.OrdinalIgnoreCase)
         || visual.Contains("install", StringComparison.OrdinalIgnoreCase)
         || visual.Contains("unduh", StringComparison.OrdinalIgnoreCase);
+
+    private sealed record Concept(string Title, SceneVisualIcon Icon, string[] Keywords);
 }

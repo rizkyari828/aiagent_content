@@ -32,7 +32,8 @@ internal static class FakeFfmpeg
     public static FakeProcessRunner WritingOutput(
         byte[] outputBytes,
         double durationSeconds = 12,
-        bool outputHasAudio = true) =>
+        bool outputHasAudio = true,
+        Action<ProcessRunRequest>? onFfmpeg = null) =>
         new(request =>
         {
             if (request.FileName.Contains("ffprobe", StringComparison.OrdinalIgnoreCase))
@@ -46,6 +47,7 @@ internal static class FakeFfmpeg
 
             if (request.FileName.Contains("ffmpeg", StringComparison.OrdinalIgnoreCase))
             {
+                onFfmpeg?.Invoke(request);
                 var output = request.Arguments[^1];
                 Directory.CreateDirectory(Path.GetDirectoryName(output)!);
                 File.WriteAllBytes(output, outputBytes);

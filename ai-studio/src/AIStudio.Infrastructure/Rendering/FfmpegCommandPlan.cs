@@ -367,6 +367,27 @@ public static class FfmpegCommandPlan
             : "fade";
 
     /// <summary>
+    /// Content durations before crossfade compensation, using the same
+    /// <see cref="SceneTiming"/> source as the demo and durable subtitle timing.
+    /// This is also what should drive derived subtitle boundaries.
+    /// </summary>
+    public static double[] ResolveContentDurations(
+        IReadOnlyList<SceneMediaInput> scenes,
+        double narrationSeconds)
+    {
+        ArgumentNullException.ThrowIfNull(scenes);
+        var weights = new double[scenes.Count];
+        var minimums = new double[scenes.Count];
+        for (var index = 0; index < scenes.Count; index++)
+        {
+            weights[index] = scenes[index].Weight > 0 ? scenes[index].Weight : 1.0;
+            minimums[index] = SceneTiming.MinimumFor(scenes[index].Type == AssetType.Video);
+        }
+
+        return SceneTiming.Allocate(weights, narrationSeconds, minimums);
+    }
+
+    /// <summary>
     /// Allocates the narration across scenes by weight (scene text length today),
     /// using a higher floor for animated scenes. The content split sums to the
     /// narration; the crossfade overlap budget is then distributed proportionally
@@ -377,20 +398,9 @@ public static class FfmpegCommandPlan
         VideoRenderSettings settings,
         double transitionDuration)
     {
-        var weights = new double[scenes.Count];
-        var minimums = new double[scenes.Count];
-        for (var index = 0; index < scenes.Count; index++)
-        {
-            weights[index] = scenes[index].Weight > 0 ? scenes[index].Weight : 1.0;
-            minimums[index] = scenes[index].Type == AssetType.Video
-                ? SceneTiming.AnimationMinimumSeconds
-                : SceneTiming.DefaultMinimumSeconds;
-        }
-
-        var contentDurations = SceneTiming.Allocate(
-            weights,
-            settings.NarrationDurationSeconds,
-            minimums);
+        var contentDurations = ResolveContentDurations(
+            scenes,
+            settings.NarrationDurationSeconds);
 
         var overlapBudget = settings.Transition == SceneTransition.Crossfade && scenes.Count > 1
             ? (scenes.Count - 1) * transitionDuration

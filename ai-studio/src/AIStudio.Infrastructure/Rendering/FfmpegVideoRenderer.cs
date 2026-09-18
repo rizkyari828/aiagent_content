@@ -43,6 +43,26 @@ public sealed class FfmpegVideoRenderer : IVideoRenderer
             request.NarrationAbsolutePath,
             cancellationToken);
 
+        // Derive subtitle boundaries from the same scene timing as the video. The
+        // canonical subtitle asset is only read; the derived file is transient.
+        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+        var subtitlePath = request.SubtitleAbsolutePath;
+        string? derivedSubtitlePath = null;
+        if (request.SubtitleAbsolutePath is not null
+            && request.SubtitleCueTexts is { Count: > 0 } cues
+            && cues.Count == request.Scenes.Count)
+        {
+            var durations = FfmpegCommandPlan.ResolveContentDurations(
+                request.Scenes,
+                narrationDuration);
+            derivedSubtitlePath = $"{outputPath}.{Guid.NewGuid():N}.srt";
+            await File.WriteAllTextAsync(
+                derivedSubtitlePath,
+                SubtitleTimeline.Build(cues, durations),
+                cancellationToken);
+            subtitlePath = derivedSubtitlePath;
+        }
+
         var settings = new VideoRenderSettings(
             options.Width,
             options.Height,
@@ -51,11 +71,10 @@ public sealed class FfmpegVideoRenderer : IVideoRenderer
             options.Transition,
             options.TransitionDurationSeconds,
             options.EnableMotion,
-            request.SubtitleAbsolutePath,
+            subtitlePath,
             options.Subtitle,
             ResolveBackgroundMusic());
 
-        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
         var temporaryPath = $"{outputPath}.{Guid.NewGuid():N}.part";
 
         try
@@ -100,6 +119,10 @@ public sealed class FfmpegVideoRenderer : IVideoRenderer
         finally
         {
             DeleteIfExists(temporaryPath);
+            if (derivedSubtitlePath is not null)
+            {
+                DeleteIfExists(derivedSubtitlePath);
+            }
         }
     }
 

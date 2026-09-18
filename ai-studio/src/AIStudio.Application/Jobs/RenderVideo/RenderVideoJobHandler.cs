@@ -127,6 +127,7 @@ public sealed class RenderVideoJobHandler(
         string? subtitlePath = null;
         Guid? subtitleTrackId = null;
         string? subtitleContentHash = null;
+        IReadOnlyList<string>? subtitleCueTexts = null;
 
         var subtitle = await subtitles.FindByProjectIdAsync(
             job.ContentProjectId,
@@ -141,6 +142,16 @@ public sealed class RenderVideoJobHandler(
             subtitlePath = subtitleFile.AbsolutePath;
             subtitleTrackId = subtitle.Id;
             subtitleContentHash = subtitleFile.ContentHash;
+
+            // Re-time the operator's own cues to the derived scene boundaries.
+            // Only a one-cue-per-scene mapping is re-timed; any other shape keeps
+            // the canonical timing as the deterministic fallback.
+            var canonicalCues = SubtitleTimeline.ReadCueTexts(
+                await File.ReadAllTextAsync(subtitlePath, cancellationToken));
+            if (canonicalCues.Count == storyboard.Scenes.Count)
+            {
+                subtitleCueTexts = canonicalCues;
+            }
         }
 
         var relativeOutput = $"renders/{job.ContentProjectId:N}/{payload.StoryboardJobId:N}.mp4";
@@ -153,7 +164,8 @@ public sealed class RenderVideoJobHandler(
                     sceneInputs,
                     narrationFile.AbsolutePath,
                     relativeOutput,
-                    subtitlePath),
+                    subtitlePath,
+                    subtitleCueTexts),
                 cancellationToken);
         }
         catch (RenderVideoException exception)
