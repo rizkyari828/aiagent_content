@@ -45,6 +45,14 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `tests/AIStudio.Tests/Scripts/` — lifecycle, canonical edit, idempotent approval, and API response contracts.
 - `tests/AIStudio.Tests/Persistence/ReviewedScriptModelTests.cs` — additive EF mapping and uniqueness validation.
 
+## Product specification (modular PRD v0.9.2)
+
+- `docs/product/PRD_INDEX.md` — split index and task-to-document map; read this first.
+- `docs/product/parts/01..12_*.md` — canonical topical split of every numbered v0.9.2 section.
+- `docs/product/execution-context/STORYBOARD.md`, `NARRATION_TTS.md`, `ASSETS.md`, `RENDERING_QA.md` — narrow Video #1 implementation contexts.
+- `docs/product/SECTION_MAP.md` — where each source section moved.
+- `docs/product/_source/Local_AI_Ecosystem_PRD_v0.9.2.md` — frozen original, authoritative on divergence; read only to resolve ambiguity.
+
 ## Agent context
 
 - `../AGENTS.md`, `AGENTS.md`, `QWEN.md`, `docs/agent/CHECKPOINT.md`, `docs/agent/LESSONS.md` — monorepo rules, Studio rules, current state, and validated knowledge.

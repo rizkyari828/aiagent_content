@@ -1,6 +1,6 @@
 # Agent Checkpoint
 
-Updated: 2026-09-17
+Updated: 2026-09-18
 
 - Repository Layout: Content Studio now lives in `ai-studio/`; run its build, test, Compose, and documentation commands from that directory. Application behavior is unchanged.
 
@@ -16,4 +16,5 @@ Updated: 2026-09-17
 - Manual Script Review/Edit: DONE. A completed GenerateScript `Job.Result` remains immutable AI evidence. `reviewed_scripts.content` is the canonical human-reviewed structured script, uniquely keyed per ContentProject and bound to `SourceJobId`; edits increment `Revision` only when canonical content changes, `Draft -> Approved` is the only transition, approval is idempotent, and approved content cannot be edited.
 - Qwen Patch Review: APPROVED and committed as `f24f770`. `Serialize()` validates and serializes the same trimmed canonical values for all six fields; `GenerateIdeaContractsTests` passed 8/8. Future Qwen patches still require human/Codex review.
 - Qwen Code Observation: direct local coding-model inference is usable; substantial delays were observed around compaction/tool orchestration. Qwen Code `0.24.0` clears its file-read cache after successful auto-compaction, which could require a later re-read, but the old session lacks a trace proving that this caused the observed Edit failure.
-- Next Recommended Step: generate the smallest Basic Storyboard only from a `reviewed_scripts` row whose status is `Approved`.
+- Next Milestone: Basic Storyboard. Canonical input is an `Approved` `ReviewedScript` (`reviewed_scripts` row); generate only the smallest structured draft from it. Narration/TTS, asset collection/creation, and rendering/FFmpeg/QA are not started and stay out of scope until the storyboard milestone is done.
+- PRD Navigation: read `docs/product/PRD_INDEX.md` first, then only the relevant `docs/product/parts/` or `docs/product/execution-context/` file (storyboard work starts at `docs/product/execution-context/STORYBOARD.md`).
