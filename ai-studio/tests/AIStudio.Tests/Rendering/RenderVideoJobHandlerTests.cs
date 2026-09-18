@@ -5,6 +5,7 @@ using AIStudio.Application.Rendering;
 using AIStudio.Domain.Assets;
 using AIStudio.Domain.Narration;
 using AIStudio.Infrastructure.Assets;
+using AIStudio.Infrastructure.Rendering;
 using AIStudio.Tests.Assets;
 using AIStudio.Tests.Jobs;
 using Microsoft.Extensions.Options;
@@ -51,7 +52,8 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
             storyboard.Id,
             "narration.wav",
             narrationBytes);
-        var renderer = new RecordingVideoRenderer();
+        var outputBytes = new byte[] { 42, 42, 42 };
+        var processRunner = FakeFfmpeg.WritingOutput(outputBytes);
         var handler = CreateHandler(
             projectId,
             storyboard,
@@ -60,7 +62,7 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
                 RenderVideoTestData.SceneAsset(projectId, storyboard.Id, 1, "scene-1.png", scene1)
             ],
             narration,
-            renderer);
+            processRunner);
 
         var resultJson = await handler.ExecuteAsync(
             RenderVideoTestData.CreateJob(projectId, storyboard.Id),
@@ -68,14 +70,17 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
 
         var result = RenderVideoResult.Deserialize(resultJson);
         Assert.Equal($"renders/{projectId:N}/{storyboard.Id:N}.mp4", result.OutputPath);
+        Assert.Equal(RenderVideoTestData.Hash(outputBytes), result.ContentHash);
+        Assert.Equal(outputBytes.Length, result.ByteSize);
         Assert.Equal(2, result.SceneCount);
         Assert.Equal(storyboard.Id, result.StoryboardJobId);
         Assert.Equal(narration.Id, result.NarrationTrackId);
         Assert.Equal(RenderVideoTestData.Hash(narrationBytes), result.NarrationContentHash);
-        Assert.Equal(1, renderer.CallCount);
-        Assert.NotNull(renderer.Request);
-        Assert.Equal(2, renderer.Request.Scenes.Count);
-        Assert.StartsWith(root, renderer.Request.NarrationAbsolutePath);
+        Assert.True(File.Exists(Path.Combine(
+            root,
+            "renders",
+            projectId.ToString("N"),
+            $"{storyboard.Id:N}.mp4")));
     }
 
     [Fact]
@@ -87,7 +92,7 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
             GenerateStoryboardTestData.ValidResult);
         var bytes = new byte[] { 1, 2, 3 };
         WriteFile("scene-0.png", bytes);
-        var renderer = new RecordingVideoRenderer();
+        var processRunner = new FakeProcessRunner();
         var handler = CreateHandler(
             projectId,
             storyboard,
@@ -102,7 +107,7 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
                 RenderVideoTestData.SceneAsset(projectId, storyboard.Id, 1, "scene-1.png", [4])
             ],
             RenderVideoTestData.Narration(projectId, storyboard.Id, "narration.wav", [5]),
-            renderer);
+            processRunner);
 
         var exception = await Assert.ThrowsAsync<JobExecutionException>(
             () => handler.ExecuteAsync(
@@ -110,7 +115,7 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
                 TestContext.Current.CancellationToken));
 
         Assert.Equal("render_asset_hash_mismatch", exception.ErrorCode);
-        Assert.Equal(0, renderer.CallCount);
+        Assert.Equal(0, processRunner.CallCount);
     }
 
     [Fact]
@@ -125,7 +130,7 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
         WriteFile("scene-0.png", scene0);
         WriteFile("scene-1.png", scene1);
         WriteFile("narration.wav", [3, 3]);
-        var renderer = new RecordingVideoRenderer();
+        var processRunner = new FakeProcessRunner();
         var handler = CreateHandler(
             projectId,
             storyboard,
@@ -139,7 +144,7 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
                 "narration.wav",
                 [3, 3],
                 contentHash: new string('b', 64)),
-            renderer);
+            processRunner);
 
         var exception = await Assert.ThrowsAsync<JobExecutionException>(
             () => handler.ExecuteAsync(
@@ -147,7 +152,7 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
                 TestContext.Current.CancellationToken));
 
         Assert.Equal("render_narration_hash_mismatch", exception.ErrorCode);
-        Assert.Equal(0, renderer.CallCount);
+        Assert.Equal(0, processRunner.CallCount);
     }
 
     [Fact]
@@ -157,7 +162,7 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
         var storyboard = AssetTestData.StoryboardJob(
             projectId,
             GenerateStoryboardTestData.ValidResult);
-        var renderer = new RecordingVideoRenderer();
+        var processRunner = new FakeProcessRunner();
         var handler = CreateHandler(
             projectId,
             storyboard,
@@ -166,7 +171,7 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
                 RenderVideoTestData.SceneAsset(projectId, storyboard.Id, 1, "also-missing.png", [2])
             ],
             RenderVideoTestData.Narration(projectId, storyboard.Id, "narration.wav", [3]),
-            renderer);
+            processRunner);
 
         var exception = await Assert.ThrowsAsync<JobExecutionException>(
             () => handler.ExecuteAsync(
@@ -174,7 +179,7 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
                 TestContext.Current.CancellationToken));
 
         Assert.Equal("render_asset_unreadable", exception.ErrorCode);
-        Assert.Equal(0, renderer.CallCount);
+        Assert.Equal(0, processRunner.CallCount);
     }
 
     [Fact]
@@ -184,14 +189,14 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
         var storyboard = AssetTestData.StoryboardJob(
             projectId,
             GenerateStoryboardTestData.ValidResult);
-        var renderer = new RecordingVideoRenderer();
+        var processRunner = new FakeProcessRunner();
         WriteFile("scene-0.png", [1]);
         var handler = CreateHandler(
             projectId,
             storyboard,
             [RenderVideoTestData.SceneAsset(projectId, storyboard.Id, 0, "scene-0.png", [1])],
             RenderVideoTestData.Narration(projectId, storyboard.Id, "narration.wav", [3]),
-            renderer);
+            processRunner);
 
         var exception = await Assert.ThrowsAsync<JobExecutionException>(
             () => handler.ExecuteAsync(
@@ -199,7 +204,7 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
                 TestContext.Current.CancellationToken));
 
         Assert.Equal("render_assets_incomplete", exception.ErrorCode);
-        Assert.Equal(0, renderer.CallCount);
+        Assert.Equal(0, processRunner.CallCount);
     }
 
     [Fact]
@@ -209,7 +214,7 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
         var storyboard = AssetTestData.StoryboardJob(
             projectId,
             GenerateStoryboardTestData.ValidResult);
-        var renderer = new RecordingVideoRenderer();
+        var processRunner = new FakeProcessRunner();
         WriteFile("scene-0.png", [1]);
         WriteFile("scene-1.png", [2]);
         var handler = CreateHandler(
@@ -220,7 +225,7 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
                 RenderVideoTestData.SceneAsset(projectId, storyboard.Id, 1, "scene-1.png", [2])
             ],
             narration: null,
-            renderer);
+            processRunner);
 
         var exception = await Assert.ThrowsAsync<JobExecutionException>(
             () => handler.ExecuteAsync(
@@ -228,11 +233,11 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
                 TestContext.Current.CancellationToken));
 
         Assert.Equal("render_narration_not_found", exception.ErrorCode);
-        Assert.Equal(0, renderer.CallCount);
+        Assert.Equal(0, processRunner.CallCount);
     }
 
     [Fact]
-    public async Task Handler_MapsRendererFailureToJobErrorCode()
+    public async Task Handler_MapsNonZeroRendererExitToJobErrorCode()
     {
         var projectId = Guid.NewGuid();
         var storyboard = AssetTestData.StoryboardJob(
@@ -244,8 +249,7 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
         WriteFile("scene-0.png", scene0);
         WriteFile("scene-1.png", scene1);
         WriteFile("narration.wav", narrationBytes);
-        var renderer = new RecordingVideoRenderer(
-            failure: new RenderVideoException("render_failed", "FFmpeg failed."));
+        var processRunner = FakeFfmpeg.FailingRender("synthetic failure");
         var handler = CreateHandler(
             projectId,
             storyboard,
@@ -258,7 +262,7 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
                 storyboard.Id,
                 "narration.wav",
                 narrationBytes),
-            renderer);
+            processRunner);
 
         var exception = await Assert.ThrowsAsync<JobExecutionException>(
             () => handler.ExecuteAsync(
@@ -266,7 +270,7 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
                 TestContext.Current.CancellationToken));
 
         Assert.Equal("render_failed", exception.ErrorCode);
-        Assert.Equal(1, renderer.CallCount);
+        Assert.Equal(2, processRunner.CallCount);
     }
 
     private RenderVideoJobHandler CreateHandler(
@@ -274,7 +278,7 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
         JobSnapshot storyboard,
         IReadOnlyList<SceneAsset> assets,
         NarrationTrack? narration,
-        IVideoRenderer renderer) =>
+        IProcessRunner processRunner) =>
         new(
             new StubContentProjectReader(
                 new ContentProjectSnapshot(projectId, "Project", "Brief")),
@@ -283,7 +287,10 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
             new StubNarrationRepository(narration),
             new LocalAssetFileStore(
                 Options.Create(new AssetStorageOptions { RootPath = root })),
-            renderer);
+            new FfmpegVideoRenderer(
+                Options.Create(new RenderingOptions()),
+                Options.Create(new AssetStorageOptions { RootPath = root }),
+                processRunner));
 
     private void WriteFile(string relativePath, byte[] bytes)
     {

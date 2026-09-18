@@ -1,5 +1,3 @@
-using System.ComponentModel;
-using System.Diagnostics;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -22,13 +20,16 @@ public sealed class FfmpegVideoRenderer : IVideoRenderer
     ];
 
     private readonly RenderingOptions options;
+    private readonly IProcessRunner processRunner;
     private readonly string outputRoot;
 
     public FfmpegVideoRenderer(
         IOptions<RenderingOptions> options,
-        IOptions<AssetStorageOptions> assetStorage)
+        IOptions<AssetStorageOptions> assetStorage,
+        IProcessRunner processRunner)
     {
         this.options = options.Value;
+        this.processRunner = processRunner;
         outputRoot = Path.TrimEndingDirectorySeparator(
             Path.GetFullPath(assetStorage.Value.RootPath));
     }
@@ -68,7 +69,7 @@ public sealed class FfmpegVideoRenderer : IVideoRenderer
                 options.Height,
                 options.FrameRate);
 
-            var execution = await RunProcessAsync(
+            var execution = await RunToolAsync(
                 options.FfmpegPath,
                 arguments,
                 cancellationToken);
@@ -125,7 +126,7 @@ public sealed class FfmpegVideoRenderer : IVideoRenderer
         CancellationToken cancellationToken)
     {
         var arguments = new List<string>(ProbeArguments) { path };
-        var execution = await RunProcessAsync(
+        var execution = await RunToolAsync(
             options.FfprobePath,
             arguments,
             cancellationToken);
@@ -182,69 +183,36 @@ public sealed class FfmpegVideoRenderer : IVideoRenderer
         }
     }
 
-    private async Task<ProcessResult> RunProcessAsync(
+    private async Task<ProcessResult> RunToolAsync(
         string fileName,
         IReadOnlyList<string> arguments,
         CancellationToken cancellationToken)
     {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = fileName,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        foreach (var argument in arguments)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        using var process = new Process { StartInfo = startInfo };
         try
         {
-            process.Start();
+            return await processRunner.RunAsync(
+                new ProcessRunRequest(
+                    fileName,
+                    arguments,
+                    TimeSpan.FromSeconds(options.TimeoutSeconds)),
+                cancellationToken);
         }
-        catch (Exception exception)
-            when (exception is Win32Exception
-                or FileNotFoundException
-                or InvalidOperationException)
+        catch (ProcessExecutionException exception)
+            when (exception.ErrorCode == ProcessExecutionException.StartFailed)
         {
             throw new RenderVideoException(
                 "render_tool_unavailable",
                 $"Unable to start '{fileName}'.",
                 exception);
         }
-
-        var standardOutput = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var standardError = process.StandardError.ReadToEndAsync(cancellationToken);
-
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(options.TimeoutSeconds));
-
-        try
+        catch (ProcessExecutionException exception)
+            when (exception.ErrorCode == ProcessExecutionException.TimedOut)
         {
-            await process.WaitForExitAsync(timeout.Token);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            TryKill(process);
             throw new RenderVideoException(
                 "render_timeout",
-                $"'{fileName}' exceeded {options.TimeoutSeconds} seconds.");
+                $"'{fileName}' exceeded {options.TimeoutSeconds} seconds.",
+                exception);
         }
-        catch (OperationCanceledException)
-        {
-            TryKill(process);
-            throw;
-        }
-
-        return new ProcessResult(
-            process.ExitCode,
-            await standardOutput,
-            await standardError);
     }
 
     private string ResolveOutputPath(string relativePath)
@@ -303,26 +271,6 @@ public sealed class FfmpegVideoRenderer : IVideoRenderer
         }
     }
 
-    private static void TryKill(Process process)
-    {
-        try
-        {
-            if (!process.HasExited)
-            {
-                process.Kill(entireProcessTree: true);
-            }
-        }
-        catch (InvalidOperationException)
-        {
-        }
-        catch (Win32Exception)
-        {
-        }
-        catch (NotSupportedException)
-        {
-        }
-    }
-
     private static string Summarize(string value)
     {
         var normalized = value.Trim();
@@ -333,9 +281,4 @@ public sealed class FfmpegVideoRenderer : IVideoRenderer
         double DurationSeconds,
         bool HasVideo,
         bool HasAudio);
-
-    private sealed record ProcessResult(
-        int ExitCode,
-        string StandardOutput,
-        string StandardError);
 }

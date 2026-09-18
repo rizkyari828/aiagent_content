@@ -72,6 +72,7 @@ public static class DependencyInjection
         services.AddScoped<IAssetRepository, AssetRepository>();
         services.AddScoped<INarrationRepository, NarrationRepository>();
         services.AddSingleton<IAssetFileStore, LocalAssetFileStore>();
+        services.AddSingleton<IProcessRunner, SystemProcessRunner>();
         services.AddSingleton<IVideoRenderer, FfmpegVideoRenderer>();
         services.AddScoped<IJobHandler, GenerateIdeaJobHandler>();
         services.AddScoped<IJobHandler, GenerateScriptJobHandler>();

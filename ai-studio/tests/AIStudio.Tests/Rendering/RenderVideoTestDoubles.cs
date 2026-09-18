@@ -6,7 +6,6 @@ using AIStudio.Application.Content;
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.RenderVideo;
 using AIStudio.Application.Narration;
-using AIStudio.Application.Rendering;
 using AIStudio.Domain.Assets;
 using AIStudio.Domain.Content;
 using AIStudio.Domain.Jobs;
@@ -157,36 +156,4 @@ internal sealed class StubNarrationRepository(NarrationTrack? narration)
 
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken) =>
         Task.FromResult(1);
-}
-
-internal sealed class RecordingVideoRenderer(
-    VideoRenderOutput? output = null,
-    RenderVideoException? failure = null) : IVideoRenderer
-{
-    public int CallCount { get; private set; }
-
-    public VideoRenderRequest? Request { get; private set; }
-
-    public Task<VideoRenderOutput> RenderAsync(
-        VideoRenderRequest request,
-        CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        CallCount++;
-        Request = request;
-
-        if (failure is not null)
-        {
-            throw failure;
-        }
-
-        return Task.FromResult(
-            output ?? new VideoRenderOutput(
-                request.RelativeOutputPath,
-                new string('f', 64),
-                4_096,
-                12.5,
-                1280,
-                720));
-    }
 }
