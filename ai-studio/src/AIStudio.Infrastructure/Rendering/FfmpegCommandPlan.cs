@@ -242,13 +242,17 @@ public static class FfmpegCommandPlan
         if (settings.Transition == SceneTransition.Crossfade && scenes.Count > 1)
         {
             var previous = "v0";
+            var previousKind = ResolveVisualKind(scenes[0]);
             for (var index = 1; index < scenes.Count; index++)
             {
+                var kind = ResolveVisualKind(scenes[index]);
+                var transition = CrossfadeTransition(previousKind, kind);
                 var offset = Format(index * (sceneDuration - settings.TransitionDurationSeconds));
                 var output = index == scenes.Count - 1 ? assembledLabel : $"x{index}";
                 builder.Append(CultureInfo.InvariantCulture,
-                    $"[{previous}][v{index}]xfade=transition=fade:duration={Format(settings.TransitionDurationSeconds)}:offset={offset}[{output}];");
+                    $"[{previous}][v{index}]xfade=transition={transition}:duration={Format(settings.TransitionDurationSeconds)}:offset={offset}[{output}];");
                 previous = output;
+                previousKind = kind;
             }
         }
         else
@@ -351,6 +355,20 @@ public static class FfmpegCommandPlan
         builder.Append(CultureInfo.InvariantCulture,
             $"[{string.Join("][", mixes)}]amix=inputs={mixes.Count}:duration=first:normalize=0[a];");
     }
+
+    // Transition ghosting policy: a crossfade briefly overlays the outgoing and
+    // incoming frames. When either side is text-heavy / UI / infographic the
+    // overlay reads as double text, so that boundary fades through the background
+    // instead (xfade fadeblack). Photographic boundaries keep the crossfade. The
+    // overlap duration is unchanged, so scene timing and offsets are unaffected.
+    // Classification is explicit and deterministic; no computer vision is used.
+    private static SceneVisualKind ResolveVisualKind(SceneMediaInput scene) =>
+        scene.VisualKind ?? SceneVisualKind.Photographic;
+
+    private static string CrossfadeTransition(SceneVisualKind left, SceneVisualKind right) =>
+        left == SceneVisualKind.Graphic || right == SceneVisualKind.Graphic
+            ? "fadeblack"
+            : "fade";
 
     private static SceneMotion ResolveMotion(
         SceneMediaInput scene,

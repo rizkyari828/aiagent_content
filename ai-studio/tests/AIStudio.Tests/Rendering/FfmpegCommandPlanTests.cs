@@ -68,6 +68,66 @@ public sealed class FfmpegCommandPlanTests
     }
 
     [Fact]
+    public void Build_CrossfadeFadesThroughBackgroundForGraphicScenes()
+    {
+        var arguments = Build(
+            [
+                new SceneMediaInput(
+                    "/root/scene-0.png",
+                    AssetType.Image,
+                    VisualKind: SceneVisualKind.Graphic),
+                new SceneMediaInput(
+                    "/root/scene-1.png",
+                    AssetType.Image,
+                    VisualKind: SceneVisualKind.Graphic)
+            ],
+            narrationSeconds: 10);
+
+        var filter = Filter(arguments);
+
+        // Text-heavy scenes must not overlay two text layers; fade through black.
+        Assert.Contains("xfade=transition=fadeblack", filter);
+        Assert.DoesNotContain("xfade=transition=fade:", filter);
+    }
+
+    [Fact]
+    public void Build_CrossfadeKeepsFadeForPhotographicScenes()
+    {
+        var arguments = Build(
+            [
+                new SceneMediaInput("/root/scene-0.png", AssetType.Image),
+                new SceneMediaInput("/root/scene-1.png", AssetType.Image)
+            ],
+            narrationSeconds: 10);
+
+        var filter = Filter(arguments);
+
+        // Absent classification preserves the previous crossfade behavior.
+        Assert.Contains("xfade=transition=fade:", filter);
+        Assert.DoesNotContain("fadeblack", filter);
+    }
+
+    [Fact]
+    public void Build_CrossfadeUsesGraphicPolicyOnlyAtGraphicBoundaries()
+    {
+        var arguments = Build(
+            [
+                new SceneMediaInput("/root/scene-0.png", AssetType.Image),
+                new SceneMediaInput("/root/scene-1.png", AssetType.Image),
+                new SceneMediaInput(
+                    "/root/scene-2.png",
+                    AssetType.Image,
+                    VisualKind: SceneVisualKind.Graphic)
+            ],
+            narrationSeconds: 15);
+
+        var filter = Filter(arguments);
+
+        Assert.Equal(1, CountOccurrences(filter, "xfade=transition=fadeblack"));
+        Assert.Equal(1, CountOccurrences(filter, "xfade=transition=fade:"));
+    }
+
+    [Fact]
     public void Build_ExplicitPanIsOptInForRichVisuals()
     {
         var arguments = Build(

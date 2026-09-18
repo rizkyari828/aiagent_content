@@ -6,4 +6,5 @@ public sealed record SceneMediaInput(
     string AbsolutePath,
     AssetType Type,
     SceneMotion? Motion = null,
-    SceneSoundEffect? SoundEffect = null);
+    SceneSoundEffect? SoundEffect = null,
+    SceneVisualKind? VisualKind = null);
