@@ -7,7 +7,9 @@ namespace AIStudio.Infrastructure.Jobs;
 public sealed class PlaceholderJobHandler : IJobHandler
 {
     public bool CanHandle(JobType type) =>
-        type is not JobType.GenerateIdea and not JobType.GenerateScript
+        type is not JobType.GenerateIdea
+            and not JobType.GenerateScript
+            and not JobType.GenerateStoryboard
         && Enum.IsDefined(type);
 
     public Task<string> ExecuteAsync(

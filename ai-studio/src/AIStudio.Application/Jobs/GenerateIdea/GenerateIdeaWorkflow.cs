@@ -4,6 +4,7 @@ using System.Text.Json;
 using AIStudio.Application.Abstractions.Persistence;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs.GenerateScript;
+using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Domain.Content;
 using AIStudio.Domain.Jobs;
 
@@ -97,6 +98,7 @@ public sealed class GenerateIdeaWorkflow(
             {
                 JobType.GenerateIdea => GenerateIdeaResult.Deserialize(job.Result),
                 JobType.GenerateScript => GenerateScriptResult.Deserialize(job.Result),
+                JobType.GenerateStoryboard => GenerateStoryboardResult.Deserialize(job.Result),
                 _ => null
             }
             : null;

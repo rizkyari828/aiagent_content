@@ -2,6 +2,7 @@ using AIStudio.Application.Abstractions.Persistence;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.GenerateIdea;
+using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Domain.Content;
 using AIStudio.Domain.Jobs;
 using Xunit;
@@ -160,6 +161,39 @@ public sealed class GenerateIdeaWorkflowTests
         var result = Assert.IsType<AIStudio.Application.Jobs.GenerateScript.GenerateScriptResult>(job.Result);
         Assert.Equal("Local AI Tutorial", result.Title);
         Assert.Equal(2, result.Sections.Count);
+    }
+
+    [Fact]
+    public async Task FindJob_DeserializesCompletedGenerateStoryboardResult()
+    {
+        var jobId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
+        var snapshot = new JobSnapshot(
+            jobId,
+            projectId,
+            JobType.GenerateStoryboard,
+            JobStatus.Succeeded,
+            0,
+            2,
+            GenerateStoryboardTestData.ValidResult,
+            null,
+            null,
+            Now,
+            Now,
+            Now,
+            Now);
+        var workflow = CreateWorkflow(
+            new RecordingDbContext(),
+            jobSnapshot: snapshot);
+
+        var job = await workflow.FindJobAsync(
+            jobId,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(job);
+        var result = Assert.IsType<GenerateStoryboardResult>(job.Result);
+        Assert.Equal("Local AI Storyboard", result.Title);
+        Assert.Equal(2, result.Scenes.Count);
     }
 
     [Fact]
