@@ -26,6 +26,7 @@ public sealed class GenerateScriptJobHandlerTests
         Assert.Equal(AiResponseFormat.JsonObject, generator.Request.ResponseFormat);
         Assert.Equal(0.3, generator.Request.Temperature);
         Assert.Equal(3_000, generator.Request.MaxTokens);
+        Assert.Equal(false, generator.Request.Think);
         Assert.Contains("Idea title: Local AI Content", generator.Request.Prompt);
         Assert.Contains("Response language: Indonesian", generator.Request.Prompt);
         Assert.Contains("heading, narration", generator.Request.Prompt);

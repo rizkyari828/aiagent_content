@@ -109,7 +109,34 @@ public sealed class OllamaTextGeneratorTests
         Assert.Equal("qwen3.8:27b-q4_K_M", root.GetProperty("model").GetString());
         Assert.False(root.TryGetProperty("format", out _));
         Assert.False(root.TryGetProperty("options", out _));
+        Assert.False(root.TryGetProperty("think", out _));
         Assert.Equal("Hello", response.Text);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_SendsThinkFlagWhenSpecified()
+    {
+        string? requestBody = null;
+        var handler = new StubHttpMessageHandler(async (request, cancellationToken) =>
+        {
+            requestBody = await request.Content!.ReadAsStringAsync(cancellationToken);
+            return JsonResponse(
+                """
+                {
+                  "model": "qwen3.8:27b-q4_K_M",
+                  "message": { "role": "assistant", "content": "Hello" },
+                  "done": true
+                }
+                """);
+        });
+        var generator = CreateGenerator(handler);
+
+        await generator.GenerateAsync(
+            new AiTextRequest("Hello", Think: false),
+            TestContext.Current.CancellationToken);
+
+        using var requestJson = JsonDocument.Parse(requestBody!);
+        Assert.False(requestJson.RootElement.GetProperty("think").GetBoolean());
     }
 
     [Theory]

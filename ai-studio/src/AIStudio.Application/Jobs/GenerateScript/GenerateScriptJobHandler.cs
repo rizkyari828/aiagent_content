@@ -51,7 +51,8 @@ public sealed class GenerateScriptJobHandler(
                     GenerateScriptPrompt.SystemInstruction,
                     ResponseFormat: AiResponseFormat.JsonObject,
                     Temperature: 0.3,
-                    MaxTokens: 3_000),
+                    MaxTokens: 3_000,
+                    Think: false),
                 cancellationToken);
         }
         catch (AiGenerationException exception)

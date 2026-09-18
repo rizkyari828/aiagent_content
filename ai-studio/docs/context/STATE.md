@@ -1,28 +1,27 @@
 # Work state
 
-Updated: 2026-09-17.
+Updated: 2026-09-18.
 
 ## Current milestone
 
-Manual Script Review/Edit is complete. The next product slice is Basic Storyboard generation from an explicitly approved reviewed script.
+Video #1 is DONE. One real ContentProject executed the existing vertical slice end to end and produced a playable MP4.
 
 ## Implemented
 
-- Completed GenerateScript `Job.Result` remains immutable historical AI evidence.
-- One `ReviewedScript` per ContentProject stores the canonical human-reviewed GenerateScript contract in JSONB and retains `SourceJobId` provenance.
-- Lifecycle is only `Draft -> Approved`; canonical content changes increment `Revision`, identical edits are no-ops, approval is idempotent, approved scripts cannot be edited, and a different source job cannot silently replace the current script.
-- HTTP supports starting review from a completed GenerateScript job, retrieving the current reviewed script, editing it, and approving it. No reject state or generic approval framework was added.
-- Migration `20260917113100_AddReviewedScripts` is additive and does not alter Job persistence or durable-job semantics.
+- Video #1 E2E run: ContentProject `01b7f0ef-e749-4e1d-bbad-a93d016b2be2`; GenerateIdea -> GenerateScript -> approved ReviewedScript -> GenerateStoryboard (8 scenes) -> 8 scene assets -> narration -> subtitle -> RenderVideo -> FinalVideoQa.
+- Project AI stayed local (Ollama `qwen3.8:27b-q4_K_M`); no paid or external provider was used.
+- Config correction: `Ollama:TimeoutSeconds` raised 120 -> 600. The validated model generates at roughly 9 tokens/second, so the GenerateScript 3000-token budget exceeded the old 120s client timeout and failed with `ai_timeout` across all retries; the existing `1..600` validation bound already anticipated this.
+- Routine reasoning off: the typed `AiTextRequest` now carries an optional `Think` flag that maps to the Ollama `/api/chat` `think` field. `GenerateScriptJobHandler` requests `Think: false`; callers that leave it null keep the previous thinking behavior. A fresh GenerateScript job (`012aaac4-fdcf-4b2f-b3a6-82f4d42e7c60`) completed with `retryCount` 0 in ~76s / 648 output tokens; the earlier failed job (`196926e0-f9a1-48f7-a360-ac52ec320945`) is preserved untouched.
+- Artifact: `src/AIStudio.Api/assets/renders/01b7f0efe7494e1dbbada93d016b2be2/1526be4b6d434f54999782cc368a1990.mp4` (499638 bytes, 24s, 1280x720, h264/aac/mov_text, SHA-256 `2a1e6980da36edadbbed375bbde8fd802669892b1ca2ecfcb726ef74b7884fb8`).
+- Untracked local media under `src/AIStudio.Api/assets/` was intentionally preserved for manual inspection and is not committed.
 
 ## Verification
 
-- PASS — 58/58 focused Script Review, GenerateScript, GenerateIdea, API contract, DI, EF model, and worker tests; optional PostgreSQL vertical tests were excluded.
-- PASS — Release API build on .NET SDK 10.0.401 with 0 warnings and 0 errors.
-- PASS — `dotnet format AIStudio.slnx --verify-no-changes --no-restore`.
-- PASS — EF reports no pending model changes after `AddReviewedScripts`; migration SQL generation contains only the new table, constraints, foreign keys, indexes, and migration-history insert.
-- UNAVAILABLE — applying the migration and DB-backed verification: PostgreSQL connection to `127.0.0.1:5432` was refused and Docker Desktop WSL integration was unavailable.
-- NOT RUN — real 27B inference; review behavior reuses persisted structured output and required no model call.
+- PASS - 251/251 tests (0 failed, 0 skipped) via `dotnet test tests/AIStudio.Tests/AIStudio.Tests.csproj` with `ConnectionStrings__DefaultConnection` set; the two added assertions cover `think` serialization and the GenerateScript handler's `Think: false`.
+- PASS - `/health/ready` returns HTTP 200 (PostgreSQL Healthy) and the persistent job worker is active.
+- PASS - final MP4 re-probed with `ffprobe`; SHA-256 matched the persisted RenderVideo and FinalVideoQa results.
 
 ## Known issues and next task
 
-Implement the smallest Basic Storyboard slice, accepting only the canonical `ReviewedScript` whose status is `Approved`.
+- `FinalVideoQa` `Job.Result` is persisted but not deserialized by `GET /api/jobs/{jobId}` (`GenerateIdeaWorkflow.FindJobAsync` omits `JobType.FinalVideoQa`); read it from PostgreSQL until a focused fix is authorised.
+- Next milestone: manual publishing.

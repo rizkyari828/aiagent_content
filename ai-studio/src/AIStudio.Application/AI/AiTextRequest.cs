@@ -6,4 +6,5 @@ public sealed record AiTextRequest(
     string? Model = null,
     AiResponseFormat ResponseFormat = AiResponseFormat.Text,
     double? Temperature = null,
-    int? MaxTokens = null);
+    int? MaxTokens = null,
+    bool? Think = null);

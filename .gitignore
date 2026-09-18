@@ -19,6 +19,9 @@
 # Content Studio manually collected asset files
 ai-studio/assets/
 
+# Content Studio runtime artifacts (registered assets, narration, subtitles, renders)
+ai-studio/src/AIStudio.Api/assets/
+
 # .NET
 **/bin/
 **/obj/
@@ -44,3 +47,4 @@ __pycache__/
 .DS_Store
 .idea/
 .vs/
+ai-studio/.qwen/

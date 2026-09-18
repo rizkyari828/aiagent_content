@@ -50,7 +50,8 @@ public sealed class OllamaTextGenerator(
             messages,
             Stream: false,
             request.ResponseFormat == AiResponseFormat.JsonObject ? "json" : null,
-            generationOptions);
+            generationOptions,
+            request.Think);
 
         logger.LogDebug(
             "Sending Ollama text request for model {Model} with response format {ResponseFormat}.",

@@ -7,7 +7,8 @@ internal sealed record OllamaChatRequest(
     [property: JsonPropertyName("messages")] IReadOnlyList<OllamaMessage> Messages,
     [property: JsonPropertyName("stream")] bool Stream,
     [property: JsonPropertyName("format")] string? Format,
-    [property: JsonPropertyName("options")] OllamaGenerationOptions? Options);
+    [property: JsonPropertyName("options")] OllamaGenerationOptions? Options,
+    [property: JsonPropertyName("think")] bool? Think);
 
 internal sealed record OllamaMessage(
     [property: JsonPropertyName("role")] string Role,
