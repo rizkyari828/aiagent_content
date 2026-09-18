@@ -37,6 +37,13 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `src/AIStudio.Infrastructure/Persistence/Configurations/NarrationTrackConfiguration.cs` — `narration_tracks` mapping and unique project index.
 - `src/AIStudio.Api/Endpoints/NarrationEndpoints.cs` — minimal narration registration and retrieval HTTP surface.
 
+## Subtitles (Video #1 subtitle track)
+
+- `src/AIStudio.Domain/Subtitles/SubtitleTrack.cs` — one canonical `.srt` subtitle track per project with provenance/license invariants.
+- `src/AIStudio.Application/Subtitles/SubtitleWorkflow.cs` — register an operator-provided `.srt` against a completed GenerateStoryboard result and retrieve it.
+- `src/AIStudio.Infrastructure/Subtitles/SubtitleRepository.cs`, `Persistence/Configurations/SubtitleTrackConfiguration.cs` — persistence and `subtitle_tracks` mapping.
+- `src/AIStudio.Api/Endpoints/SubtitleEndpoints.cs` — minimal subtitle registration and retrieval HTTP surface.
+
 ## Rendering (FFmpeg composition)
 
 - `src/AIStudio.Application/Jobs/RenderVideo/RenderVideoWorkflow.cs` — enqueue a durable render job from storyboard + assets + narration gating.
@@ -79,6 +86,7 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `tests/AIStudio.Tests/Persistence/ReviewedScriptModelTests.cs` — additive EF mapping and uniqueness validation.
 - `tests/AIStudio.Tests/Assets/` — scene asset domain rules, workflow association/provenance, path-safety and hashing, and API response contracts; `Persistence/SceneAssetModelTests.cs` and DB-gated `Persistence/SceneAssetVerticalSliceTests.cs` cover mapping and persistence.
 - `tests/AIStudio.Tests/Narration/` — narration domain rules, storyboard-gated workflow, provenance, shared path-safety/hash reuse, and API response contracts; `Persistence/NarrationTrackModelTests.cs` and DB-gated `Persistence/NarrationVerticalSliceTests.cs` cover mapping and persistence.
+- `tests/AIStudio.Tests/Subtitles/` — subtitle domain rules, `.srt`-only storyboard-gated workflow, provenance, path safety, and API response contracts; `Persistence/SubtitleTrackModelTests.cs` covers `subtitle_tracks` mapping. Renderer subtitle embedding is covered in `Rendering/`.
 - `tests/AIStudio.Tests/Rendering/` — FFmpeg argument/timing plan, render enqueue gating, handler input-integrity gates, safe output paths, faked process boundary, and `Job.Result` render-evidence contracts.
 
 ## Product specification (modular PRD v0.9.2)

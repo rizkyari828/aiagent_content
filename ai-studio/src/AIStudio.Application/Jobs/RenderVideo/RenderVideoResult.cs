@@ -13,7 +13,9 @@ public sealed record RenderVideoResult(
     Guid StoryboardJobId,
     Guid NarrationTrackId,
     int SceneCount,
-    string NarrationContentHash)
+    string NarrationContentHash,
+    Guid? SubtitleTrackId = null,
+    string? SubtitleContentHash = null)
 {
     public const int ContentHashLength = 64;
     public const int MaxOutputPathLength = 1024;
@@ -80,6 +82,17 @@ public sealed record RenderVideoResult(
             throw InvalidResult("RenderVideo result dimensions must be greater than zero.");
         }
 
+        if (result.SubtitleTrackId == Guid.Empty)
+        {
+            throw InvalidResult("RenderVideo result subtitleTrackId must not be empty when present.");
+        }
+
+        if ((result.SubtitleTrackId is null) != (result.SubtitleContentHash is null))
+        {
+            throw InvalidResult(
+                "RenderVideo result subtitle fields must both be present or both be absent.");
+        }
+
         return result with
         {
             OutputPath = RequireText(
@@ -87,7 +100,10 @@ public sealed record RenderVideoResult(
                 MaxOutputPathLength,
                 "outputPath"),
             ContentHash = RequireHash(result.ContentHash, "contentHash"),
-            NarrationContentHash = RequireHash(result.NarrationContentHash, "narrationContentHash")
+            NarrationContentHash = RequireHash(result.NarrationContentHash, "narrationContentHash"),
+            SubtitleContentHash = result.SubtitleContentHash is null
+                ? null
+                : RequireHash(result.SubtitleContentHash, "subtitleContentHash")
         };
     }
 

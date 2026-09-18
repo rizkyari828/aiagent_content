@@ -3,6 +3,7 @@ using AIStudio.Application.Content;
 using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Application.Narration;
 using AIStudio.Application.Rendering;
+using AIStudio.Application.Subtitles;
 using AIStudio.Domain.Jobs;
 
 namespace AIStudio.Application.Jobs.RenderVideo;
@@ -12,6 +13,7 @@ public sealed class RenderVideoJobHandler(
     IJobReader jobs,
     IAssetRepository assets,
     INarrationRepository narrations,
+    ISubtitleRepository subtitles,
     IAssetFileStore fileStore,
     IVideoRenderer renderer) : IJobHandler
 {
@@ -107,6 +109,25 @@ public sealed class RenderVideoJobHandler(
             "render_narration_unreadable",
             "render_narration_hash_mismatch");
 
+        string? subtitlePath = null;
+        Guid? subtitleTrackId = null;
+        string? subtitleContentHash = null;
+
+        var subtitle = await subtitles.FindByProjectIdAsync(
+            job.ContentProjectId,
+            cancellationToken);
+        if (subtitle is not null && subtitle.SourceJobId == payload.StoryboardJobId)
+        {
+            var subtitleFile = ReadVerified(
+                subtitle.Path,
+                subtitle.ContentHash,
+                "render_subtitle_unreadable",
+                "render_subtitle_hash_mismatch");
+            subtitlePath = subtitleFile.AbsolutePath;
+            subtitleTrackId = subtitle.Id;
+            subtitleContentHash = subtitleFile.ContentHash;
+        }
+
         var relativeOutput = $"renders/{job.ContentProjectId:N}/{payload.StoryboardJobId:N}.mp4";
 
         VideoRenderOutput output;
@@ -116,7 +137,8 @@ public sealed class RenderVideoJobHandler(
                 new VideoRenderRequest(
                     sceneInputs,
                     narrationFile.AbsolutePath,
-                    relativeOutput),
+                    relativeOutput,
+                    subtitlePath),
                 cancellationToken);
         }
         catch (RenderVideoException exception)
@@ -137,7 +159,9 @@ public sealed class RenderVideoJobHandler(
             payload.StoryboardJobId,
             narration.Id,
             sceneInputs.Count,
-            narrationFile.ContentHash);
+            narrationFile.ContentHash,
+            subtitleTrackId,
+            subtitleContentHash);
 
         return result.Serialize();
     }

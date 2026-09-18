@@ -34,7 +34,8 @@ public static class FfmpegCommandPlan
         double sceneDurationSeconds,
         int width,
         int height,
-        int frameRate)
+        int frameRate,
+        string? subtitlePath = null)
     {
         ArgumentNullException.ThrowIfNull(scenes);
 
@@ -58,6 +59,12 @@ public static class FfmpegCommandPlan
         arguments.Add("-i");
         arguments.Add(narrationPath);
 
+        if (subtitlePath is not null)
+        {
+            arguments.Add("-i");
+            arguments.Add(subtitlePath);
+        }
+
         arguments.Add("-filter_complex");
         arguments.Add(BuildFilterGraph(scenes.Count, duration, width, height, frameRate));
 
@@ -65,6 +72,12 @@ public static class FfmpegCommandPlan
         arguments.Add("[v]");
         arguments.Add("-map");
         arguments.Add($"{scenes.Count}:a");
+
+        if (subtitlePath is not null)
+        {
+            arguments.Add("-map");
+            arguments.Add($"{scenes.Count + 1}:s:0");
+        }
 
         arguments.Add("-c:v");
         arguments.Add("libx264");
@@ -78,6 +91,13 @@ public static class FfmpegCommandPlan
         arguments.Add("aac");
         arguments.Add("-b:a");
         arguments.Add("128k");
+
+        if (subtitlePath is not null)
+        {
+            arguments.Add("-c:s");
+            arguments.Add("mov_text");
+        }
+
         arguments.Add("-shortest");
         arguments.Add("-movflags");
         arguments.Add("+faststart");

@@ -4,6 +4,7 @@ using AIStudio.Domain.Content;
 using AIStudio.Domain.Jobs;
 using AIStudio.Domain.Narration;
 using AIStudio.Domain.Scripts;
+using AIStudio.Domain.Subtitles;
 using Microsoft.EntityFrameworkCore;
 
 namespace AIStudio.Infrastructure.Persistence;
@@ -20,6 +21,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<SceneAsset> SceneAssets => Set<SceneAsset>();
 
     public DbSet<NarrationTrack> NarrationTracks => Set<NarrationTrack>();
+
+    public DbSet<SubtitleTrack> SubtitleTracks => Set<SubtitleTrack>();
 
     public void Add(ContentProject project)
     {

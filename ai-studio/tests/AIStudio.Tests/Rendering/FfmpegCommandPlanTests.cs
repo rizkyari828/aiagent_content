@@ -84,4 +84,39 @@ public sealed class FfmpegCommandPlanTests
         Assert.DoesNotContain(arguments, argument => argument.StartsWith("sh "));
         Assert.Contains("-filter_complex", arguments);
     }
+
+    [Fact]
+    public void Build_AddsSoftSubtitleInputAndMapWhenProvided()
+    {
+        var arguments = FfmpegCommandPlan.Build(
+            [new SceneMediaInput("/root/scene-0.png", AssetType.Image)],
+            "/root/narration.wav",
+            "/root/out.part",
+            5,
+            640,
+            360,
+            24,
+            "/root/subtitle.srt");
+
+        Assert.Contains("/root/subtitle.srt", arguments);
+        Assert.Contains("2:s:0", arguments);
+        Assert.Contains("-c:s", arguments);
+        Assert.Contains("mov_text", arguments);
+    }
+
+    [Fact]
+    public void Build_OmitsSubtitleWhenNotProvided()
+    {
+        var arguments = FfmpegCommandPlan.Build(
+            [new SceneMediaInput("/root/scene-0.png", AssetType.Image)],
+            "/root/narration.wav",
+            "/root/out.part",
+            5,
+            640,
+            360,
+            24);
+
+        Assert.DoesNotContain("-c:s", arguments);
+        Assert.DoesNotContain("mov_text", arguments);
+    }
 }

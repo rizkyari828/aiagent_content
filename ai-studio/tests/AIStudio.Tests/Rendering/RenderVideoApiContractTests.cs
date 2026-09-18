@@ -35,6 +35,29 @@ public sealed class RenderVideoApiContractTests
     }
 
     [Fact]
+    public void RenderVideoResult_RoundTripsSubtitleEvidence()
+    {
+        var result = new RenderVideoResult(
+            "renders/project/video.mp4",
+            new string('d', RenderVideoResult.ContentHashLength),
+            2_048,
+            30,
+            1280,
+            720,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            2,
+            new string('e', RenderVideoResult.ContentHashLength),
+            Guid.NewGuid(),
+            new string('f', RenderVideoResult.ContentHashLength));
+
+        var roundTripped = RenderVideoResult.Deserialize(result.Serialize());
+
+        Assert.Equal(result.SubtitleTrackId, roundTripped.SubtitleTrackId);
+        Assert.Equal(result.SubtitleContentHash, roundTripped.SubtitleContentHash);
+    }
+
+    [Fact]
     public void JobResponse_ExposesCompletedRenderVideoResult()
     {
         var now = new DateTimeOffset(2026, 9, 18, 12, 0, 0, TimeSpan.Zero);

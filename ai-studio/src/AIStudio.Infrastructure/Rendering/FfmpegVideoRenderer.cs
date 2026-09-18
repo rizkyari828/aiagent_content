@@ -67,7 +67,8 @@ public sealed class FfmpegVideoRenderer : IVideoRenderer
                 sceneDuration,
                 options.Width,
                 options.Height,
-                options.FrameRate);
+                options.FrameRate,
+                request.SubtitleAbsolutePath);
 
             var execution = await RunToolAsync(
                 options.FfmpegPath,

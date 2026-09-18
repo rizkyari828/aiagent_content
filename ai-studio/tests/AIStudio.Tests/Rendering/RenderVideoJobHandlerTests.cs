@@ -4,10 +4,12 @@ using AIStudio.Application.Jobs.RenderVideo;
 using AIStudio.Application.Rendering;
 using AIStudio.Domain.Assets;
 using AIStudio.Domain.Narration;
+using AIStudio.Domain.Subtitles;
 using AIStudio.Infrastructure.Assets;
 using AIStudio.Infrastructure.Rendering;
 using AIStudio.Tests.Assets;
 using AIStudio.Tests.Jobs;
+using AIStudio.Tests.Subtitles;
 using Microsoft.Extensions.Options;
 using Xunit;
 
@@ -273,18 +275,179 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
         Assert.Equal(2, processRunner.CallCount);
     }
 
+    [Fact]
+    public async Task Handler_IncludesMatchingSubtitle()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateStoryboardTestData.ValidResult);
+        var scene0 = new byte[] { 1 };
+        var scene1 = new byte[] { 2 };
+        var narrationBytes = new byte[] { 3 };
+        var subtitleBytes = "1\n00:00:00,000 --> 00:00:02,000\nHello\n"u8.ToArray();
+        WriteFile("scene-0.png", scene0);
+        WriteFile("scene-1.png", scene1);
+        WriteFile("narration.wav", narrationBytes);
+        WriteFile("subtitle.srt", subtitleBytes);
+        var subtitle = SubtitleTrack.Create(
+            projectId,
+            storyboard.Id,
+            "subtitle.srt",
+            subtitleBytes.Length,
+            RenderVideoTestData.Hash(subtitleBytes),
+            AssetOrigin.Local,
+            null,
+            null,
+            null,
+            null,
+            AssetTestData.Now);
+        var processRunner = FakeFfmpeg.WritingOutput([42, 42]);
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            [
+                RenderVideoTestData.SceneAsset(projectId, storyboard.Id, 0, "scene-0.png", scene0),
+                RenderVideoTestData.SceneAsset(projectId, storyboard.Id, 1, "scene-1.png", scene1)
+            ],
+            RenderVideoTestData.Narration(
+                projectId,
+                storyboard.Id,
+                "narration.wav",
+                narrationBytes),
+            processRunner,
+            subtitle);
+
+        var resultJson = await handler.ExecuteAsync(
+            RenderVideoTestData.CreateJob(projectId, storyboard.Id),
+            TestContext.Current.CancellationToken);
+
+        var result = RenderVideoResult.Deserialize(resultJson);
+        Assert.Equal(subtitle.Id, result.SubtitleTrackId);
+        Assert.Equal(RenderVideoTestData.Hash(subtitleBytes), result.SubtitleContentHash);
+
+        var ffmpegArguments = processRunner.Requests[1].Arguments;
+        Assert.Contains(Path.Combine(root, "subtitle.srt"), ffmpegArguments);
+        Assert.Contains("mov_text", ffmpegArguments);
+    }
+
+    [Fact]
+    public async Task Handler_RejectsChangedSubtitleHash()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateStoryboardTestData.ValidResult);
+        var scene0 = new byte[] { 1 };
+        var scene1 = new byte[] { 2 };
+        var narrationBytes = new byte[] { 3 };
+        WriteFile("scene-0.png", scene0);
+        WriteFile("scene-1.png", scene1);
+        WriteFile("narration.wav", narrationBytes);
+        WriteFile("subtitle.srt", [9, 9]);
+        var subtitle = SubtitleTrack.Create(
+            projectId,
+            storyboard.Id,
+            "subtitle.srt",
+            2,
+            new string('d', SubtitleTrack.ContentHashLength),
+            AssetOrigin.Local,
+            null,
+            null,
+            null,
+            null,
+            AssetTestData.Now);
+        var processRunner = new FakeProcessRunner();
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            [
+                RenderVideoTestData.SceneAsset(projectId, storyboard.Id, 0, "scene-0.png", scene0),
+                RenderVideoTestData.SceneAsset(projectId, storyboard.Id, 1, "scene-1.png", scene1)
+            ],
+            RenderVideoTestData.Narration(
+                projectId,
+                storyboard.Id,
+                "narration.wav",
+                narrationBytes),
+            processRunner,
+            subtitle);
+
+        var exception = await Assert.ThrowsAsync<JobExecutionException>(
+            () => handler.ExecuteAsync(
+                RenderVideoTestData.CreateJob(projectId, storyboard.Id),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("render_subtitle_hash_mismatch", exception.ErrorCode);
+        Assert.Equal(0, processRunner.CallCount);
+    }
+
+    [Fact]
+    public async Task Handler_IgnoresSubtitleFromAnotherStoryboard()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateStoryboardTestData.ValidResult);
+        var scene0 = new byte[] { 1 };
+        var scene1 = new byte[] { 2 };
+        var narrationBytes = new byte[] { 3 };
+        WriteFile("scene-0.png", scene0);
+        WriteFile("scene-1.png", scene1);
+        WriteFile("narration.wav", narrationBytes);
+        WriteFile("subtitle.srt", [9]);
+        var subtitle = SubtitleTrack.Create(
+            projectId,
+            Guid.NewGuid(),
+            "subtitle.srt",
+            1,
+            RenderVideoTestData.Hash([9]),
+            AssetOrigin.Local,
+            null,
+            null,
+            null,
+            null,
+            AssetTestData.Now);
+        var processRunner = FakeFfmpeg.WritingOutput([42]);
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            [
+                RenderVideoTestData.SceneAsset(projectId, storyboard.Id, 0, "scene-0.png", scene0),
+                RenderVideoTestData.SceneAsset(projectId, storyboard.Id, 1, "scene-1.png", scene1)
+            ],
+            RenderVideoTestData.Narration(
+                projectId,
+                storyboard.Id,
+                "narration.wav",
+                narrationBytes),
+            processRunner,
+            subtitle);
+
+        var resultJson = await handler.ExecuteAsync(
+            RenderVideoTestData.CreateJob(projectId, storyboard.Id),
+            TestContext.Current.CancellationToken);
+
+        var result = RenderVideoResult.Deserialize(resultJson);
+        Assert.Null(result.SubtitleTrackId);
+        Assert.Null(result.SubtitleContentHash);
+        Assert.DoesNotContain("mov_text", processRunner.Requests[1].Arguments);
+    }
+
     private RenderVideoJobHandler CreateHandler(
         Guid projectId,
         JobSnapshot storyboard,
         IReadOnlyList<SceneAsset> assets,
         NarrationTrack? narration,
-        IProcessRunner processRunner) =>
+        IProcessRunner processRunner,
+        SubtitleTrack? subtitle = null) =>
         new(
             new StubContentProjectReader(
                 new ContentProjectSnapshot(projectId, "Project", "Brief")),
             new StubJobReader(storyboard),
             new StubAssetRepository([.. assets]),
             new StubNarrationRepository(narration),
+            new StubSubtitleRepository(subtitle),
             new LocalAssetFileStore(
                 Options.Create(new AssetStorageOptions { RootPath = root })),
             new FfmpegVideoRenderer(
