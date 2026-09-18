@@ -42,9 +42,18 @@ public sealed class FfmpegVideoRenderer : IVideoRenderer
         var narrationDuration = await ProbeDurationAsync(
             request.NarrationAbsolutePath,
             cancellationToken);
-        var sceneDuration = FfmpegCommandPlan.SceneDurationSeconds(
+
+        var settings = new VideoRenderSettings(
+            options.Width,
+            options.Height,
+            options.FrameRate,
             narrationDuration,
-            request.Scenes.Count);
+            options.Transition,
+            options.TransitionDurationSeconds,
+            options.EnableMotion,
+            request.SubtitleAbsolutePath,
+            options.Subtitle,
+            ResolveBackgroundMusic());
 
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
         var temporaryPath = $"{outputPath}.{Guid.NewGuid():N}.part";
@@ -55,11 +64,7 @@ public sealed class FfmpegVideoRenderer : IVideoRenderer
                 request.Scenes,
                 request.NarrationAbsolutePath,
                 temporaryPath,
-                sceneDuration,
-                options.Width,
-                options.Height,
-                options.FrameRate,
-                request.SubtitleAbsolutePath);
+                settings);
 
             var execution = await RunToolAsync(
                 options.FfmpegPath,
@@ -176,6 +181,40 @@ public sealed class FfmpegVideoRenderer : IVideoRenderer
                 $"'{fileName}' exceeded {options.TimeoutSeconds} seconds.",
                 exception);
         }
+    }
+
+    private BackgroundMusic? ResolveBackgroundMusic()
+    {
+        var configured = options.BackgroundMusicPath;
+        if (string.IsNullOrWhiteSpace(configured))
+        {
+            return null;
+        }
+
+        var path = Path.GetFullPath(
+            Path.IsPathRooted(configured)
+                ? configured
+                : Path.Combine(outputRoot, configured));
+
+        // ponytail: relative music must stay under the approved artifact root; absolute paths are operator config.
+        if (!Path.IsPathRooted(configured)
+            && !path.StartsWith(
+                outputRoot + Path.DirectorySeparatorChar,
+                StringComparison.Ordinal))
+        {
+            throw new RenderVideoException(
+                "render_music_path_invalid",
+                "Background music path must be inside the approved artifact root.");
+        }
+
+        if (!File.Exists(path))
+        {
+            throw new RenderVideoException(
+                "render_music_not_found",
+                $"Background music '{configured}' was not found.");
+        }
+
+        return new BackgroundMusic(path, options.BackgroundMusicVolume, options.EnableDucking);
     }
 
     private string ResolveOutputPath(string relativePath)

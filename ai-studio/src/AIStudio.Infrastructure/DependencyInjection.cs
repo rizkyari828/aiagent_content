@@ -10,6 +10,7 @@ using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Application.Jobs.RenderVideo;
 using AIStudio.Application.Narration;
 using AIStudio.Application.Rendering;
+using AIStudio.Application.Rendering.Visuals;
 using AIStudio.Application.Scripts;
 using AIStudio.Application.Subtitles;
 using AIStudio.Infrastructure.AI;
@@ -79,6 +80,7 @@ public static class DependencyInjection
         services.AddSingleton<IProcessRunner, SystemProcessRunner>();
         services.AddSingleton<IMediaInspector, FfprobeMediaInspector>();
         services.AddSingleton<IVideoRenderer, FfmpegVideoRenderer>();
+        services.AddSingleton<ISceneVisualRenderer, FfmpegSceneVisualRenderer>();
         services.AddScoped<IJobHandler, GenerateIdeaJobHandler>();
         services.AddScoped<IJobHandler, GenerateScriptJobHandler>();
         services.AddScoped<IJobHandler, GenerateStoryboardJobHandler>();

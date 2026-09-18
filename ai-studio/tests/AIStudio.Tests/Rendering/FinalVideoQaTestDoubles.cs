@@ -27,7 +27,8 @@ internal static class FinalVideoQaTestData
         int width = 640,
         int height = 480,
         Guid? subtitleTrackId = null,
-        string? subtitleContentHash = null) =>
+        string? subtitleContentHash = null,
+        bool subtitleBurnedIn = false) =>
         new(
             outputPath,
             contentHash,
@@ -40,7 +41,8 @@ internal static class FinalVideoQaTestData
             2,
             new string('a', RenderVideoResult.ContentHashLength),
             subtitleTrackId,
-            subtitleContentHash);
+            subtitleContentHash,
+            subtitleBurnedIn);
 
     public static JobSnapshot RenderJob(
         Guid contentProjectId,

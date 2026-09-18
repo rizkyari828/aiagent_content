@@ -49,9 +49,12 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `src/AIStudio.Application/Jobs/RenderVideo/RenderVideoWorkflow.cs` — enqueue a durable render job from storyboard + assets + narration gating.
 - `RenderVideoJobHandler.cs`, `RenderVideoJobPayload.cs`, `RenderVideoResult.cs` — execution contract, input integrity gates, and canonical `Job.Result` render evidence.
 - `src/AIStudio.Application/Rendering/IVideoRenderer.cs`, `VideoRenderRequest.cs`, `VideoRenderOutput.cs`, `SceneMediaInput.cs`, `RenderVideoException.cs` — renderer process boundary and DTOs.
+- `src/AIStudio.Application/Rendering/SceneMotion.cs`, `SceneTransition.cs`, `SubtitleStyle.cs`, `BackgroundMusic.cs`, `SceneSoundEffect.cs`, `VideoRenderSettings.cs` — Video Quality v1 motion/transition/subtitle/audio settings (deterministic defaults; per-scene overrides optional).
+- `src/AIStudio.Application/Rendering/Visuals/SceneVisualBrief.cs`, `SceneVisualSvg.cs`, `ISceneVisualRenderer.cs` — Visual Asset Engine: structured brief, pure SVG composer (Hero/Cards/Window/Chat), and the rasterizer boundary.
+- `src/AIStudio.Infrastructure/Rendering/FfmpegSceneVisualRenderer.cs` — rasterizes a `SceneVisualBrief` to PNG via `IProcessRunner` + FFmpeg librsvg.
 - `src/AIStudio.Application/Rendering/IMediaInspector.cs`, `src/AIStudio.Infrastructure/Rendering/FfprobeMediaInspector.cs` — shared ffprobe stream/duration/dimension inspection behind `IProcessRunner`.
-- `src/AIStudio.Infrastructure/Rendering/FfmpegVideoRenderer.cs` — safe `ArgumentList` FFmpeg invocation, bounded timeout, temp-file + atomic promotion.
-- `FfmpegCommandPlan.cs`, `RenderingOptions.cs` — pure argument/timing plan and rendering configuration.
+- `src/AIStudio.Infrastructure/Rendering/FfmpegVideoRenderer.cs` — safe `ArgumentList` FFmpeg invocation, bounded timeout, temp-file + atomic promotion, background-music path resolution.
+- `FfmpegCommandPlan.cs`, `RenderingOptions.cs` — pure argument/filter/timing plan (motion, transitions, styled subtitle burn-in, music/ducking/SFX audio graph) and rendering configuration.
 - `src/AIStudio.Api/Endpoints/RenderEndpoints.cs` — minimal render enqueue HTTP surface.
 
 ## Final Video QA (pre-publish deterministic validation)

@@ -92,7 +92,10 @@ public sealed class FinalVideoQaJobHandler(
                 "The rendered output video dimensions are not valid.");
         }
 
-        if (renderResult.SubtitleTrackId is not null && !inspection.HasSubtitle)
+        // Burned-in subtitles are pixels, not a stream; only embedded subtitles are probed.
+        if (renderResult.SubtitleTrackId is not null
+            && !renderResult.SubtitleBurnedIn
+            && !inspection.HasSubtitle)
         {
             throw new JobExecutionException(
                 "qa_subtitle_stream_missing",

@@ -15,7 +15,8 @@ public sealed record RenderVideoResult(
     int SceneCount,
     string NarrationContentHash,
     Guid? SubtitleTrackId = null,
-    string? SubtitleContentHash = null)
+    string? SubtitleContentHash = null,
+    bool SubtitleBurnedIn = false)
 {
     public const int ContentHashLength = 64;
     public const int MaxOutputPathLength = 1024;
@@ -91,6 +92,12 @@ public sealed record RenderVideoResult(
         {
             throw InvalidResult(
                 "RenderVideo result subtitle fields must both be present or both be absent.");
+        }
+
+        if (result.SubtitleBurnedIn && result.SubtitleTrackId is null)
+        {
+            throw InvalidResult(
+                "RenderVideo result cannot be marked subtitleBurnedIn without a subtitle track.");
         }
 
         return result with

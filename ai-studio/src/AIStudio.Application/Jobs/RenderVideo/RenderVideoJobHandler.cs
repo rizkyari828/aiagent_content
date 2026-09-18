@@ -161,7 +161,8 @@ public sealed class RenderVideoJobHandler(
             sceneInputs.Count,
             narrationFile.ContentHash,
             subtitleTrackId,
-            subtitleContentHash);
+            subtitleContentHash,
+            subtitlePath is not null);
 
         return result.Serialize();
     }

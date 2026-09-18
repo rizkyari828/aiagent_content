@@ -2,4 +2,8 @@ using AIStudio.Domain.Assets;
 
 namespace AIStudio.Application.Rendering;
 
-public sealed record SceneMediaInput(string AbsolutePath, AssetType Type);
+public sealed record SceneMediaInput(
+    string AbsolutePath,
+    AssetType Type,
+    SceneMotion? Motion = null,
+    SceneSoundEffect? SoundEffect = null);

@@ -7,7 +7,31 @@ namespace AIStudio.Infrastructure.Rendering;
 
 public static class FfmpegCommandPlan
 {
-    public static double SceneDurationSeconds(double narrationSeconds, int sceneCount)
+    // Content-safety policy: without explicit direction the renderer only uses
+    // centered zoom, which never pushes frame content out of view. Pan is opt-in
+    // via SceneMediaInput.Motion and reserved for visuals that declare safe
+    // margins; do not infer this with computer vision.
+    private static readonly SceneMotion[] DefaultMotionCycle =
+    [
+        SceneMotion.SlowZoomIn,
+        SceneMotion.SlowZoomOut
+    ];
+
+    private const string DuckThreshold = "0.05";
+    private const string DuckRatio = "4";
+    private const string DuckAttack = "20";
+    private const string DuckRelease = "400";
+    // Narration is gain-staged to a standard target before mixing so a quiet
+    // recording stays audible and reliably triggers ducking. Applied only when
+    // the render actually mixes audio; a narration-only render is untouched.
+    private const string NarrationLoudness = "loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000,asetpts=PTS-STARTPTS";
+    private const string MusicHighPass = "120";
+
+    public static double SceneDurationSeconds(
+        double narrationSeconds,
+        int sceneCount,
+        SceneTransition transition = SceneTransition.Cut,
+        double transitionDurationSeconds = 0.35)
     {
         if (narrationSeconds <= 0)
         {
@@ -24,6 +48,11 @@ public static class FfmpegCommandPlan
         }
 
         // ponytail: equal scene duration = narration length / scene count; add per-scene narration timing when available.
+        if (transition == SceneTransition.Crossfade && sceneCount > 1)
+        {
+            return (narrationSeconds + (sceneCount - 1) * transitionDurationSeconds) / sceneCount;
+        }
+
         return narrationSeconds / sceneCount;
     }
 
@@ -31,19 +60,51 @@ public static class FfmpegCommandPlan
         IReadOnlyList<SceneMediaInput> scenes,
         string narrationPath,
         string outputPath,
-        double sceneDurationSeconds,
-        int width,
-        int height,
-        int frameRate,
-        string? subtitlePath = null)
+        VideoRenderSettings settings)
     {
         ArgumentNullException.ThrowIfNull(scenes);
+        ArgumentNullException.ThrowIfNull(settings);
 
-        var duration = Format(sceneDurationSeconds);
-        var arguments = new List<string> { "-y", "-hide_banner", "-loglevel", "error" };
-
-        foreach (var scene in scenes)
+        if (scenes.Count == 0)
         {
+            throw new RenderVideoException(
+                "render_scene_count_invalid",
+                "At least one scene is required.");
+        }
+
+        var sceneCount = scenes.Count;
+        var transitionDuration = settings.TransitionDurationSeconds;
+        var sceneDuration = SceneDurationSeconds(
+            settings.NarrationDurationSeconds,
+            sceneCount,
+            settings.Transition,
+            transitionDuration);
+
+        if (settings.Transition != SceneTransition.Cut
+            && (transitionDuration <= 0 || transitionDuration >= sceneDuration))
+        {
+            throw new RenderVideoException(
+                "render_transition_invalid",
+                "Transition duration must be greater than zero and shorter than a scene.");
+        }
+
+        var duration = Format(sceneDuration);
+        var arguments = new List<string> { "-y", "-hide_banner", "-loglevel", "error" };
+        var motions = new SceneMotion[sceneCount];
+
+        for (var index = 0; index < sceneCount; index++)
+        {
+            var scene = scenes[index];
+            motions[index] = ResolveMotion(scene, index, settings.EnableMotion);
+
+            if (scene.Type == AssetType.Image && motions[index] != SceneMotion.None)
+            {
+                // zoompan generates the frames; no -loop/-t needed.
+                arguments.Add("-i");
+                arguments.Add(scene.AbsolutePath);
+                continue;
+            }
+
             if (scene.Type == AssetType.Image)
             {
                 arguments.Add("-loop");
@@ -58,26 +119,51 @@ public static class FfmpegCommandPlan
 
         arguments.Add("-i");
         arguments.Add(narrationPath);
+        var narrationIndex = sceneCount;
+        var inputIndex = sceneCount + 1;
 
-        if (subtitlePath is not null)
+        int? musicIndex = null;
+        if (settings.BackgroundMusic is not null)
         {
+            arguments.Add("-stream_loop");
+            arguments.Add("-1");
             arguments.Add("-i");
-            arguments.Add(subtitlePath);
+            arguments.Add(settings.BackgroundMusic.AbsolutePath);
+            musicIndex = inputIndex;
+            inputIndex++;
+        }
+
+        var soundEffectIndexes = new Dictionary<int, int>();
+        for (var index = 0; index < sceneCount; index++)
+        {
+            if (scenes[index].SoundEffect is null)
+            {
+                continue;
+            }
+
+            arguments.Add("-i");
+            arguments.Add(scenes[index].SoundEffect!.AbsolutePath);
+            soundEffectIndexes[index] = inputIndex;
+            inputIndex++;
         }
 
         arguments.Add("-filter_complex");
-        arguments.Add(BuildFilterGraph(scenes.Count, duration, width, height, frameRate));
+        arguments.Add(BuildFilterGraph(
+            scenes,
+            motions,
+            settings,
+            duration,
+            sceneDuration,
+            narrationIndex,
+            musicIndex,
+            soundEffectIndexes));
 
         arguments.Add("-map");
         arguments.Add("[v]");
         arguments.Add("-map");
-        arguments.Add($"{scenes.Count}:a");
-
-        if (subtitlePath is not null)
-        {
-            arguments.Add("-map");
-            arguments.Add($"{scenes.Count + 1}:s:0");
-        }
+        arguments.Add(settings.BackgroundMusic is not null || soundEffectIndexes.Count > 0
+            ? "[a]"
+            : $"{narrationIndex}:a");
 
         arguments.Add("-c:v");
         arguments.Add("libx264");
@@ -92,12 +178,6 @@ public static class FfmpegCommandPlan
         arguments.Add("-b:a");
         arguments.Add("128k");
 
-        if (subtitlePath is not null)
-        {
-            arguments.Add("-c:s");
-            arguments.Add("mov_text");
-        }
-
         arguments.Add("-shortest");
         arguments.Add("-movflags");
         arguments.Add("+faststart");
@@ -109,30 +189,246 @@ public static class FfmpegCommandPlan
     }
 
     private static string BuildFilterGraph(
-        int sceneCount,
+        IReadOnlyList<SceneMediaInput> scenes,
+        IReadOnlyList<SceneMotion> motions,
+        VideoRenderSettings settings,
         string duration,
-        int width,
-        int height,
-        int frameRate)
+        double sceneDuration,
+        int narrationIndex,
+        int? musicIndex,
+        IReadOnlyDictionary<int, int> soundEffectIndexes)
     {
         var builder = new StringBuilder();
+        var frameRate = settings.FrameRate;
 
-        for (var index = 0; index < sceneCount; index++)
+        for (var index = 0; index < scenes.Count; index++)
         {
+            builder.Append(CultureInfo.InvariantCulture, $"[{index}:v]");
+
+            if (scenes[index].Type == AssetType.Image && motions[index] != SceneMotion.None)
+            {
+                var frames = Math.Max(2, (int)Math.Ceiling(sceneDuration * frameRate));
+                builder.Append(CultureInfo.InvariantCulture,
+                    $"scale={settings.Width}:{settings.Height}:force_original_aspect_ratio=increase,");
+                builder.Append(CultureInfo.InvariantCulture,
+                    $"crop={settings.Width}:{settings.Height},");
+                builder.Append(BuildMotion(motions[index], frames, settings));
+                builder.Append(",setsar=1,format=yuv420p");
+            }
+            else
+            {
+                builder.Append(CultureInfo.InvariantCulture,
+                    $"tpad=stop_mode=clone:stop_duration={duration},trim=duration={duration},");
+                builder.Append(CultureInfo.InvariantCulture,
+                    $"scale={settings.Width}:{settings.Height}:force_original_aspect_ratio=increase,");
+                builder.Append(CultureInfo.InvariantCulture,
+                    $"crop={settings.Width}:{settings.Height},setsar=1,fps={frameRate},format=yuv420p");
+            }
+
+            if (settings.Transition == SceneTransition.Fade)
+            {
+                var transition = Format(settings.TransitionDurationSeconds);
+                var fadeOutStart = Format(sceneDuration - settings.TransitionDurationSeconds);
+                builder.Append(CultureInfo.InvariantCulture,
+                    $",fade=t=in:st=0:d={transition},fade=t=out:st={fadeOutStart}:d={transition}");
+            }
+
+            builder.Append(CultureInfo.InvariantCulture, $"[v{index}];");
+        }
+
+        var hasSubtitleStyle = settings.SubtitlePath is not null;
+        var assembledLabel = hasSubtitleStyle ? "vcat" : "v";
+
+        if (settings.Transition == SceneTransition.Crossfade && scenes.Count > 1)
+        {
+            var previous = "v0";
+            for (var index = 1; index < scenes.Count; index++)
+            {
+                var offset = Format(index * (sceneDuration - settings.TransitionDurationSeconds));
+                var output = index == scenes.Count - 1 ? assembledLabel : $"x{index}";
+                builder.Append(CultureInfo.InvariantCulture,
+                    $"[{previous}][v{index}]xfade=transition=fade:duration={Format(settings.TransitionDurationSeconds)}:offset={offset}[{output}];");
+                previous = output;
+            }
+        }
+        else
+        {
+            for (var index = 0; index < scenes.Count; index++)
+            {
+                builder.Append(CultureInfo.InvariantCulture, $"[v{index}]");
+            }
+
             builder.Append(CultureInfo.InvariantCulture,
-                $"[{index}:v]tpad=stop_mode=clone:stop_duration={duration},trim=duration={duration},scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps={frameRate},format=yuv420p[v{index}];");
+                $"concat=n={scenes.Count}:v=1:a=0[{assembledLabel}];");
         }
 
-        for (var index = 0; index < sceneCount; index++)
+        if (hasSubtitleStyle)
         {
-            builder.Append(CultureInfo.InvariantCulture, $"[v{index}]");
+            var style = settings.Subtitle ?? new SubtitleStyle();
+            builder.Append(CultureInfo.InvariantCulture,
+                $"[vcat]subtitles=filename='{EscapeFilterValue(settings.SubtitlePath!)}':force_style='{BuildForceStyle(style)}'[v];");
         }
 
-        builder.Append(CultureInfo.InvariantCulture,
-            $"concat=n={sceneCount}:v=1:a=0[v]");
+        AppendAudioGraph(
+            builder,
+            scenes,
+            settings,
+            narrationIndex,
+            musicIndex,
+            soundEffectIndexes);
 
         return builder.ToString();
     }
+
+    private static void AppendAudioGraph(
+        StringBuilder builder,
+        IReadOnlyList<SceneMediaInput> scenes,
+        VideoRenderSettings settings,
+        int narrationIndex,
+        int? musicIndex,
+        IReadOnlyDictionary<int, int> soundEffectIndexes)
+    {
+        var music = settings.BackgroundMusic;
+        var needsMix = music is not null || soundEffectIndexes.Count > 0;
+        var mixes = new List<string>();
+
+        if (needsMix)
+        {
+            builder.Append(CultureInfo.InvariantCulture,
+                $"[{narrationIndex}:a]{NarrationLoudness}[nargain];");
+        }
+
+        var narrationLabel = needsMix ? "nargain" : $"{narrationIndex}:a";
+
+        if (music is not null && music.Duck)
+        {
+            builder.Append(CultureInfo.InvariantCulture,
+                $"[{narrationLabel}]asplit=2[nar][duckkey];");
+            mixes.Add("nar");
+        }
+        else
+        {
+            mixes.Add(narrationLabel);
+        }
+
+        if (music is not null && musicIndex is not null)
+        {
+            var fadeSeconds = Math.Min(1d, settings.NarrationDurationSeconds / 2);
+            var fade = Format(fadeSeconds);
+            var fadeOutStart = Format(Math.Max(0, settings.NarrationDurationSeconds - fadeSeconds));
+            builder.Append(CultureInfo.InvariantCulture,
+                $"[{musicIndex}:a]highpass=f={MusicHighPass},volume={Format(music.Volume)},afade=t=in:st=0:d={fade},afade=t=out:st={fadeOutStart}:d={fade}[music];");
+
+            if (music.Duck)
+            {
+                builder.Append(CultureInfo.InvariantCulture,
+                    $"[music][duckkey]sidechaincompress=threshold={DuckThreshold}:ratio={DuckRatio}:attack={DuckAttack}:release={DuckRelease}[musicduck];");
+                mixes.Add("musicduck");
+            }
+            else
+            {
+                mixes.Add("music");
+            }
+        }
+
+        var effectIndex = 0;
+        foreach (var sceneIndex in soundEffectIndexes.Keys.OrderBy(index => index))
+        {
+            var effect = scenes[sceneIndex].SoundEffect!;
+            var delayMilliseconds = (int)Math.Round(Math.Max(0, effect.StartOffsetSeconds) * 1000);
+            var label = $"sfx{effectIndex}";
+            builder.Append(CultureInfo.InvariantCulture,
+                $"[{soundEffectIndexes[sceneIndex]}:a]adelay={delayMilliseconds}:all=1,volume={Format(effect.Volume)}[{label}];");
+            mixes.Add(label);
+            effectIndex++;
+        }
+
+        if (mixes.Count == 1)
+        {
+            return;
+        }
+
+        builder.Append(CultureInfo.InvariantCulture,
+            $"[{string.Join("][", mixes)}]amix=inputs={mixes.Count}:duration=first:normalize=0[a];");
+    }
+
+    private static SceneMotion ResolveMotion(
+        SceneMediaInput scene,
+        int index,
+        bool enableMotion)
+    {
+        if (!enableMotion || scene.Type != AssetType.Image)
+        {
+            return SceneMotion.None;
+        }
+
+        return scene.Motion ?? DefaultMotionCycle[index % DefaultMotionCycle.Length];
+    }
+
+    private static string BuildMotion(
+        SceneMotion motion,
+        int frames,
+        VideoRenderSettings settings)
+    {
+        var last = frames - 1;
+        var centerX = "iw/2-(iw/zoom/2)";
+        var centerY = "ih/2-(ih/zoom/2)";
+
+        var (zoom, x, y) = motion switch
+        {
+            SceneMotion.SlowZoomIn => (
+                $"1+0.08*on/{last}",
+                centerX,
+                centerY),
+            SceneMotion.SlowZoomOut => (
+                $"1.08-0.08*on/{last}",
+                centerX,
+                centerY),
+            SceneMotion.PanRight => (
+                "1.08",
+                $"(iw-iw/zoom)*on/{last}",
+                centerY),
+            SceneMotion.PanLeft => (
+                "1.08",
+                $"(iw-iw/zoom)*(1-on/{last})",
+                centerY),
+            _ => ("1", centerX, centerY)
+        };
+
+        return $"zoompan=z='{zoom}':x='{x}':y='{y}':d={frames}:s={settings.Width}x{settings.Height}:fps={settings.FrameRate}";
+    }
+
+    private static string BuildForceStyle(SubtitleStyle style)
+    {
+        var builder = new StringBuilder();
+        if (!string.IsNullOrWhiteSpace(style.FontName))
+        {
+            builder.Append("FontName=").Append(style.FontName).Append(',');
+        }
+
+        builder.Append("FontSize=").Append(style.FontSize)
+            .Append(",PrimaryColour=&H00FFFFFF")
+            .Append(",OutlineColour=&H00000000")
+            .Append(",BorderStyle=1")
+            .Append(",Outline=").Append(style.Outline)
+            .Append(",Shadow=").Append(style.Shadow)
+            .Append(",MarginV=").Append(style.MarginVertical)
+            .Append(",Alignment=2");
+
+        return builder.ToString();
+    }
+
+    /// <summary>
+    /// Escapes a path for use inside a libass filtergraph value. The path is
+    /// single-quoted by the caller, so only backslashes, quotes, colons and
+    /// commas need protection.
+    /// </summary>
+    private static string EscapeFilterValue(string value) =>
+        value
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("'", "\\'", StringComparison.Ordinal)
+            .Replace(":", "\\:", StringComparison.Ordinal)
+            .Replace(",", "\\,", StringComparison.Ordinal);
 
     private static string Format(double value) =>
         value.ToString("0.###", CultureInfo.InvariantCulture);

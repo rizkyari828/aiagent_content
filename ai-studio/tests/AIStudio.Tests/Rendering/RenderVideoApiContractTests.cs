@@ -32,6 +32,32 @@ public sealed class RenderVideoApiContractTests
         Assert.Equal(result.DurationSeconds, roundTripped.DurationSeconds);
         Assert.Equal(result.SceneCount, roundTripped.SceneCount);
         Assert.Equal(result.NarrationContentHash, roundTripped.NarrationContentHash);
+        Assert.False(roundTripped.SubtitleBurnedIn);
+    }
+
+    [Fact]
+    public void RenderVideoResult_DefaultsBurnedInForLegacyResultJson()
+    {
+        // A result persisted before Video Quality v1 has no subtitleBurnedIn field.
+        var legacyJson = $$"""
+        {
+          "outputPath": "renders/project/video.mp4",
+          "contentHash": "{{new string('d', RenderVideoResult.ContentHashLength)}}",
+          "byteSize": 2048,
+          "durationSeconds": 24,
+          "width": 1280,
+          "height": 720,
+          "storyboardJobId": "{{Guid.NewGuid()}}",
+          "narrationTrackId": "{{Guid.NewGuid()}}",
+          "sceneCount": 8,
+          "narrationContentHash": "{{new string('a', RenderVideoResult.ContentHashLength)}}"
+        }
+        """;
+
+        var result = RenderVideoResult.Deserialize(legacyJson);
+
+        Assert.False(result.SubtitleBurnedIn);
+        Assert.Null(result.SubtitleTrackId);
     }
 
     [Fact]
@@ -49,12 +75,14 @@ public sealed class RenderVideoApiContractTests
             2,
             new string('e', RenderVideoResult.ContentHashLength),
             Guid.NewGuid(),
-            new string('f', RenderVideoResult.ContentHashLength));
+            new string('f', RenderVideoResult.ContentHashLength),
+            SubtitleBurnedIn: true);
 
         var roundTripped = RenderVideoResult.Deserialize(result.Serialize());
 
         Assert.Equal(result.SubtitleTrackId, roundTripped.SubtitleTrackId);
         Assert.Equal(result.SubtitleContentHash, roundTripped.SubtitleContentHash);
+        Assert.True(roundTripped.SubtitleBurnedIn);
     }
 
     [Fact]

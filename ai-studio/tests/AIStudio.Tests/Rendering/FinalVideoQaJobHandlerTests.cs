@@ -258,6 +258,39 @@ public sealed class FinalVideoQaJobHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task Handler_PassesForBurnedInSubtitleWithoutStream()
+    {
+        var projectId = Guid.NewGuid();
+        var bytes = new byte[] { 1, 2, 3, 4 };
+        var relativePath = $"renders/{projectId:N}/burned-subtitle.mp4";
+        WriteFile(relativePath, bytes);
+        var renderResult = FinalVideoQaTestData.RenderResult(
+            relativePath,
+            FinalVideoQaTestData.Hash(bytes),
+            subtitleTrackId: Guid.NewGuid(),
+            subtitleContentHash: new string('e', RenderVideoResult.ContentHashLength),
+            subtitleBurnedIn: true);
+        var renderJob = FinalVideoQaTestData.RenderJob(projectId, renderResult);
+        var handler = CreateHandler(
+            renderJob,
+            FakeMediaInspector.Returning(
+                new MediaInspection(
+                    DurationSeconds: 12,
+                    HasVideo: true,
+                    HasAudio: true,
+                    HasSubtitle: false,
+                    Width: 1280,
+                    Height: 720)));
+
+        var json = await handler.ExecuteAsync(
+            FinalVideoQaTestData.ClaimedQaJob(projectId, renderJob.Id),
+            TestContext.Current.CancellationToken);
+
+        var result = FinalVideoQaResult.Deserialize(json);
+        Assert.False(result.HasSubtitle);
+    }
+
+    [Fact]
     public async Task Handler_RejectsMissingRenderJob()
     {
         var projectId = Guid.NewGuid();

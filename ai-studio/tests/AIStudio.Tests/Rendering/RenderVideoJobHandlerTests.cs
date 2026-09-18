@@ -325,10 +325,13 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
         var result = RenderVideoResult.Deserialize(resultJson);
         Assert.Equal(subtitle.Id, result.SubtitleTrackId);
         Assert.Equal(RenderVideoTestData.Hash(subtitleBytes), result.SubtitleContentHash);
+        Assert.True(result.SubtitleBurnedIn);
 
         var ffmpegArguments = processRunner.Requests[1].Arguments;
-        Assert.Contains(Path.Combine(root, "subtitle.srt"), ffmpegArguments);
-        Assert.Contains("mov_text", ffmpegArguments);
+        var filter = ffmpegArguments[ffmpegArguments.ToList().IndexOf("-filter_complex") + 1];
+        Assert.Contains(Path.Combine(root, "subtitle.srt"), filter);
+        Assert.Contains("subtitles=", filter);
+        Assert.DoesNotContain("mov_text", ffmpegArguments);
     }
 
     [Fact]
