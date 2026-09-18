@@ -83,7 +83,22 @@ public sealed class RenderVideoJobHandler(
                 asset.ContentHash,
                 "render_asset_unreadable",
                 "render_asset_hash_mismatch");
-            sceneInputs.Add(new SceneMediaInput(assetFile.AbsolutePath, asset.Type));
+
+            // Programmatic SVG/Manim visuals are text-heavy; the transition policy
+            // fades through background for them. Manual assets stay photographic.
+            var visualKind = SceneAssetProvenance.IsGeneratedGraphic(asset.Source)
+                ? SceneVisualKind.Graphic
+                : SceneVisualKind.Photographic;
+
+            // Narration-aware timing fallback: longer scene text gets more time.
+            var scene = storyboard.Scenes[sceneIndex];
+            var weight = SceneTiming.WeightFor(scene.Heading, scene.Visual);
+
+            sceneInputs.Add(new SceneMediaInput(
+                assetFile.AbsolutePath,
+                asset.Type,
+                VisualKind: visualKind,
+                Weight: weight));
         }
 
         var narration = await narrations.FindByProjectIdAsync(

@@ -7,4 +7,5 @@ public sealed record SceneMediaInput(
     AssetType Type,
     SceneMotion? Motion = null,
     SceneSoundEffect? SoundEffect = null,
-    SceneVisualKind? VisualKind = null);
+    SceneVisualKind? VisualKind = null,
+    double Weight = 1);

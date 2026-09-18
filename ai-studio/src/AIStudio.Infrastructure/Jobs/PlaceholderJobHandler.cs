@@ -12,6 +12,7 @@ public sealed class PlaceholderJobHandler : IJobHandler
             and not JobType.GenerateStoryboard
             and not JobType.RenderVideo
             and not JobType.FinalVideoQa
+            and not JobType.GenerateSceneVisuals
         && Enum.IsDefined(type);
 
     public Task<string> ExecuteAsync(

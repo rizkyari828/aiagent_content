@@ -1,3 +1,4 @@
+using AIStudio.Application.Assets;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.RenderVideo;
@@ -435,6 +436,90 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
         Assert.Null(result.SubtitleTrackId);
         Assert.Null(result.SubtitleContentHash);
         Assert.DoesNotContain("mov_text", processRunner.Requests[1].Arguments);
+    }
+
+    [Fact]
+    public async Task Handler_TreatsGeneratedVisualsAsGraphicForTransitions()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateStoryboardTestData.ValidResult);
+        var scene0 = new byte[] { 1 };
+        var scene1 = new byte[] { 2 };
+        var narrationBytes = new byte[] { 3 };
+        WriteFile("scene-0.png", scene0);
+        WriteFile("scene-1.png", scene1);
+        WriteFile("narration.wav", narrationBytes);
+        var processRunner = FakeFfmpeg.WritingOutput([42, 42]);
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            [
+                RenderVideoTestData.SceneAsset(
+                    projectId,
+                    storyboard.Id,
+                    0,
+                    "scene-0.png",
+                    scene0,
+                    source: SceneAssetProvenance.GeneratedVisualSource),
+                RenderVideoTestData.SceneAsset(
+                    projectId,
+                    storyboard.Id,
+                    1,
+                    "scene-1.png",
+                    scene1,
+                    source: SceneAssetProvenance.GeneratedVisualSource)
+            ],
+            RenderVideoTestData.Narration(projectId, storyboard.Id, "narration.wav", narrationBytes),
+            processRunner);
+
+        await handler.ExecuteAsync(
+            RenderVideoTestData.CreateJob(projectId, storyboard.Id),
+            TestContext.Current.CancellationToken);
+
+        var filter = Filter(processRunner);
+        Assert.Contains("xfade=transition=fadeblack", filter);
+        Assert.DoesNotContain("xfade=transition=fade:", filter);
+    }
+
+    [Fact]
+    public async Task Handler_KeepsCrossfadeForManualAssets()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateStoryboardTestData.ValidResult);
+        var scene0 = new byte[] { 1 };
+        var scene1 = new byte[] { 2 };
+        var narrationBytes = new byte[] { 3 };
+        WriteFile("scene-0.png", scene0);
+        WriteFile("scene-1.png", scene1);
+        WriteFile("narration.wav", narrationBytes);
+        var processRunner = FakeFfmpeg.WritingOutput([42, 42]);
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            [
+                RenderVideoTestData.SceneAsset(projectId, storyboard.Id, 0, "scene-0.png", scene0),
+                RenderVideoTestData.SceneAsset(projectId, storyboard.Id, 1, "scene-1.png", scene1)
+            ],
+            RenderVideoTestData.Narration(projectId, storyboard.Id, "narration.wav", narrationBytes),
+            processRunner);
+
+        await handler.ExecuteAsync(
+            RenderVideoTestData.CreateJob(projectId, storyboard.Id),
+            TestContext.Current.CancellationToken);
+
+        var filter = Filter(processRunner);
+        Assert.Contains("xfade=transition=fade:", filter);
+        Assert.DoesNotContain("fadeblack", filter);
+    }
+
+    private static string Filter(FakeProcessRunner processRunner)
+    {
+        var arguments = processRunner.Requests[1].Arguments;
+        return arguments[arguments.ToList().IndexOf("-filter_complex") + 1];
     }
 
     private RenderVideoJobHandler CreateHandler(

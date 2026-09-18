@@ -128,6 +128,84 @@ public sealed class LocalAssetFileStoreTests : IDisposable
         Assert.Equal("asset_path_invalid", exception.ErrorCode);
     }
 
+    [Fact]
+    public async Task WriteAsync_WritesGeneratedBytesUnderRoot()
+    {
+        var bytes = new byte[] { 10, 20, 30, 40 };
+        var store = Store();
+
+        var info = await store.WriteAsync(
+            "visuals/project/scene_0.png",
+            bytes,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("visuals/project/scene_0.png", info.RelativePath);
+        Assert.Equal(bytes.Length, info.ByteSize);
+        Assert.Equal(
+            Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
+            info.ContentHash);
+        Assert.Equal(bytes, File.ReadAllBytes(Path.Combine(root, "visuals/project/scene_0.png")));
+    }
+
+    [Fact]
+    public async Task WriteAsync_IsIdempotentForIdenticalContent()
+    {
+        var bytes = new byte[] { 1, 2, 3 };
+        var store = Store();
+        var first = await store.WriteAsync(
+            "visuals/scene.png",
+            bytes,
+            TestContext.Current.CancellationToken);
+        var lastWrite = File.GetLastWriteTimeUtc(first.AbsolutePath);
+
+        var second = await store.WriteAsync(
+            "visuals/scene.png",
+            bytes,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(first.ContentHash, second.ContentHash);
+        Assert.Equal(lastWrite, File.GetLastWriteTimeUtc(second.AbsolutePath));
+    }
+
+    [Fact]
+    public async Task WriteAsync_OverwritesChangedContent()
+    {
+        var store = Store();
+        await store.WriteAsync("visuals/scene.png", [1, 2, 3], TestContext.Current.CancellationToken);
+
+        var updated = await store.WriteAsync(
+            "visuals/scene.png",
+            [4, 5, 6, 7],
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(4, updated.ByteSize);
+        Assert.Equal([4, 5, 6, 7], File.ReadAllBytes(updated.AbsolutePath));
+    }
+
+    [Theory]
+    [InlineData("../outside/secret.png")]
+    [InlineData("/etc/passwd")]
+    [InlineData("C:\\Windows\\system32\\config\\sam")]
+    public async Task WriteAsync_RejectsPathTraversalAndAbsolutePaths(string requestedPath)
+    {
+        var exception = await Assert.ThrowsAsync<AssetCollectionException>(
+            () => Store().WriteAsync(
+                requestedPath,
+                [1],
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("asset_path_invalid", exception.ErrorCode);
+    }
+
+    [Fact]
+    public async Task WriteAsync_RejectsEmptyContent()
+    {
+        var exception = await Assert.ThrowsAsync<AssetCollectionException>(
+            () => Store().WriteAsync("visuals/scene.png", [], TestContext.Current.CancellationToken));
+
+        Assert.Equal("asset_file_invalid", exception.ErrorCode);
+    }
+
     private LocalAssetFileStore Store() =>
         new(Options.Create(new AssetStorageOptions { RootPath = root }));
 

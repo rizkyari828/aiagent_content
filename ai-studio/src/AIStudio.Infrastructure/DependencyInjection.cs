@@ -10,6 +10,7 @@ using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Application.Jobs.RenderVideo;
 using AIStudio.Application.Narration;
 using AIStudio.Application.Rendering;
+using AIStudio.Application.Jobs.GenerateSceneVisuals;
 using AIStudio.Application.Rendering.Visuals;
 using AIStudio.Application.Scripts;
 using AIStudio.Application.Subtitles;
@@ -81,11 +82,13 @@ public static class DependencyInjection
         services.AddSingleton<IMediaInspector, FfprobeMediaInspector>();
         services.AddSingleton<IVideoRenderer, FfmpegVideoRenderer>();
         services.AddSingleton<ISceneVisualRenderer, FfmpegSceneVisualRenderer>();
+        services.AddSingleton<IManimSceneRenderer, ProcessManimSceneRenderer>();
         services.AddScoped<IJobHandler, GenerateIdeaJobHandler>();
         services.AddScoped<IJobHandler, GenerateScriptJobHandler>();
         services.AddScoped<IJobHandler, GenerateStoryboardJobHandler>();
         services.AddScoped<IJobHandler, RenderVideoJobHandler>();
         services.AddScoped<IJobHandler, FinalVideoQaJobHandler>();
+        services.AddScoped<IJobHandler, GenerateSceneVisualsJobHandler>();
         services.AddScoped<GenerateIdeaWorkflow>();
         services.AddScoped<GenerateScriptWorkflow>();
         services.AddScoped<GenerateStoryboardWorkflow>();
@@ -95,6 +98,7 @@ public static class DependencyInjection
         services.AddScoped<SubtitleWorkflow>();
         services.AddScoped<RenderVideoWorkflow>();
         services.AddScoped<FinalVideoQaWorkflow>();
+        services.AddScoped<GenerateSceneVisualsWorkflow>();
         services.AddSingleton<IJobHandler, PlaceholderJobHandler>();
         services.AddScoped<JobProcessor>();
         services.AddHostedService<JobWorker>();
@@ -180,6 +184,20 @@ public static class DependencyInjection
             .Validate(
                 options => options.FrameRate is >= 1 and <= 120,
                 "Rendering:FrameRate must be between 1 and 120.")
+            .ValidateOnStart();
+
+        services
+            .AddOptions<ManimOptions>()
+            .Bind(configuration.GetSection(ManimOptions.SectionName))
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.PythonPath),
+                "Manim:PythonPath is required.")
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.ScriptPath),
+                "Manim:ScriptPath is required.")
+            .Validate(
+                options => options.TimeoutSeconds is >= 1 and <= 3600,
+                "Manim:TimeoutSeconds must be between 1 and 3600.")
             .ValidateOnStart();
     }
 

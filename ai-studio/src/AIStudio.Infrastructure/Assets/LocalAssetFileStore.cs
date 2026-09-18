@@ -17,6 +17,95 @@ public sealed class LocalAssetFileStore : IAssetFileStore
 
     public AssetFileInfo Register(string requestedPath)
     {
+        var (relativePath, absolutePath) = Resolve(requestedPath);
+
+        if (!File.Exists(absolutePath))
+        {
+            throw Invalid(
+                "asset_file_not_found",
+                "The asset file does not exist under the approved root.");
+        }
+
+        try
+        {
+            using var stream = File.OpenRead(absolutePath);
+            var byteSize = stream.Length;
+            if (byteSize == 0)
+            {
+                throw Invalid("asset_file_invalid", "The asset file is empty.");
+            }
+
+            var contentHash = Convert
+                .ToHexString(SHA256.HashData(stream))
+                .ToLowerInvariant();
+            return new AssetFileInfo(relativePath, absolutePath, byteSize, contentHash);
+        }
+        catch (Exception exception)
+            when (exception is IOException
+                or UnauthorizedAccessException
+                or SecurityException)
+        {
+            throw Invalid(
+                "asset_file_unreadable",
+                "The asset file could not be read.",
+                exception);
+        }
+    }
+
+    public async Task<AssetFileInfo> WriteAsync(
+        string relativePath,
+        byte[] content,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        if (content.Length == 0)
+        {
+            throw Invalid("asset_file_invalid", "Generated asset content is empty.");
+        }
+
+        var (normalized, absolutePath) = Resolve(relativePath);
+        var contentHash = Convert
+            .ToHexString(SHA256.HashData(content))
+            .ToLowerInvariant();
+
+        if (File.Exists(absolutePath)
+            && await MatchesAsync(absolutePath, contentHash, cancellationToken))
+        {
+            // Idempotent: identical content already exists, leave it untouched.
+            return new AssetFileInfo(normalized, absolutePath, content.Length, contentHash);
+        }
+
+        var directory = Path.GetDirectoryName(absolutePath)!;
+        Directory.CreateDirectory(directory);
+        var temporaryPath = $"{absolutePath}.{Guid.NewGuid():N}.part";
+
+        try
+        {
+            await File.WriteAllBytesAsync(temporaryPath, content, cancellationToken);
+            File.Move(temporaryPath, absolutePath, overwrite: true);
+        }
+        finally
+        {
+            DeleteIfExists(temporaryPath);
+        }
+
+        return new AssetFileInfo(normalized, absolutePath, content.Length, contentHash);
+    }
+
+    private static async Task<bool> MatchesAsync(
+        string path,
+        string expectedHash,
+        CancellationToken cancellationToken)
+    {
+        await using var stream = File.OpenRead(path);
+        var hash = Convert
+            .ToHexString(await SHA256.HashDataAsync(stream, cancellationToken))
+            .ToLowerInvariant();
+        return string.Equals(hash, expectedHash, StringComparison.Ordinal);
+    }
+
+    private (string RelativePath, string AbsolutePath) Resolve(string requestedPath)
+    {
         if (string.IsNullOrWhiteSpace(requestedPath))
         {
             throw Invalid("asset_path_invalid", "An asset path is required.");
@@ -66,37 +155,7 @@ public sealed class LocalAssetFileStore : IAssetFileStore
                 "Asset path must not traverse symbolic links.");
         }
 
-        if (!File.Exists(absolutePath))
-        {
-            throw Invalid(
-                "asset_file_not_found",
-                "The asset file does not exist under the approved root.");
-        }
-
-        try
-        {
-            using var stream = File.OpenRead(absolutePath);
-            var byteSize = stream.Length;
-            if (byteSize == 0)
-            {
-                throw Invalid("asset_file_invalid", "The asset file is empty.");
-            }
-
-            var contentHash = Convert
-                .ToHexString(SHA256.HashData(stream))
-                .ToLowerInvariant();
-            return new AssetFileInfo(relativePath, absolutePath, byteSize, contentHash);
-        }
-        catch (Exception exception)
-            when (exception is IOException
-                or UnauthorizedAccessException
-                or SecurityException)
-        {
-            throw Invalid(
-                "asset_file_unreadable",
-                "The asset file could not be read.",
-                exception);
-        }
+        return (relativePath, absolutePath);
     }
 
     private bool IsWithinRoot(string path) =>
@@ -124,6 +183,23 @@ public sealed class LocalAssetFileStore : IAssetFileStore
         }
 
         return false;
+    }
+
+    private static void DeleteIfExists(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
 
     private static AssetCollectionException Invalid(

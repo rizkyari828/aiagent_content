@@ -128,6 +128,39 @@ public sealed class FfmpegCommandPlanTests
     }
 
     [Fact]
+    public void Build_UsesWeightedSceneDurations()
+    {
+        var arguments = Build(
+            [
+                new SceneMediaInput("/root/scene-0.png", AssetType.Image, Weight: 1),
+                new SceneMediaInput("/root/scene-1.png", AssetType.Image, Weight: 3)
+            ],
+            narrationSeconds: 8,
+            transition: SceneTransition.Cut,
+            enableMotion: false);
+
+        Assert.Equal(new[] { "2", "6" }, Durations(arguments));
+    }
+
+    [Fact]
+    public void Build_CrossfadeOffsetsFollowWeightedDurations()
+    {
+        var arguments = Build(
+            [
+                new SceneMediaInput("/root/scene-0.png", AssetType.Image, Weight: 1),
+                new SceneMediaInput("/root/scene-1.png", AssetType.Image, Weight: 3)
+            ],
+            narrationSeconds: 10,
+            transition: SceneTransition.Crossfade);
+
+        var filter = Filter(arguments);
+
+        // base [2.5, 7.5] expanded by (10 + 0.5) / 10 => [2.625, 7.875];
+        // first boundary offset = 2.625 - 0.5 = 2.125.
+        Assert.Contains("offset=2.125", filter);
+    }
+
+    [Fact]
     public void Build_ExplicitPanIsOptInForRichVisuals()
     {
         var arguments = Build(
@@ -384,6 +417,20 @@ public sealed class FfmpegCommandPlanTests
 
     private static string Filter(IReadOnlyList<string> arguments) =>
         arguments[arguments.ToList().IndexOf("-filter_complex") + 1];
+
+    private static IReadOnlyList<string> Durations(IReadOnlyList<string> arguments)
+    {
+        var durations = new List<string>();
+        for (var index = 0; index < arguments.Count - 1; index++)
+        {
+            if (arguments[index] == "-t")
+            {
+                durations.Add(arguments[index + 1]);
+            }
+        }
+
+        return durations;
+    }
 
     private static int CountOccurrences(string value, string token)
     {

@@ -22,6 +22,23 @@ public static class SceneVisualSvg
             [SceneVisualPalette.Slate] = new("#101418", "#1e2a33", "#7fb2ff", "#eaf1fb")
         };
 
+    /// <summary>Resolved palette values shared with other engines so they stay in sync.</summary>
+    public sealed record SceneVisualPaletteColors(
+        string Background,
+        string BackgroundAlt,
+        string Accent,
+        string Text);
+
+    /// <summary>
+    /// Single source of truth for the four controlled palettes. The Manim engine
+    /// receives these values at render time instead of duplicating the hex codes.
+    /// </summary>
+    public static SceneVisualPaletteColors GetColors(SceneVisualPalette palette)
+    {
+        var value = Palettes[palette];
+        return new SceneVisualPaletteColors(value.From, value.To, value.Accent, value.Text);
+    }
+
     public static string Compose(SceneVisualBrief brief)
     {
         ArgumentNullException.ThrowIfNull(brief);

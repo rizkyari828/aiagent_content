@@ -29,7 +29,9 @@ internal static class RenderVideoTestData
         string path,
         byte[] bytes,
         AssetType type = AssetType.Image,
-        string? contentHash = null) =>
+        string? contentHash = null,
+        string? source = null,
+        string? creator = null) =>
         AIStudio.Domain.Assets.SceneAsset.Create(
             contentProjectId,
             storyboardJobId,
@@ -39,8 +41,8 @@ internal static class RenderVideoTestData
             bytes.Length,
             contentHash ?? Hash(bytes),
             AssetOrigin.Local,
-            null,
-            null,
+            source,
+            creator,
             null,
             null,
             AssetTestData.Now);

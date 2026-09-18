@@ -7,5 +7,6 @@ public enum JobType
     GenerateScript = 2,
     GenerateStoryboard = 3,
     RenderVideo = 4,
-    FinalVideoQa = 5
+    FinalVideoQa = 5,
+    GenerateSceneVisuals = 6
 }

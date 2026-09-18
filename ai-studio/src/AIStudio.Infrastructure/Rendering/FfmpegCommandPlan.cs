@@ -74,21 +74,16 @@ public static class FfmpegCommandPlan
 
         var sceneCount = scenes.Count;
         var transitionDuration = settings.TransitionDurationSeconds;
-        var sceneDuration = SceneDurationSeconds(
-            settings.NarrationDurationSeconds,
-            sceneCount,
-            settings.Transition,
-            transitionDuration);
+        var sceneDurations = ResolveSceneDurations(scenes, settings, transitionDuration);
 
         if (settings.Transition != SceneTransition.Cut
-            && (transitionDuration <= 0 || transitionDuration >= sceneDuration))
+            && (transitionDuration <= 0 || transitionDuration >= sceneDurations.Min()))
         {
             throw new RenderVideoException(
                 "render_transition_invalid",
                 "Transition duration must be greater than zero and shorter than a scene.");
         }
 
-        var duration = Format(sceneDuration);
         var arguments = new List<string> { "-y", "-hide_banner", "-loglevel", "error" };
         var motions = new SceneMotion[sceneCount];
 
@@ -112,7 +107,7 @@ public static class FfmpegCommandPlan
             }
 
             arguments.Add("-t");
-            arguments.Add(duration);
+            arguments.Add(Format(sceneDurations[index]));
             arguments.Add("-i");
             arguments.Add(scene.AbsolutePath);
         }
@@ -152,8 +147,7 @@ public static class FfmpegCommandPlan
             scenes,
             motions,
             settings,
-            duration,
-            sceneDuration,
+            sceneDurations,
             narrationIndex,
             musicIndex,
             soundEffectIndexes));
@@ -192,8 +186,7 @@ public static class FfmpegCommandPlan
         IReadOnlyList<SceneMediaInput> scenes,
         IReadOnlyList<SceneMotion> motions,
         VideoRenderSettings settings,
-        string duration,
-        double sceneDuration,
+        IReadOnlyList<double> sceneDurations,
         int narrationIndex,
         int? musicIndex,
         IReadOnlyDictionary<int, int> soundEffectIndexes)
@@ -203,11 +196,12 @@ public static class FfmpegCommandPlan
 
         for (var index = 0; index < scenes.Count; index++)
         {
+            var duration = Format(sceneDurations[index]);
             builder.Append(CultureInfo.InvariantCulture, $"[{index}:v]");
 
             if (scenes[index].Type == AssetType.Image && motions[index] != SceneMotion.None)
             {
-                var frames = Math.Max(2, (int)Math.Ceiling(sceneDuration * frameRate));
+                var frames = Math.Max(2, (int)Math.Ceiling(sceneDurations[index] * frameRate));
                 builder.Append(CultureInfo.InvariantCulture,
                     $"scale={settings.Width}:{settings.Height}:force_original_aspect_ratio=increase,");
                 builder.Append(CultureInfo.InvariantCulture,
@@ -228,7 +222,7 @@ public static class FfmpegCommandPlan
             if (settings.Transition == SceneTransition.Fade)
             {
                 var transition = Format(settings.TransitionDurationSeconds);
-                var fadeOutStart = Format(sceneDuration - settings.TransitionDurationSeconds);
+                var fadeOutStart = Format(sceneDurations[index] - settings.TransitionDurationSeconds);
                 builder.Append(CultureInfo.InvariantCulture,
                     $",fade=t=in:st=0:d={transition},fade=t=out:st={fadeOutStart}:d={transition}");
             }
@@ -243,16 +237,18 @@ public static class FfmpegCommandPlan
         {
             var previous = "v0";
             var previousKind = ResolveVisualKind(scenes[0]);
+            var cumulative = sceneDurations[0];
             for (var index = 1; index < scenes.Count; index++)
             {
                 var kind = ResolveVisualKind(scenes[index]);
                 var transition = CrossfadeTransition(previousKind, kind);
-                var offset = Format(index * (sceneDuration - settings.TransitionDurationSeconds));
+                var offset = Format(cumulative - index * settings.TransitionDurationSeconds);
                 var output = index == scenes.Count - 1 ? assembledLabel : $"x{index}";
                 builder.Append(CultureInfo.InvariantCulture,
                     $"[{previous}][v{index}]xfade=transition={transition}:duration={Format(settings.TransitionDurationSeconds)}:offset={offset}[{output}];");
                 previous = output;
                 previousKind = kind;
+                cumulative += sceneDurations[index];
             }
         }
         else
@@ -369,6 +365,52 @@ public static class FfmpegCommandPlan
         left == SceneVisualKind.Graphic || right == SceneVisualKind.Graphic
             ? "fadeblack"
             : "fade";
+
+    /// <summary>
+    /// Allocates the narration across scenes by weight (scene text length today),
+    /// using a higher floor for animated scenes. The content split sums to the
+    /// narration; the crossfade overlap budget is then distributed proportionally
+    /// so the final timeline still equals the narration duration.
+    /// </summary>
+    private static double[] ResolveSceneDurations(
+        IReadOnlyList<SceneMediaInput> scenes,
+        VideoRenderSettings settings,
+        double transitionDuration)
+    {
+        var weights = new double[scenes.Count];
+        var minimums = new double[scenes.Count];
+        for (var index = 0; index < scenes.Count; index++)
+        {
+            weights[index] = scenes[index].Weight > 0 ? scenes[index].Weight : 1.0;
+            minimums[index] = scenes[index].Type == AssetType.Video
+                ? SceneTiming.AnimationMinimumSeconds
+                : SceneTiming.DefaultMinimumSeconds;
+        }
+
+        var contentDurations = SceneTiming.Allocate(
+            weights,
+            settings.NarrationDurationSeconds,
+            minimums);
+
+        var overlapBudget = settings.Transition == SceneTransition.Crossfade && scenes.Count > 1
+            ? (scenes.Count - 1) * transitionDuration
+            : 0;
+
+        var contentSum = 0d;
+        foreach (var value in contentDurations)
+        {
+            contentSum += value;
+        }
+
+        var scale = (settings.NarrationDurationSeconds + overlapBudget) / contentSum;
+        var durations = new double[scenes.Count];
+        for (var index = 0; index < scenes.Count; index++)
+        {
+            durations[index] = contentDurations[index] * scale;
+        }
+
+        return durations;
+    }
 
     private static SceneMotion ResolveMotion(
         SceneMediaInput scene,
