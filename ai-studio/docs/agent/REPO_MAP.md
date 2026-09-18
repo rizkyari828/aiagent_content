@@ -37,6 +37,15 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `src/AIStudio.Infrastructure/Persistence/Configurations/NarrationTrackConfiguration.cs` — `narration_tracks` mapping and unique project index.
 - `src/AIStudio.Api/Endpoints/NarrationEndpoints.cs` — minimal narration registration and retrieval HTTP surface.
 
+## Rendering (FFmpeg composition)
+
+- `src/AIStudio.Application/Jobs/RenderVideo/RenderVideoWorkflow.cs` — enqueue a durable render job from storyboard + assets + narration gating.
+- `RenderVideoJobHandler.cs`, `RenderVideoJobPayload.cs`, `RenderVideoResult.cs` — execution contract, input integrity gates, and canonical `Job.Result` render evidence.
+- `src/AIStudio.Application/Rendering/IVideoRenderer.cs`, `VideoRenderRequest.cs`, `VideoRenderOutput.cs`, `SceneMediaInput.cs`, `RenderVideoException.cs` — renderer process boundary and DTOs.
+- `src/AIStudio.Infrastructure/Rendering/FfmpegVideoRenderer.cs` — safe `ArgumentList` FFmpeg/ffprobe process invocation, bounded timeout, temp-file + atomic promotion.
+- `FfmpegCommandPlan.cs`, `RenderingOptions.cs` — pure argument/timing plan and rendering configuration.
+- `src/AIStudio.Api/Endpoints/RenderEndpoints.cs` — minimal render enqueue HTTP surface.
+
 ## Manual Script Review/Edit
 
 - `src/AIStudio.Domain/Scripts/ReviewedScript.cs` — one canonical reviewed script per project with `Draft -> Approved` lifecycle.
@@ -70,6 +79,7 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `tests/AIStudio.Tests/Persistence/ReviewedScriptModelTests.cs` — additive EF mapping and uniqueness validation.
 - `tests/AIStudio.Tests/Assets/` — scene asset domain rules, workflow association/provenance, path-safety and hashing, and API response contracts; `Persistence/SceneAssetModelTests.cs` and DB-gated `Persistence/SceneAssetVerticalSliceTests.cs` cover mapping and persistence.
 - `tests/AIStudio.Tests/Narration/` — narration domain rules, storyboard-gated workflow, provenance, shared path-safety/hash reuse, and API response contracts; `Persistence/NarrationTrackModelTests.cs` and DB-gated `Persistence/NarrationVerticalSliceTests.cs` cover mapping and persistence.
+- `tests/AIStudio.Tests/Rendering/` — FFmpeg argument/timing plan, render enqueue gating, handler input-integrity gates, safe output paths, faked process boundary, and `Job.Result` render-evidence contracts.
 
 ## Product specification (modular PRD v0.9.2)
 

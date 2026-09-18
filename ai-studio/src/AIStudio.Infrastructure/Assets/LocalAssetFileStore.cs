@@ -85,7 +85,7 @@ public sealed class LocalAssetFileStore : IAssetFileStore
             var contentHash = Convert
                 .ToHexString(SHA256.HashData(stream))
                 .ToLowerInvariant();
-            return new AssetFileInfo(relativePath, byteSize, contentHash);
+            return new AssetFileInfo(relativePath, absolutePath, byteSize, contentHash);
         }
         catch (Exception exception)
             when (exception is IOException

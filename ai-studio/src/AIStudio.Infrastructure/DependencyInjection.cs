@@ -6,7 +6,9 @@ using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.GenerateIdea;
 using AIStudio.Application.Jobs.GenerateScript;
 using AIStudio.Application.Jobs.GenerateStoryboard;
+using AIStudio.Application.Jobs.RenderVideo;
 using AIStudio.Application.Narration;
+using AIStudio.Application.Rendering;
 using AIStudio.Application.Scripts;
 using AIStudio.Infrastructure.AI;
 using AIStudio.Infrastructure.Assets;
@@ -14,6 +16,7 @@ using AIStudio.Infrastructure.Content;
 using AIStudio.Infrastructure.Jobs;
 using AIStudio.Infrastructure.Narration;
 using AIStudio.Infrastructure.Persistence;
+using AIStudio.Infrastructure.Rendering;
 using AIStudio.Infrastructure.Scripts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -41,6 +44,7 @@ public static class DependencyInjection
         AddJobWorker(services, configuration);
         AddAiGateway(services, configuration);
         AddAssetStorage(services, configuration);
+        AddRendering(services, configuration);
 
         return services;
     }
@@ -68,15 +72,18 @@ public static class DependencyInjection
         services.AddScoped<IAssetRepository, AssetRepository>();
         services.AddScoped<INarrationRepository, NarrationRepository>();
         services.AddSingleton<IAssetFileStore, LocalAssetFileStore>();
+        services.AddSingleton<IVideoRenderer, FfmpegVideoRenderer>();
         services.AddScoped<IJobHandler, GenerateIdeaJobHandler>();
         services.AddScoped<IJobHandler, GenerateScriptJobHandler>();
         services.AddScoped<IJobHandler, GenerateStoryboardJobHandler>();
+        services.AddScoped<IJobHandler, RenderVideoJobHandler>();
         services.AddScoped<GenerateIdeaWorkflow>();
         services.AddScoped<GenerateScriptWorkflow>();
         services.AddScoped<GenerateStoryboardWorkflow>();
         services.AddScoped<ScriptReviewWorkflow>();
         services.AddScoped<AssetCollectionWorkflow>();
         services.AddScoped<NarrationWorkflow>();
+        services.AddScoped<RenderVideoWorkflow>();
         services.AddSingleton<IJobHandler, PlaceholderJobHandler>();
         services.AddScoped<JobProcessor>();
         services.AddHostedService<JobWorker>();
@@ -134,6 +141,34 @@ public static class DependencyInjection
             .Validate(
                 options => !string.IsNullOrWhiteSpace(options.RootPath),
                 "Assets:RootPath is required.")
+            .ValidateOnStart();
+    }
+
+    private static void AddRendering(
+        IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services
+            .AddOptions<RenderingOptions>()
+            .Bind(configuration.GetSection(RenderingOptions.SectionName))
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.FfmpegPath),
+                "Rendering:FfmpegPath is required.")
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.FfprobePath),
+                "Rendering:FfprobePath is required.")
+            .Validate(
+                options => options.TimeoutSeconds is >= 1 and <= 3600,
+                "Rendering:TimeoutSeconds must be between 1 and 3600.")
+            .Validate(
+                options => options.Width is >= 2 and <= 7680,
+                "Rendering:Width must be between 2 and 7680.")
+            .Validate(
+                options => options.Height is >= 2 and <= 4320,
+                "Rendering:Height must be between 2 and 4320.")
+            .Validate(
+                options => options.FrameRate is >= 1 and <= 120,
+                "Rendering:FrameRate must be between 1 and 120.")
             .ValidateOnStart();
     }
 

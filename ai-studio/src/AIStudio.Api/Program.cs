@@ -63,6 +63,7 @@ app.MapScriptReviewApi();
 app.MapStoryboardApi();
 app.MapAssetApi();
 app.MapNarrationApi();
+app.MapRenderApi();
 
 app.Run();
 
