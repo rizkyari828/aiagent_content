@@ -16,6 +16,9 @@
 /logs/
 *.log
 
+# Content Studio manually collected asset files
+ai-studio/assets/
+
 # .NET
 **/bin/
 **/obj/

@@ -1,4 +1,5 @@
 using AIStudio.Application.Abstractions.Persistence;
+using AIStudio.Domain.Assets;
 using AIStudio.Domain.Content;
 using AIStudio.Domain.Jobs;
 using AIStudio.Domain.Scripts;
@@ -14,6 +15,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<Job> Jobs => Set<Job>();
 
     public DbSet<ReviewedScript> ReviewedScripts => Set<ReviewedScript>();
+
+    public DbSet<SceneAsset> SceneAssets => Set<SceneAsset>();
 
     public void Add(ContentProject project)
     {

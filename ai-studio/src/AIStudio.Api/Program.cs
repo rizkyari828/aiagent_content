@@ -61,6 +61,7 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 app.MapGenerateIdeaApi();
 app.MapScriptReviewApi();
 app.MapStoryboardApi();
+app.MapAssetApi();
 
 app.Run();
 

@@ -1,5 +1,6 @@
 using AIStudio.Application.Abstractions.Persistence;
 using AIStudio.Application.AI;
+using AIStudio.Application.Assets;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.GenerateIdea;
@@ -7,6 +8,7 @@ using AIStudio.Application.Jobs.GenerateScript;
 using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Application.Scripts;
 using AIStudio.Infrastructure.AI;
+using AIStudio.Infrastructure.Assets;
 using AIStudio.Infrastructure.Content;
 using AIStudio.Infrastructure.Jobs;
 using AIStudio.Infrastructure.Persistence;
@@ -36,6 +38,7 @@ public static class DependencyInjection
 
         AddJobWorker(services, configuration);
         AddAiGateway(services, configuration);
+        AddAssetStorage(services, configuration);
 
         return services;
     }
@@ -60,6 +63,8 @@ public static class DependencyInjection
         services.AddScoped<IContentProjectReader, ContentProjectReader>();
         services.AddScoped<IJobReader, JobReader>();
         services.AddScoped<IScriptReviewRepository, ScriptReviewRepository>();
+        services.AddScoped<IAssetRepository, AssetRepository>();
+        services.AddSingleton<IAssetFileStore, LocalAssetFileStore>();
         services.AddScoped<IJobHandler, GenerateIdeaJobHandler>();
         services.AddScoped<IJobHandler, GenerateScriptJobHandler>();
         services.AddScoped<IJobHandler, GenerateStoryboardJobHandler>();
@@ -67,6 +72,7 @@ public static class DependencyInjection
         services.AddScoped<GenerateScriptWorkflow>();
         services.AddScoped<GenerateStoryboardWorkflow>();
         services.AddScoped<ScriptReviewWorkflow>();
+        services.AddScoped<AssetCollectionWorkflow>();
         services.AddSingleton<IJobHandler, PlaceholderJobHandler>();
         services.AddScoped<JobProcessor>();
         services.AddHostedService<JobWorker>();
@@ -112,6 +118,19 @@ public static class DependencyInjection
                     UriKind.Absolute);
                 client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
             });
+    }
+
+    private static void AddAssetStorage(
+        IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services
+            .AddOptions<AssetStorageOptions>()
+            .Bind(configuration.GetSection(AssetStorageOptions.SectionName))
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.RootPath),
+                "Assets:RootPath is required.")
+            .ValidateOnStart();
     }
 
     private static bool IsValidBaseUrl(string? value) =>
