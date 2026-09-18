@@ -2,6 +2,7 @@ using AIStudio.Application.Abstractions.Persistence;
 using AIStudio.Domain.Assets;
 using AIStudio.Domain.Content;
 using AIStudio.Domain.Jobs;
+using AIStudio.Domain.Narration;
 using AIStudio.Domain.Scripts;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,6 +18,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<ReviewedScript> ReviewedScripts => Set<ReviewedScript>();
 
     public DbSet<SceneAsset> SceneAssets => Set<SceneAsset>();
+
+    public DbSet<NarrationTrack> NarrationTracks => Set<NarrationTrack>();
 
     public void Add(ContentProject project)
     {
