@@ -1,6 +1,4 @@
-using System.Globalization;
 using System.Security.Cryptography;
-using System.Text.Json;
 using AIStudio.Application.Rendering;
 using AIStudio.Infrastructure.Assets;
 using Microsoft.Extensions.Options;
@@ -9,27 +7,20 @@ namespace AIStudio.Infrastructure.Rendering;
 
 public sealed class FfmpegVideoRenderer : IVideoRenderer
 {
-    private static readonly string[] ProbeArguments =
-    [
-        "-v",
-        "error",
-        "-show_entries",
-        "format=duration:stream=codec_type",
-        "-of",
-        "json"
-    ];
-
     private readonly RenderingOptions options;
     private readonly IProcessRunner processRunner;
+    private readonly IMediaInspector mediaInspector;
     private readonly string outputRoot;
 
     public FfmpegVideoRenderer(
         IOptions<RenderingOptions> options,
         IOptions<AssetStorageOptions> assetStorage,
-        IProcessRunner processRunner)
+        IProcessRunner processRunner,
+        IMediaInspector mediaInspector)
     {
         this.options = options.Value;
         this.processRunner = processRunner;
+        this.mediaInspector = mediaInspector;
         outputRoot = Path.TrimEndingDirectorySeparator(
             Path.GetFullPath(assetStorage.Value.RootPath));
     }
@@ -81,7 +72,7 @@ public sealed class FfmpegVideoRenderer : IVideoRenderer
                     $"FFmpeg exited with code {execution.ExitCode}: {Summarize(execution.StandardError)}");
             }
 
-            var probe = await ProbeAsync(temporaryPath, cancellationToken);
+            var probe = await InspectAsync(temporaryPath, cancellationToken);
             if (!probe.HasVideo || !probe.HasAudio || probe.DurationSeconds <= 0)
             {
                 throw new RenderVideoException(
@@ -111,75 +102,46 @@ public sealed class FfmpegVideoRenderer : IVideoRenderer
         string path,
         CancellationToken cancellationToken)
     {
-        var probe = await ProbeAsync(path, cancellationToken);
-        if (probe.DurationSeconds <= 0)
+        var inspection = await InspectAsync(path, cancellationToken);
+        if (inspection.DurationSeconds <= 0)
         {
             throw new RenderVideoException(
                 "render_narration_duration_invalid",
                 "Narration duration must be greater than zero.");
         }
 
-        return probe.DurationSeconds;
+        return inspection.DurationSeconds;
     }
 
-    private async Task<ProbeResult> ProbeAsync(
+    private async Task<MediaInspection> InspectAsync(
         string path,
         CancellationToken cancellationToken)
     {
-        var arguments = new List<string>(ProbeArguments) { path };
-        var execution = await RunToolAsync(
-            options.FfprobePath,
-            arguments,
-            cancellationToken);
-
-        if (execution.ExitCode != 0)
-        {
-            throw new RenderVideoException(
-                "render_probe_failed",
-                $"ffprobe exited with code {execution.ExitCode}: {Summarize(execution.StandardError)}");
-        }
-
         try
         {
-            using var document = JsonDocument.Parse(execution.StandardOutput);
-            var root = document.RootElement;
-
-            var duration = 0d;
-            if (root.TryGetProperty("format", out var format)
-                && format.TryGetProperty("duration", out var durationElement)
-                && durationElement.ValueKind == JsonValueKind.String)
-            {
-                double.TryParse(
-                    durationElement.GetString(),
-                    NumberStyles.Float,
-                    CultureInfo.InvariantCulture,
-                    out duration);
-            }
-
-            var hasVideo = false;
-            var hasAudio = false;
-            if (root.TryGetProperty("streams", out var streams)
-                && streams.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var stream in streams.EnumerateArray())
-                {
-                    if (!stream.TryGetProperty("codec_type", out var codecType))
-                    {
-                        continue;
-                    }
-
-                    hasVideo |= codecType.GetString() == "video";
-                    hasAudio |= codecType.GetString() == "audio";
-                }
-            }
-
-            return new ProbeResult(duration, hasVideo, hasAudio);
+            return await mediaInspector.InspectAsync(path, cancellationToken);
         }
-        catch (JsonException exception)
+        catch (ProcessExecutionException exception)
+            when (exception.ErrorCode == ProcessExecutionException.StartFailed)
+        {
+            throw new RenderVideoException(
+                "render_tool_unavailable",
+                $"Unable to start '{options.FfprobePath}'.",
+                exception);
+        }
+        catch (ProcessExecutionException exception)
+            when (exception.ErrorCode == ProcessExecutionException.TimedOut)
+        {
+            throw new RenderVideoException(
+                "render_timeout",
+                $"'{options.FfprobePath}' exceeded {options.TimeoutSeconds} seconds.",
+                exception);
+        }
+        catch (ProcessExecutionException exception)
         {
             throw new RenderVideoException(
                 "render_probe_failed",
-                "ffprobe output was not valid JSON.",
+                exception.Message,
                 exception);
         }
     }
@@ -277,9 +239,4 @@ public sealed class FfmpegVideoRenderer : IVideoRenderer
         var normalized = value.Trim();
         return normalized.Length <= 500 ? normalized : normalized[..500];
     }
-
-    private sealed record ProbeResult(
-        double DurationSeconds,
-        bool HasVideo,
-        bool HasAudio);
 }

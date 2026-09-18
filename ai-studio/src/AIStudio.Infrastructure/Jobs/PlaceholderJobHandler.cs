@@ -10,6 +10,8 @@ public sealed class PlaceholderJobHandler : IJobHandler
         type is not JobType.GenerateIdea
             and not JobType.GenerateScript
             and not JobType.GenerateStoryboard
+            and not JobType.RenderVideo
+            and not JobType.FinalVideoQa
         && Enum.IsDefined(type);
 
     public Task<string> ExecuteAsync(

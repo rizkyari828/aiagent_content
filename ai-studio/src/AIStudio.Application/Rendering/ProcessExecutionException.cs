@@ -9,5 +9,7 @@ public sealed class ProcessExecutionException(
 
     public const string TimedOut = "process_timeout";
 
+    public const string MediaProbeFailed = "media_probe_failed";
+
     public string ErrorCode { get; } = errorCode;
 }

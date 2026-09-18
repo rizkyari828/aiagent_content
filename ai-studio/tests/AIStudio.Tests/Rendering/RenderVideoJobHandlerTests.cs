@@ -453,7 +453,10 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
             new FfmpegVideoRenderer(
                 Options.Create(new RenderingOptions()),
                 Options.Create(new AssetStorageOptions { RootPath = root }),
-                processRunner));
+                processRunner,
+                new FfprobeMediaInspector(
+                    Options.Create(new RenderingOptions()),
+                    processRunner)));
 
     private void WriteFile(string relativePath, byte[] bytes)
     {

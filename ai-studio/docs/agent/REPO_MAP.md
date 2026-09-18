@@ -49,9 +49,16 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `src/AIStudio.Application/Jobs/RenderVideo/RenderVideoWorkflow.cs` — enqueue a durable render job from storyboard + assets + narration gating.
 - `RenderVideoJobHandler.cs`, `RenderVideoJobPayload.cs`, `RenderVideoResult.cs` — execution contract, input integrity gates, and canonical `Job.Result` render evidence.
 - `src/AIStudio.Application/Rendering/IVideoRenderer.cs`, `VideoRenderRequest.cs`, `VideoRenderOutput.cs`, `SceneMediaInput.cs`, `RenderVideoException.cs` — renderer process boundary and DTOs.
-- `src/AIStudio.Infrastructure/Rendering/FfmpegVideoRenderer.cs` — safe `ArgumentList` FFmpeg/ffprobe process invocation, bounded timeout, temp-file + atomic promotion.
+- `src/AIStudio.Application/Rendering/IMediaInspector.cs`, `src/AIStudio.Infrastructure/Rendering/FfprobeMediaInspector.cs` — shared ffprobe stream/duration/dimension inspection behind `IProcessRunner`.
+- `src/AIStudio.Infrastructure/Rendering/FfmpegVideoRenderer.cs` — safe `ArgumentList` FFmpeg invocation, bounded timeout, temp-file + atomic promotion.
 - `FfmpegCommandPlan.cs`, `RenderingOptions.cs` — pure argument/timing plan and rendering configuration.
 - `src/AIStudio.Api/Endpoints/RenderEndpoints.cs` — minimal render enqueue HTTP surface.
+
+## Final Video QA (pre-publish deterministic validation)
+
+- `src/AIStudio.Application/Jobs/FinalVideoQa/FinalVideoQaJobHandler.cs` — re-reads the RenderVideo artifact through `IAssetFileStore`, verifies its SHA-256, probes it, and returns pass-only `FinalVideoQaResult` or a stable `qa_*` error code.
+- `FinalVideoQaResult.cs`, `FinalVideoQaJobPayload.cs`, `FinalVideoQaWorkflow.cs`, `FinalVideoQaException.cs` — canonical `Job.Result` evidence, enqueue contract/gating, and enqueue errors.
+- `src/AIStudio.Api/Endpoints/FinalVideoQaEndpoints.cs` — minimal QA enqueue HTTP surface.
 
 ## Manual Script Review/Edit
 
@@ -87,7 +94,7 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `tests/AIStudio.Tests/Assets/` — scene asset domain rules, workflow association/provenance, path-safety and hashing, and API response contracts; `Persistence/SceneAssetModelTests.cs` and DB-gated `Persistence/SceneAssetVerticalSliceTests.cs` cover mapping and persistence.
 - `tests/AIStudio.Tests/Narration/` — narration domain rules, storyboard-gated workflow, provenance, shared path-safety/hash reuse, and API response contracts; `Persistence/NarrationTrackModelTests.cs` and DB-gated `Persistence/NarrationVerticalSliceTests.cs` cover mapping and persistence.
 - `tests/AIStudio.Tests/Subtitles/` — subtitle domain rules, `.srt`-only storyboard-gated workflow, provenance, path safety, and API response contracts; `Persistence/SubtitleTrackModelTests.cs` covers `subtitle_tracks` mapping. Renderer subtitle embedding is covered in `Rendering/`.
-- `tests/AIStudio.Tests/Rendering/` — FFmpeg argument/timing plan, render enqueue gating, handler input-integrity gates, safe output paths, faked process boundary, and `Job.Result` render-evidence contracts.
+- `tests/AIStudio.Tests/Rendering/` — FFmpeg argument/timing plan, render enqueue gating, handler input-integrity gates, safe output paths, faked process boundary, `Job.Result` render-evidence contracts, and Final Video QA handler/workflow/contracts plus `FfprobeMediaInspector` parsing/failure tests (no installed FFmpeg required).
 
 ## Product specification (modular PRD v0.9.2)
 

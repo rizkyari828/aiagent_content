@@ -187,7 +187,10 @@ public sealed class FfmpegVideoRendererTests : IDisposable
         new(
             Options.Create(new RenderingOptions()),
             Options.Create(new AssetStorageOptions { RootPath = root }),
-            processRunner);
+            processRunner,
+            new FfprobeMediaInspector(
+                Options.Create(new RenderingOptions()),
+                processRunner));
 
     private string WriteNarration(byte[] bytes)
     {

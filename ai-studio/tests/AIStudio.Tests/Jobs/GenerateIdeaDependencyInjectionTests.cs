@@ -1,7 +1,9 @@
 using AIStudio.Application.Jobs;
+using AIStudio.Application.Jobs.FinalVideoQa;
 using AIStudio.Application.Jobs.GenerateIdea;
 using AIStudio.Application.Jobs.GenerateScript;
 using AIStudio.Application.Jobs.GenerateStoryboard;
+using AIStudio.Application.Jobs.RenderVideo;
 using AIStudio.Application.Scripts;
 using AIStudio.Domain.Jobs;
 using AIStudio.Infrastructure;
@@ -90,5 +92,45 @@ public sealed class GenerateIdeaDependencyInjectionTests
         Assert.IsType<GenerateStoryboardJobHandler>(handler);
         Assert.NotNull(
             scope.ServiceProvider.GetRequiredService<GenerateStoryboardWorkflow>());
+    }
+
+    [Theory]
+    [InlineData(JobType.RenderVideo, typeof(RenderVideoJobHandler))]
+    [InlineData(JobType.FinalVideoQa, typeof(FinalVideoQaJobHandler))]
+    public void Infrastructure_RegistersExactlyOneHandlerForRenderingAndQa(
+        JobType jobType,
+        Type expectedHandler)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:DefaultConnection"] =
+                    "Host=127.0.0.1;Database=test;Username=test;Password=test",
+                ["Ai:Provider"] = "Ollama",
+                ["Ollama:BaseUrl"] = "http://127.0.0.1:11434",
+                ["Ollama:DefaultModel"] = "configured-model",
+                ["Ollama:TimeoutSeconds"] = "30",
+                ["JobWorker:Enabled"] = "false",
+                ["JobWorker:PollInterval"] = "00:00:01",
+                ["JobWorker:LeaseDuration"] = "00:02:00"
+            })
+            .Build();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddInfrastructure(configuration);
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateOnBuild = true,
+            ValidateScopes = true
+        });
+        using var scope = provider.CreateScope();
+
+        var handlers = scope.ServiceProvider
+            .GetServices<IJobHandler>()
+            .Where(handler => handler.CanHandle(jobType))
+            .ToArray();
+
+        var handler = Assert.Single(handlers);
+        Assert.IsType(expectedHandler, handler);
     }
 }

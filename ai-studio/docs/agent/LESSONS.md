@@ -17,3 +17,4 @@ Only stable, reviewed, evidence-backed knowledge belongs here.
 
 - Qwen-generated changes require human/Codex review before commit.
 - Prefer targeted tests and preserve PostgreSQL durable-job claiming, lease, retry, ownership, and recovery semantics.
+- `JobProcessor` selects the handler with `SingleOrDefault(CanHandle)`, so `PlaceholderJobHandler` must exclude every implemented `JobType`. Adding a `JobType` without excluding it (or forgetting an existing one) makes dispatch ambiguous; a DI test asserts exactly one handler per implemented type.
