@@ -17,6 +17,7 @@ using AIStudio.Application.Subtitles;
 using AIStudio.Infrastructure.AI;
 using AIStudio.Infrastructure.Assets;
 using AIStudio.Infrastructure.Content;
+using AIStudio.Infrastructure.Gpu;
 using AIStudio.Infrastructure.Jobs;
 using AIStudio.Infrastructure.Narration;
 using AIStudio.Infrastructure.Persistence;
@@ -47,11 +48,25 @@ public static class DependencyInjection
             serviceProvider.GetRequiredService<ApplicationDbContext>());
 
         AddJobWorker(services, configuration);
+        AddGpuResourceGate(services, configuration);
         AddAiGateway(services, configuration);
         AddAssetStorage(services, configuration);
         AddRendering(services, configuration);
 
         return services;
+    }
+
+    private static void AddGpuResourceGate(
+        IServiceCollection services,
+        IConfiguration configuration)
+    {
+        // One shared singleton so every heavy-GPU provider serializes on the same
+        // in-process permit.
+        services
+            .AddOptions<GpuResourceGateOptions>()
+            .Bind(configuration.GetSection(GpuResourceGateOptions.SectionName));
+
+        services.AddSingleton<IGpuResourceGate, GpuResourceGate>();
     }
 
     private static void AddJobWorker(

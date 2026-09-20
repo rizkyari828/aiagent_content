@@ -21,13 +21,16 @@ public sealed class ComfyUiImageGenerationProvider : IImageGenerationProvider
 
     private readonly HttpClient httpClient;
     private readonly ComfyUiOptions options;
+    private readonly IGpuResourceGate gpuResourceGate;
 
     public ComfyUiImageGenerationProvider(
         HttpClient httpClient,
-        IOptions<ComfyUiOptions> options)
+        IOptions<ComfyUiOptions> options,
+        IGpuResourceGate gpuResourceGate)
     {
         this.httpClient = httpClient;
         this.options = options.Value;
+        this.gpuResourceGate = gpuResourceGate;
     }
 
     public bool IsEnabled => options.Enabled;
@@ -54,6 +57,13 @@ public sealed class ComfyUiImageGenerationProvider : IImageGenerationProvider
         }
 
         var clientId = Guid.NewGuid().ToString("N");
+
+        // Hold the exclusive GPU lease from submission until the generated image is
+        // retrieved; POST /prompt only queues the work, so the lease must cover the
+        // full submit -> poll -> download window or two FLUX jobs could overlap.
+        await using var lease = await gpuResourceGate.AcquireAsync(
+            GpuWorkloads.ComfyUi,
+            cancellationToken);
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(options.TimeoutSeconds));

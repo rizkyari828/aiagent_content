@@ -4,6 +4,7 @@ using System.Text.Json;
 using AIStudio.Application.AI;
 using AIStudio.Infrastructure;
 using AIStudio.Infrastructure.AI;
+using AIStudio.Tests.Rendering;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -295,6 +296,7 @@ public sealed class OllamaTextGeneratorTests
                 DefaultModel = "qwen3.8:27b-q4_K_M",
                 TimeoutSeconds = (int)client.Timeout.TotalSeconds
             }),
+            NoopGpuResourceGate.Instance,
             NullLogger<OllamaTextGenerator>.Instance);
 
     private static HttpResponseMessage JsonResponse(string json) =>

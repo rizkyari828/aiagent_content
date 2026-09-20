@@ -221,6 +221,35 @@ public sealed class BlenderThreeDRenderingProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task RenderAsync_HoldsGateOnlyForBlenderAndReleasesBeforeFfmpeg()
+    {
+        var gate = new RecordingGpuResourceGate();
+        var runner = new FakeProcessRunner(request =>
+        {
+            if (request.FileName == "blender-test")
+            {
+                Assert.Equal(1, gate.ActiveLeases);
+                var framesDirectory = request.Arguments[request.Arguments.ToList().IndexOf("--frames") + 1];
+                Directory.CreateDirectory(framesDirectory);
+                File.WriteAllBytes(Path.Combine(framesDirectory, "frame_0001.png"), [1]);
+                return new ProcessResult(0, string.Empty, string.Empty);
+            }
+
+            // FFmpeg is CPU-only and must run after the GPU lease is released.
+            Assert.Equal(0, gate.ActiveLeases);
+            File.WriteAllBytes(request.Arguments[^1], Mp4);
+            return new ProcessResult(0, string.Empty, string.Empty);
+        });
+        var provider = CreateProvider(runner, enabled: true, gpuResourceGate: gate);
+
+        var bytes = await provider.RenderAsync(Request(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(Mp4, bytes);
+        Assert.Equal(0, gate.ActiveLeases);
+        Assert.Equal(["acquire:blender", "release:blender"], gate.Events);
+    }
+
+    [Fact]
     public void IsEnabled_ReflectsConfiguration()
     {
         Assert.True(CreateProvider(new FakeProcessRunner(), enabled: true).IsEnabled);
@@ -245,7 +274,8 @@ public sealed class BlenderThreeDRenderingProviderTests : IDisposable
     private BlenderThreeDRenderingProvider CreateProvider(
         IProcessRunner runner,
         bool enabled,
-        string? templateDirectory = null) =>
+        string? templateDirectory = null,
+        IGpuResourceGate? gpuResourceGate = null) =>
         new(
             Options.Create(new BlenderOptions
             {
@@ -266,7 +296,8 @@ public sealed class BlenderThreeDRenderingProviderTests : IDisposable
                 FfprobePath = "ffprobe-test",
                 TimeoutSeconds = 30
             }),
-            runner);
+            runner,
+            gpuResourceGate ?? NoopGpuResourceGate.Instance);
 
     private static ThreeDRenderRequest Request() =>
         new(SceneThreeDTemplate.LocalAiLaptop, SceneVisualPalette.Ocean, 3.0, 12345);

@@ -170,6 +170,54 @@ public sealed class ComfyUiImageGenerationProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task GenerateAsync_HoldsGateUntilGenerationCompletes()
+    {
+        var gate = new RecordingGpuResourceGate();
+        var generationStarted = new TaskCompletionSource();
+        var releaseGeneration = new TaskCompletionSource();
+
+        var handler = new StubHttpMessageHandler(async (request, cancellationToken) =>
+        {
+            var path = request.RequestUri!.PathAndQuery;
+            if (path == "/prompt")
+            {
+                return Json(HttpStatusCode.OK, "{\"prompt_id\":\"abc\"}");
+            }
+
+            if (path.StartsWith("/history/", StringComparison.Ordinal))
+            {
+                generationStarted.TrySetResult();
+                await releaseGeneration.Task.WaitAsync(TestContext.Current.CancellationToken);
+                return Json(HttpStatusCode.OK, History);
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(Png)
+            };
+        });
+        var provider = CreateProvider(handler, enabled: true, gpuResourceGate: gate);
+
+        var run = provider.GenerateAsync(
+            new ImageGenerationRequest("prompt", 1),
+            TestContext.Current.CancellationToken);
+
+        await generationStarted.Task.WaitAsync(
+            TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken);
+        // The lease is still held while ComfyUI is generating, not merely after submit.
+        Assert.Equal(1, gate.ActiveLeases);
+        Assert.Equal(1, gate.AcquireCount);
+        Assert.Contains("acquire:comfyui", gate.Events);
+
+        releaseGeneration.TrySetResult();
+        await run;
+
+        Assert.Equal(0, gate.ActiveLeases);
+        Assert.Contains("release:comfyui", gate.Events);
+    }
+
+    [Fact]
     public void IsEnabled_ReflectsConfiguration()
     {
         Assert.True(CreateProvider(
@@ -184,7 +232,8 @@ public sealed class ComfyUiImageGenerationProviderTests : IDisposable
         HttpMessageHandler handler,
         bool enabled,
         string? workflow = null,
-        int timeoutSeconds = 600) =>
+        int timeoutSeconds = 600,
+        IGpuResourceGate? gpuResourceGate = null) =>
         new(
             new HttpClient(handler) { BaseAddress = new Uri("http://127.0.0.1:8188/") },
             Options.Create(new ComfyUiOptions
@@ -195,7 +244,8 @@ public sealed class ComfyUiImageGenerationProviderTests : IDisposable
                 TimeoutSeconds = timeoutSeconds,
                 Width = 1280,
                 Height = 720
-            }));
+            }),
+            gpuResourceGate ?? NoopGpuResourceGate.Instance);
 
     private static HttpResponseMessage Json(HttpStatusCode status, string body) =>
         new(status)

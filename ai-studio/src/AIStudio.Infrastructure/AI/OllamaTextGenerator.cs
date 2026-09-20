@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AIStudio.Application.AI;
+using AIStudio.Application.Rendering;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -11,6 +12,7 @@ namespace AIStudio.Infrastructure.AI;
 public sealed class OllamaTextGenerator(
     HttpClient httpClient,
     IOptions<OllamaOptions> options,
+    IGpuResourceGate gpuResourceGate,
     ILogger<OllamaTextGenerator> logger) : IAiTextGenerator
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
@@ -60,6 +62,12 @@ public sealed class OllamaTextGenerator(
 
         try
         {
+            // The local model occupies the GPU while it generates; share the same
+            // exclusive lease as the image and 3D engines.
+            await using var lease = await gpuResourceGate.AcquireAsync(
+                GpuWorkloads.Ollama,
+                cancellationToken);
+
             using var response = await httpClient.PostAsJsonAsync(
                 "api/chat",
                 payload,

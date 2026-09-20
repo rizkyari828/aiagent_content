@@ -20,15 +20,18 @@ public sealed class BlenderThreeDRenderingProvider : IThreeDRenderingProvider
     private readonly BlenderOptions options;
     private readonly RenderingOptions rendering;
     private readonly IProcessRunner processRunner;
+    private readonly IGpuResourceGate gpuResourceGate;
 
     public BlenderThreeDRenderingProvider(
         IOptions<BlenderOptions> options,
         IOptions<RenderingOptions> rendering,
-        IProcessRunner processRunner)
+        IProcessRunner processRunner,
+        IGpuResourceGate gpuResourceGate)
     {
         this.options = options.Value;
         this.rendering = rendering.Value;
         this.processRunner = processRunner;
+        this.gpuResourceGate = gpuResourceGate;
     }
 
     public bool IsEnabled => options.Enabled;
@@ -72,7 +75,14 @@ public sealed class BlenderThreeDRenderingProvider : IThreeDRenderingProvider
                 BuildParameters(request),
                 cancellationToken);
 
-            await RenderFramesAsync(scriptPath, parametersPath, framesDirectory, cancellationToken);
+            // The Blender CUDA process is the only GPU-heavy section. The lease is
+            // released before the CPU-only FFmpeg encode.
+            {
+                await using var lease = await gpuResourceGate.AcquireAsync(
+                    GpuWorkloads.Blender,
+                    cancellationToken);
+                await RenderFramesAsync(scriptPath, parametersPath, framesDirectory, cancellationToken);
+            }
 
             var frameCount = CountFrames(framesDirectory);
             if (frameCount == 0)
