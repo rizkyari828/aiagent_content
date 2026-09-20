@@ -1,12 +1,14 @@
 # Work state
 
-Updated: 2026-09-18.
+Updated: 2026-09-20.
 
 ## Current milestone
 
-Video #1 is DONE, including the durable animated visual pipeline: SceneVisualPlanner v2, SVG + Manim engines, and narration-aware durable timing parity.
+Video #1 is DONE, including the durable animated visual pipeline: SceneVisualPlanner v2, SVG + Manim engines, and narration-aware durable timing parity. Audio Mixing / Mastering v1 is DONE as a standalone CPU FFmpeg service (no durable job/endpoint).
 
 ## Implemented
+
+- Audio Mixing / Mastering v1 (no schema/migration): new standalone `IAudioMixer`/`FfmpegAudioMixer` (`Application.Rendering.AudioMixing` + `Infrastructure.Rendering.AudioMixing`). Narration + optional background music -> narration `loudnorm=I=-16:TP=-1.5:LRA=11`, music `loudnorm=I=-24:TP=-3:LRA=7`, sidechain ducking while narration is active, short music fade-in/out, `alimiter` at -1 dBFS, 48 kHz stereo `pcm_s16le` WAV bounded to the narration length (music looped when shorter, trimmed/faded when longer). Values centralized in `AudioMixingOptions`; no caller-supplied filter text. Inputs are approved asset references resolved through existing `IAssetFileStore`; output is a relative `.wav` under the approved root; execution reuses `IProcessRunner`/`IMediaInspector`. Structured `audio_*` errors. CPU-only: never acquires `IGpuResourceGate`; no shell; no arbitrary executable paths.
 
 - Video Quality v1.1 (renderer tuning + first Visual Asset Engine, no schema/migration):
   - Subtitle: `SubtitleStyle` defaults lowered from FontSize 22 / Outline 2 / MarginV 40 to FontSize 16 / Outline 1 / MarginV 18. Note libass renders SRT through a 288-high script canvas (≈2.5x scale at 720p), so MarginV 18 is a ~45px safe bottom margin; the earlier 40 sat ~100px up into the visuals.
@@ -45,6 +47,9 @@ Video #1 is DONE, including the durable animated visual pipeline: SceneVisualPla
 
 ## Verification
 
+- PASS - Audio Mixing / Mastering v1: 24 focused tests pass (command plan, mixer, and a real-FFmpeg integration test); full suite 399/399 with `ConnectionStrings__DefaultConnection` set, 0 skipped.
+- PASS - Audio mix real FFmpeg smoke: synthesized 6s mono narration + 3s stereo music -> 48 kHz stereo `pcm_s16le` WAV, 6.0s, peak -12.2 dBFS, integrated -15.9 LUFS (no clipping); ducking measured ~10 dB music reduction under speech and full recovery in a 2s silent gap.
+
 - PASS (partial) - 365/375 tests pass, 0 skipped, without PostgreSQL. The 10 `Persistence` integration tests are DB-gated and were not run this session (PostgreSQL/Docker unavailable in this WSL distro); the last full-suite run with `ConnectionStrings__DefaultConnection` set was 338/338. New coverage: GPU resource gate acquisition/waiter/cancellation/exception/double-dispose/cross-workload exclusion, ComfyUI holding the lease until generation completes, Blender holding it only for the CUDA render and releasing before FFmpeg, and one shared singleton gate via DI. Existing provider error mapping is unchanged.
 - PASS - Blender 3D engine end-to-end against local Blender 5.2.2 LTS (Cycles CUDA, RTX 4060 Ti 16 GB) through the real `BlenderThreeDRenderingProvider`: 768x432, 16 samples, 90 frames (3.0s @ 30 FPS), total 105s, valid H.264/yuv420p MP4 (`85788` bytes, `ffprobe` confirms 768x432 / 90 frames / 3.0s). The engine stays disabled by default (`Blender:Enabled=false`), so canonical SVG/Manim behavior is unchanged.
 - PASS - `dotnet build AIStudio.slnx -c Release` 0 warnings/0 errors; `dotnet format AIStudio.slnx --verify-no-changes` clean; `git diff --check` clean.
@@ -63,4 +68,5 @@ Video #1 is DONE, including the durable animated visual pipeline: SceneVisualPla
 - Durable subtitle re-timing applies only when the canonical SRT cue count equals the storyboard scene count (one cue per scene). Any other shape keeps the canonical timing as the deterministic fallback, so multi-cue SRTs are not re-timed yet.
 - The `SceneVisualPlanner` concept vocabulary is generic but finite; a scene whose `visual` has no quoted labels or recognized concepts falls back to a heading-only card.
 - `.demo/` is a local harness; generated runtime assets under `src/AIStudio.Api/assets/` stay gitignored and are preserved locally, not committed. AI image generation and 3D scene rendering now exist as optional engines (ComfyUI and Blender, both disabled by default). Heavy GPU workloads (ComfyUI, Blender CUDA, Ollama) are serialized by the process-local GPU gate; character animation, VRAM-aware scheduling, and cross-process coordination remain deferred.
+- Audio Mixing / Mastering v1 is implemented as a standalone service only: no durable job type, HTTP enqueue endpoint, or DB persistence yet, and VoxCPM2/ACE-Step/Stable Audio provider integration is not attempted. Deferred until a milestone authorizes the production narration/BGM selection flow.
 - Next milestone: manual publishing.

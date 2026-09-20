@@ -10,6 +10,7 @@ using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Application.Jobs.RenderVideo;
 using AIStudio.Application.Narration;
 using AIStudio.Application.Rendering;
+using AIStudio.Application.Rendering.AudioMixing;
 using AIStudio.Application.Jobs.GenerateSceneVisuals;
 using AIStudio.Application.Rendering.Visuals;
 using AIStudio.Application.Scripts;
@@ -22,6 +23,7 @@ using AIStudio.Infrastructure.Jobs;
 using AIStudio.Infrastructure.Narration;
 using AIStudio.Infrastructure.Persistence;
 using AIStudio.Infrastructure.Rendering;
+using AIStudio.Infrastructure.Rendering.AudioMixing;
 using AIStudio.Infrastructure.Scripts;
 using AIStudio.Infrastructure.Subtitles;
 using Microsoft.EntityFrameworkCore;
@@ -96,6 +98,7 @@ public static class DependencyInjection
         services.AddSingleton<IProcessRunner, SystemProcessRunner>();
         services.AddSingleton<IMediaInspector, FfprobeMediaInspector>();
         services.AddSingleton<IVideoRenderer, FfmpegVideoRenderer>();
+        services.AddSingleton<IAudioMixer, FfmpegAudioMixer>();
         services.AddSingleton<ISceneVisualRenderer, FfmpegSceneVisualRenderer>();
         services.AddSingleton<IManimSceneRenderer, ProcessManimSceneRenderer>();
         services.AddScoped<IJobHandler, GenerateIdeaJobHandler>();
@@ -199,6 +202,23 @@ public static class DependencyInjection
             .Validate(
                 options => options.FrameRate is >= 1 and <= 120,
                 "Rendering:FrameRate must be between 1 and 120.")
+            .ValidateOnStart();
+
+        services
+            .AddOptions<AudioMixingOptions>()
+            .Bind(configuration.GetSection(AudioMixingOptions.SectionName))
+            .Validate(
+                options => options.SampleRate is >= 8000 and <= 192000,
+                "AudioMixing:SampleRate must be between 8000 and 192000.")
+            .Validate(
+                options => options.Channels is 1 or 2,
+                "AudioMixing:Channels must be 1 or 2.")
+            .Validate(
+                options => options.FadeInSeconds >= 0 && options.FadeOutSeconds >= 0,
+                "AudioMixing fade durations must not be negative.")
+            .Validate(
+                options => options.LimiterCeilingDb is <= 0 and >= -20,
+                "AudioMixing:LimiterCeilingDb must be between -20 and 0.")
             .ValidateOnStart();
 
         services

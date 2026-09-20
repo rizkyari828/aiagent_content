@@ -58,6 +58,13 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `FfmpegCommandPlan.cs`, `RenderingOptions.cs` — pure argument/filter/timing plan (motion, transitions, styled subtitle burn-in, music/ducking/SFX audio graph) and rendering configuration.
 - `src/AIStudio.Api/Endpoints/RenderEndpoints.cs` — minimal render enqueue HTTP surface.
 
+## Audio Mixing / Mastering
+
+- `src/AIStudio.Application/Rendering/AudioMixing/IAudioMixer.cs`, `AudioMixRequest.cs`, `AudioMixOutput.cs`, `AudioMixException.cs` — standalone mastering contract: approved asset references (narration required, music optional) -> relative `.wav` output plus hash/size/duration/format; structured `audio_*` errors.
+- `src/AIStudio.Infrastructure/Rendering/AudioMixing/FfmpegAudioMixer.cs` — CPU-only FFmpeg mixer behind `IProcessRunner`/`IMediaInspector`, resolving inputs through `IAssetFileStore`; never acquires `IGpuResourceGate`.
+- `src/AIStudio.Infrastructure/Rendering/AudioMixing/FfmpegAudioMixCommandPlan.cs`, `AudioMixingOptions.cs` — safe argument/filter plan (narration/music `loudnorm`, sidechain ducking, fades, `alimiter`, 48 kHz stereo) with every value centralized in options.
+- `tests/AIStudio.Tests/Rendering/FfmpegAudioMixCommandPlanTests.cs`, `FfmpegAudioMixerTests.cs`, `FfmpegAudioMixerIntegrationTests.cs` — argument safety/format/ducking/fade/limiter, missing input, FFmpeg failure, cancellation, space-containing paths, path traversal, and a real-FFmpeg smoke test (skips without ffmpeg).
+
 ## Visual Asset Pipeline (durable planning + animation)
 
 - `src/AIStudio.Application/Rendering/Visuals/SceneVisualPlanner.cs` (v2), `SceneVisualPlan.cs`, `SceneVisualEngine.cs`, `SceneAnimationTemplate.cs`, `SceneAnimationParameters.cs`, `SceneVisualEngineSelector.cs` — deterministic storyboard-to-visual mapping and engine/template selection. v2 resolves display text only from the heading + quoted strings + concept vocabulary and never renders raw `visual` instruction prose.
