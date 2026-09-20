@@ -18,9 +18,21 @@ public sealed class GenerateSceneVisualsWorkflow(
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
 
+    public Task<Guid?> EnqueueAsync(
+        Guid contentProjectId,
+        Guid storyboardJobId,
+        CancellationToken cancellationToken) =>
+        EnqueueAsync(contentProjectId, storyboardJobId, force: false, cancellationToken);
+
+    /// <summary>
+    /// <paramref name="force"/> is an explicit operator action: it regenerates every
+    /// scene (including existing manual/generated assets) instead of reusing them.
+    /// A normal re-run keeps reusing current-version assets.
+    /// </summary>
     public async Task<Guid?> EnqueueAsync(
         Guid contentProjectId,
         Guid storyboardJobId,
+        bool force,
         CancellationToken cancellationToken)
     {
         RequireIdentifier(contentProjectId, nameof(contentProjectId));
@@ -41,7 +53,7 @@ public sealed class GenerateSceneVisualsWorkflow(
             cancellationToken);
 
         var payload = JsonSerializer.Serialize(
-            new GenerateSceneVisualsJobPayload(contentProjectId, storyboardJobId),
+            new GenerateSceneVisualsJobPayload(contentProjectId, storyboardJobId, force),
             JsonOptions);
 
         var job = Job.Create(

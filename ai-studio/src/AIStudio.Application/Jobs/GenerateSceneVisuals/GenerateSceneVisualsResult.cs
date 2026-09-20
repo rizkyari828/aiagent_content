@@ -9,14 +9,29 @@ public sealed record GeneratedSceneVisual(
     string Template,
     string Path,
     long ByteSize,
-    string ContentHash);
+    string ContentHash,
+    string IntendedEngine = "",
+    string Status = "generated",
+    string Intent = "");
+
+/// <summary>
+/// Per-scene routing evidence: which engine the intent preferred, which engine was
+/// actually used, and whether the artifact was generated, reused, or a fallback.
+/// </summary>
+public sealed record SceneVisualRouting(
+    int SceneIndex,
+    string IntendedEngine,
+    string Engine,
+    string Status,
+    string Template);
 
 public sealed record GenerateSceneVisualsResult(
     Guid StoryboardJobId,
     int SceneCount,
     int GeneratedCount,
     int SkippedCount,
-    IReadOnlyList<GeneratedSceneVisual> Visuals)
+    IReadOnlyList<GeneratedSceneVisual> Visuals,
+    IReadOnlyList<SceneVisualRouting>? Routing = null)
 {
     public const int ContentHashLength = 64;
     public const int MaxPathLength = 1024;
@@ -81,9 +96,14 @@ public sealed record GenerateSceneVisualsResult(
                 "GenerateSceneVisuals visuals must contain exactly generatedCount entries.");
         }
 
+        var routing = (result.Routing ?? [])
+            .Select(NormalizeRouting)
+            .ToArray();
+
         return result with
         {
-            Visuals = result.Visuals.Select(NormalizeVisual).ToArray()
+            Visuals = result.Visuals.Select(NormalizeVisual).ToArray(),
+            Routing = routing
         };
     }
 
@@ -127,8 +147,37 @@ public sealed record GenerateSceneVisualsResult(
         return visual with
         {
             Path = path,
-            ContentHash = visual.ContentHash.ToLowerInvariant()
+            ContentHash = visual.ContentHash.ToLowerInvariant(),
+            IntendedEngine = NormalizeLabel(visual.IntendedEngine),
+            Status = NormalizeLabel(visual.Status),
+            Intent = NormalizeLabel(visual.Intent)
         };
+    }
+
+    private static SceneVisualRouting NormalizeRouting(SceneVisualRouting routing)
+    {
+        if (routing.SceneIndex < 0)
+        {
+            throw InvalidResult("GenerateSceneVisuals routing scene index cannot be negative.");
+        }
+
+        return routing with
+        {
+            IntendedEngine = NormalizeLabel(routing.IntendedEngine),
+            Engine = NormalizeLabel(routing.Engine),
+            Status = NormalizeLabel(routing.Status),
+            Template = NormalizeLabel(routing.Template)
+        };
+    }
+
+    private static string NormalizeLabel(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        return value.Length > MaxLabelLength ? value[..MaxLabelLength] : value;
     }
 
     private static JobExecutionException InvalidResult(

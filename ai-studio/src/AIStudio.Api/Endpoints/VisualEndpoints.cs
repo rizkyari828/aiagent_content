@@ -24,6 +24,7 @@ public static class VisualEndpoints
     private static async Task<IResult> EnqueueVisualsAsync(
         string contentProjectId,
         string storyboardJobId,
+        bool? force,
         GenerateSceneVisualsWorkflow workflow,
         CancellationToken cancellationToken)
     {
@@ -42,6 +43,7 @@ public static class VisualEndpoints
             var jobId = await workflow.EnqueueAsync(
                 parsedProjectId,
                 parsedStoryboardJobId,
+                force ?? false,
                 cancellationToken);
 
             if (jobId is null)

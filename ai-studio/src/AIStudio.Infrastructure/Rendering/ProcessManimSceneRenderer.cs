@@ -75,7 +75,10 @@ public sealed class ProcessManimSceneRenderer : IManimSceneRenderer
                             accent = colors.Accent,
                             text = colors.Text
                         },
-                        durationSeconds = parameters.DurationSeconds
+                        durationSeconds = parameters.DurationSeconds,
+                        command = parameters.Command,
+                        steps = parameters.Steps ?? [],
+                        progressTarget = parameters.ProgressTarget
                     },
                     JsonOptions),
                 cancellationToken);
@@ -159,6 +162,7 @@ public sealed class ProcessManimSceneRenderer : IManimSceneRenderer
         {
             SceneAnimationTemplate.LocalAiFlow => "local_ai_flow",
             SceneAnimationTemplate.ChatFlow => "chat_flow",
+            SceneAnimationTemplate.ProcessFlow => "process_flow",
             _ => null
         };
 

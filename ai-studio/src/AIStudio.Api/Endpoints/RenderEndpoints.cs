@@ -25,6 +25,7 @@ public static class RenderEndpoints
     private static async Task<IResult> EnqueueRenderVideoAsync(
         string contentProjectId,
         string storyboardJobId,
+        string? variant,
         RenderVideoWorkflow workflow,
         CancellationToken cancellationToken)
     {
@@ -43,6 +44,7 @@ public static class RenderEndpoints
             var jobId = await workflow.EnqueueAsync(
                 parsedProjectId,
                 parsedStoryboardJobId,
+                variant,
                 cancellationToken);
 
             if (jobId is null)

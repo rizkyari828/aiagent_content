@@ -9,4 +9,7 @@ public sealed record SceneVisualPlan(
     SceneVisualEngine Engine,
     SceneAnimationTemplate Template = SceneAnimationTemplate.None,
     SceneAnimationParameters? Animation = null,
-    SceneThreeDTemplate ThreeDTemplate = SceneThreeDTemplate.None);
+    SceneThreeDTemplate ThreeDTemplate = SceneThreeDTemplate.None,
+    SceneVisualDirection? Direction = null,
+    bool IsFallback = false,
+    SceneVisualEngine IntendedEngine = SceneVisualEngine.SvgStill);

@@ -56,4 +56,6 @@ public sealed record SceneVisualBrief(
     IReadOnlyList<SceneVisualCard> Cards,
     string? Note = null,
     string? Command = null,
-    double Progress = 0);
+    double Progress = 0,
+    bool Typing = false,
+    bool Completion = false);

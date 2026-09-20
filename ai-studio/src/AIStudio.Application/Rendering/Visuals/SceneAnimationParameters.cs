@@ -11,4 +11,7 @@ public sealed record SceneAnimationParameters(
     string? SecondaryText,
     string? TertiaryText,
     SceneVisualPalette Palette,
-    double DurationSeconds);
+    double DurationSeconds,
+    string? Command = null,
+    IReadOnlyList<string>? Steps = null,
+    double ProgressTarget = 0);

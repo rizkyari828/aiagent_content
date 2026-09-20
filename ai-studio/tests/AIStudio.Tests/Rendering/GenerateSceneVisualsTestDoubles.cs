@@ -11,6 +11,12 @@ internal sealed class StubSceneVisualRenderer(
 {
     public List<SceneVisualBrief> Briefs { get; } = [];
 
+    public List<SceneVisualBrief> AnimatedBriefs { get; } = [];
+
+    public List<double> AnimationDurations { get; } = [];
+
+    public List<string> MotionLabels { get; } = [];
+
     public Task<byte[]> RenderPngAsync(
         SceneVisualBrief brief,
         CancellationToken cancellationToken)
@@ -18,6 +24,32 @@ internal sealed class StubSceneVisualRenderer(
         cancellationToken.ThrowIfCancellationRequested();
         Briefs.Add(brief);
         return Task.FromResult(render?.Invoke(brief) ?? new byte[] { 137, 80, 78, 71 });
+    }
+
+    public Task<byte[]> RenderAnimationAsync(
+        SceneVisualBrief brief,
+        SceneChoreography choreography,
+        double durationSeconds,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        AnimatedBriefs.Add(brief);
+        AnimationDurations.Add(durationSeconds);
+        return Task.FromResult(
+            render?.Invoke(brief)
+            ?? new byte[] { 0, 0, 0, 1, 102, 116, 121, 112 });
+    }
+
+    public Task<byte[]> RenderImageMotionAsync(
+        byte[] backgroundPng,
+        string overlayLabel,
+        SceneVisualPalette palette,
+        double durationSeconds,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        MotionLabels.Add(overlayLabel);
+        return Task.FromResult(new byte[] { 0, 0, 0, 1, 102, 116, 121, 112 });
     }
 }
 
@@ -106,21 +138,46 @@ internal static class GenerateSceneVisualsTestData
         }
         """;
 
-    public static string Payload(Guid contentProjectId, Guid storyboardJobId) =>
+    public const string OpeningStoryboard = """
+        {
+          "title": "Opening storyboard",
+          "scenes": [
+            {
+              "heading": "Opening Hook",
+              "visual": "A laptop appears and local AI runs offline while the cloud connection is disabled."
+            }
+          ]
+        }
+        """;
+
+    public const string ClosingStoryboard = """
+        {
+          "title": "Closing storyboard",
+          "scenes": [
+            {
+              "heading": "Closing",
+              "visual": "A confident person opens a laptop and chats with local AI; a final callout appears."
+            }
+          ]
+        }
+        """;
+
+    public static string Payload(Guid contentProjectId, Guid storyboardJobId, bool force = false) =>
         JsonSerializer.Serialize(
-            new GenerateSceneVisualsJobPayload(contentProjectId, storyboardJobId),
+            new GenerateSceneVisualsJobPayload(contentProjectId, storyboardJobId, force),
             JsonOptions);
 
     public static ClaimedJob Job(
         Guid contentProjectId,
         Guid storyboardJobId,
-        JobType type = JobType.GenerateSceneVisuals) =>
+        JobType type = JobType.GenerateSceneVisuals,
+        bool force = false) =>
         new(
             Guid.NewGuid(),
             contentProjectId,
             type,
             "input-v1",
-            Payload(contentProjectId, storyboardJobId),
+            Payload(contentProjectId, storyboardJobId, force),
             0,
             2,
             false);

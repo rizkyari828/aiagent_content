@@ -82,7 +82,10 @@ public sealed class RenderVideoJobHandler(
             storyboard,
             cancellationToken);
 
-        var relativeOutput = $"renders/{job.ContentProjectId:N}/{payload.StoryboardJobId:N}.mp4";
+        var relativeOutput = BuildOutputPath(
+            job.ContentProjectId,
+            payload.StoryboardJobId,
+            payload.Variant);
 
         VideoRenderOutput output;
         try
@@ -312,6 +315,14 @@ public sealed class RenderVideoJobHandler(
                 exception);
         }
     }
+
+    private static string BuildOutputPath(
+        Guid contentProjectId,
+        Guid storyboardJobId,
+        string? variant) =>
+        string.IsNullOrWhiteSpace(variant)
+            ? $"renders/{contentProjectId:N}/{storyboardJobId:N}.mp4"
+            : $"renders/{contentProjectId:N}/{storyboardJobId:N}-{variant}.mp4";
 
     private AssetFileInfo ReadVerified(
         string path,

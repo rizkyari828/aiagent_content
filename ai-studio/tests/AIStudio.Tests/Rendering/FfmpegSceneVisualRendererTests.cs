@@ -67,6 +67,70 @@ public sealed class FfmpegSceneVisualRendererTests
         Assert.Equal("visual_render_tool_unavailable", exception.ErrorCode);
     }
 
+    [Fact]
+    public async Task RenderAnimationAsync_EncodesChoreographedFrames()
+    {
+        var mp4 = new byte[] { 0, 0, 0, 1, 102, 116, 121, 112 };
+        var runner = new FakeProcessRunner(request =>
+        {
+            File.WriteAllBytes(request.Arguments[^1], mp4);
+            return new ProcessResult(0, string.Empty, string.Empty);
+        });
+        var renderer = CreateRenderer(runner);
+        var brief = new SceneVisualBrief(
+            0,
+            "Video 1",
+            "Yang Kamu Butuhkan",
+            SceneVisualLayout.Cards,
+            SceneVisualPalette.Ocean,
+            [new SceneVisualCard("Laptop"), new SceneVisualCard("Ollama")]);
+        var choreography = SceneChoreographyPlanner.Build(brief, 0.5);
+
+        var result = await renderer.RenderAnimationAsync(
+            brief,
+            choreography,
+            0.5,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(mp4, result);
+        var encode = runner.Requests[^1].Arguments;
+        Assert.Contains("libx264", encode);
+        Assert.Contains(encode, argument => argument.EndsWith("frame_%04d.png", StringComparison.Ordinal));
+        // Several rasterized frames plus the encode step.
+        Assert.True(runner.Requests.Count >= 7);
+        Assert.All(
+            runner.Requests,
+            request => Assert.DoesNotContain(
+                request.Arguments,
+                argument => argument.Contains("-i ") || argument.StartsWith("sh ")));
+    }
+
+    [Fact]
+    public async Task RenderImageMotionAsync_AddsSlowPushAndOverlayMotion()
+    {
+        var mp4 = new byte[] { 0, 0, 0, 1, 102, 116, 121, 112 };
+        var runner = new FakeProcessRunner(request =>
+        {
+            File.WriteAllBytes(request.Arguments[^1], mp4);
+            return new ProcessResult(0, string.Empty, string.Empty);
+        });
+        var renderer = CreateRenderer(runner);
+
+        var result = await renderer.RenderImageMotionAsync(
+            new byte[] { 137, 80, 78, 71 },
+            "AI LOKAL",
+            SceneVisualPalette.Ocean,
+            0.5,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(mp4, result);
+        var encode = runner.Requests[^1].Arguments.ToList();
+        var filter = encode[encode.IndexOf("-filter_complex") + 1];
+        Assert.Contains("zoompan=", filter);
+        Assert.Contains("overlay=", filter);
+        Assert.Contains(encode, argument => argument.EndsWith("overlay_%04d.png", StringComparison.Ordinal));
+    }
+
     private static FfmpegSceneVisualRenderer CreateRenderer(IProcessRunner runner) =>
         new(Options.Create(new RenderingOptions()), runner);
 }

@@ -145,6 +145,37 @@ public sealed class BlenderThreeDRenderingProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task RenderAsync_ClampsSeedToBlenderIntRange()
+    {
+        string? capturedParameters = null;
+        var runner = new FakeProcessRunner(request =>
+        {
+            if (request.FileName == "blender-test")
+            {
+                var parametersPath = request.Arguments[request.Arguments.ToList().IndexOf("--params") + 1];
+                capturedParameters = File.ReadAllText(parametersPath);
+                var framesDirectory = request.Arguments[request.Arguments.ToList().IndexOf("--frames") + 1];
+                Directory.CreateDirectory(framesDirectory);
+                File.WriteAllBytes(Path.Combine(framesDirectory, "frame_0001.png"), [1]);
+                return new ProcessResult(0, string.Empty, string.Empty);
+            }
+
+            File.WriteAllBytes(request.Arguments[^1], Mp4);
+            return new ProcessResult(0, string.Empty, string.Empty);
+        });
+        var provider = CreateProvider(runner, enabled: true);
+
+        await provider.RenderAsync(
+            Request() with { Seed = long.MaxValue },
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(capturedParameters);
+        var seed = JsonNode.Parse(capturedParameters)!["seed"]!.GetValue<long>();
+        // Blender's Cycles seed is an int32; an out-of-range value fails the render.
+        Assert.InRange(seed, 0, int.MaxValue);
+    }
+
+    [Fact]
     public async Task RenderAsync_MapsBlenderStartFailure()
     {
         var runner = new FakeProcessRunner(

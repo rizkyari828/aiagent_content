@@ -13,5 +13,8 @@ public enum SceneAnimationTemplate
     LocalAiFlow = 1,
 
     /// <summary>User message appears -> processing indicator -> assistant reply appears.</summary>
-    ChatFlow = 2
+    ChatFlow = 2,
+
+    /// <summary>Download/install/process animation: command, progress bar, completion check.</summary>
+    ProcessFlow = 3
 }

@@ -5,7 +5,8 @@ namespace AIStudio.Application.Jobs.GenerateSceneVisuals;
 
 public sealed record GenerateSceneVisualsJobPayload(
     Guid ContentProjectId,
-    Guid StoryboardJobId)
+    Guid StoryboardJobId,
+    bool Force = false)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {

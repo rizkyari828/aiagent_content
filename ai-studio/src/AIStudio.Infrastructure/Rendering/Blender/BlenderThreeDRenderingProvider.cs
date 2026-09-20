@@ -134,7 +134,7 @@ public sealed class BlenderThreeDRenderingProvider : IThreeDRenderingProvider
             ["height"] = options.Height,
             ["framesPerSecond"] = options.FramesPerSecond,
             ["durationSeconds"] = request.DurationSeconds,
-            ["seed"] = request.Seed & long.MaxValue,
+            ["seed"] = request.Seed & int.MaxValue,
             ["accent"] = colors.Accent,
             ["background"] = colors.Background
         };
@@ -190,6 +190,13 @@ public sealed class BlenderThreeDRenderingProvider : IThreeDRenderingProvider
             throw new RenderVideoException(
                 "threed_generation_failed",
                 $"Blender exited with code {execution.ExitCode}: {Summarize(execution.StandardError)}");
+        }
+
+        if (CountFrames(framesDirectory) == 0)
+        {
+            throw new RenderVideoException(
+                "threed_output_missing",
+                $"Blender produced no frames. stdout: {SummarizeTail(execution.StandardOutput)} stderr: {SummarizeTail(execution.StandardError)}");
         }
     }
 
@@ -333,6 +340,12 @@ public sealed class BlenderThreeDRenderingProvider : IThreeDRenderingProvider
     {
         var normalized = value.Trim();
         return normalized.Length <= 500 ? normalized : normalized[..500];
+    }
+
+    private static string SummarizeTail(string value)
+    {
+        var normalized = value.Trim();
+        return normalized.Length <= 500 ? normalized : normalized[^500..];
     }
 
     private static void TryDelete(DirectoryInfo directory)

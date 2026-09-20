@@ -13,6 +13,12 @@ public static class SceneVisualSvg
     public const int Width = 1280;
     public const int Height = 720;
 
+    /// <summary>
+    /// Y coordinate below which burned subtitles sit. Meaningful content must stay
+    /// above this line so captions never collide with the composition.
+    /// </summary>
+    public const int SubtitleSafeTop = 630;
+
     private static readonly IReadOnlyDictionary<SceneVisualPalette, Palette> Palettes =
         new Dictionary<SceneVisualPalette, Palette>
         {
@@ -39,7 +45,46 @@ public static class SceneVisualSvg
         return new SceneVisualPaletteColors(value.From, value.To, value.Accent, value.Text);
     }
 
-    public static string Compose(SceneVisualBrief brief)
+    public static string Compose(SceneVisualBrief brief) => Compose(brief, null);
+
+    /// <summary>
+    /// Composes one animated-SVG frame: the static brief is narrowed to the
+    /// elements the choreography has revealed at this instant, then rendered with
+    /// the same trusted composer used for stills.
+    /// </summary>
+    public static string ComposeFrame(SceneVisualBrief brief, SceneVisualFrameState frame)
+    {
+        ArgumentNullException.ThrowIfNull(brief);
+        ArgumentNullException.ThrowIfNull(frame);
+        var variant = ApplyFrame(brief, frame);
+        return Compose(variant, frame);
+    }
+
+    private static SceneVisualBrief ApplyFrame(SceneVisualBrief brief, SceneVisualFrameState frame)
+    {
+        var cards = brief.Cards;
+        if (cards.Count > 0)
+        {
+            var prefix = brief.Layout == SceneVisualLayout.Chat ? "bubble" : "card";
+            var visible = frame.RevealedCount(prefix, cards.Count);
+            if (visible < cards.Count)
+            {
+                cards = cards.Take(visible).ToArray();
+            }
+        }
+
+        return brief with
+        {
+            Cards = cards,
+            Note = frame.NoteVisible ? brief.Note : null,
+            Command = frame.CommandText ?? brief.Command,
+            Progress = frame.Progress >= 0 ? frame.Progress : brief.Progress,
+            Typing = frame.Typing,
+            Completion = frame.Completion
+        };
+    }
+
+    public static string Compose(SceneVisualBrief brief, SceneVisualFrameState? frame)
     {
         ArgumentNullException.ThrowIfNull(brief);
         var palette = Palettes[brief.Palette];
@@ -59,7 +104,7 @@ public static class SceneVisualSvg
                 Hero(sb, brief, palette);
                 break;
             case SceneVisualLayout.Cards:
-                Cards(sb, brief, palette);
+                Cards(sb, brief, palette, frame);
                 break;
             case SceneVisualLayout.Window:
                 Window(sb, brief, palette);
@@ -70,6 +115,34 @@ public static class SceneVisualSvg
         }
 
         sb.Append("</svg>");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// A transparent motion overlay for an AI-image background: one accent badge
+    /// scaled around its own anchor. Deliberately small so the illustration stays
+    /// the hero while the scene still gains real overlay motion.
+    /// </summary>
+    public static string ComposeOverlay(
+        string label,
+        SceneVisualPalette palette,
+        double opacity,
+        double scale)
+    {
+        var colors = Palettes[palette];
+        var clampedOpacity = Math.Clamp(opacity, 0, 1);
+        var clampedScale = Math.Clamp(scale, 0.5, 1.5);
+        var centerX = 320;
+        var centerY = SubtitleSafeTop - 70;
+        var width = Math.Max(260, ApproximateWidth(label, 26) + 130);
+
+        var sb = new StringBuilder(2_048);
+        sb.Append($"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{Width}\" height=\"{Height}\" viewBox=\"0 0 {Width} {Height}\">");
+        sb.Append($"<g opacity=\"{Round(clampedOpacity)}\" transform=\"translate({centerX} {centerY}) scale({Round(clampedScale)}) translate({-centerX} {-centerY})\">");
+        Rect(sb, centerX - width / 2.0, centerY - 34, width, 68, 34, colors.Accent, fillOpacity: 0.92);
+        Icon(sb, SceneVisualIcon.Shield, centerX - width / 2 + 44, centerY, 34, colors.From);
+        Text(sb, centerX + 24, centerY + 10, 26, "bold", colors.From, label, anchor: "middle");
+        sb.Append("</g></svg>");
         return sb.ToString();
     }
 
@@ -116,7 +189,11 @@ public static class SceneVisualSvg
         }
     }
 
-    private static void Cards(StringBuilder sb, SceneVisualBrief brief, Palette palette)
+    private static void Cards(
+        StringBuilder sb,
+        SceneVisualBrief brief,
+        Palette palette,
+        SceneVisualFrameState? frame = null)
     {
         var count = brief.Cards.Count;
         var compact = count >= 4;
@@ -135,8 +212,10 @@ public static class SceneVisualSvg
             var x = originX + column * (cardWidth + gapX);
             var y = originY + row * (cardHeight + gapY);
             var card = brief.Cards[index];
+            var emphasized = frame is not null
+                && string.Equals(frame.PulseElement, $"card{index}", StringComparison.Ordinal);
 
-            Rect(sb, x, y, cardWidth, cardHeight, 22, "#ffffff", fillOpacity: 0.05, stroke: palette.Accent, strokeOpacity: 0.25);
+            Rect(sb, x, y, cardWidth, cardHeight, 22, "#ffffff", fillOpacity: 0.05, stroke: palette.Accent, strokeOpacity: emphasized ? 0.8 : 0.25);
 
             if (compact)
             {
@@ -190,6 +269,12 @@ public static class SceneVisualSvg
             y += 80;
         }
 
+        if (brief.Completion)
+        {
+            Icon(sb, SceneVisualIcon.Check, 1030, 430, 56, "#5ef2a0");
+            Text(sb, 1030, 486, 22, "bold", "#5ef2a0", "Selesai", anchor: "middle");
+        }
+
         if (!string.IsNullOrWhiteSpace(brief.Note))
         {
             Text(sb, 200, y + 50, 24, "normal", palette.Text, brief.Note!, opacity: 0.85);
@@ -208,9 +293,22 @@ public static class SceneVisualSvg
             y = Bubble(sb, 990, y, brief.Cards[0].Title, palette.Accent, "#0b0f14", rightAligned: true);
         }
 
-        if (brief.Cards.Count > 1)
+        if (brief.Typing)
+        {
+            TypingBubble(sb, 290, y + 24, palette);
+        }
+        else if (brief.Cards.Count > 1)
         {
             Bubble(sb, 290, y + 24, brief.Cards[1].Title, "#ffffff", palette.Text, rightAligned: false, fillOpacity: 0.12);
+        }
+    }
+
+    private static void TypingBubble(StringBuilder sb, int x, int y, Palette palette)
+    {
+        Rect(sb, x, y, 176, 64, 18, "#ffffff", fillOpacity: 0.12);
+        for (var index = 0; index < 3; index++)
+        {
+            sb.Append($"<circle cx=\"{x + 50 + index * 38}\" cy=\"{y + 32}\" r=\"7\" fill=\"{palette.Accent}\"/>");
         }
     }
 

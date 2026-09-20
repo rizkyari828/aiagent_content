@@ -20,7 +20,7 @@ namespace AIStudio.Application.Rendering.Visuals;
 public static class SceneVisualPlanner
 {
     /// <summary>Bump when the mapping changes so job input hashes change.</summary>
-    public const int PlannerVersion = 2;
+    public const int PlannerVersion = 3;
 
     /// <summary>Animation templates must fit their scene; aligned with the timing floor.</summary>
     public const double AnimationDurationSeconds = SceneTiming.AnimationMinimumSeconds;
@@ -33,17 +33,6 @@ public static class SceneVisualPlanner
         SceneVisualPalette.Sunset
     ];
 
-    private static readonly string[] LocalFlowKeywords =
-        ["cloud", "gpu", "internet", "lokal", "local", "offline"];
-
-    private static readonly string[] LaptopKeywords =
-        ["laptop", "notebook"];
-
-    private static readonly string[] ChatFlowKeywords =
-        ["chat", "percakapan", "prompt", "jawaban", "assistant"];
-
-    // Layout intent comes from the heading (canonical, user-facing), not from the
-    // creative-direction prose where nouns like "terminal" may only be described.
     private static readonly string[] ChatLayoutKeywords =
         ["chat", "percakapan", "obrol"];
 
@@ -95,10 +84,34 @@ public static class SceneVisualPlanner
         bool enableThreeD = false)
     {
         ArgumentNullException.ThrowIfNull(storyboard);
+        var durations = storyboard.Scenes
+            .Select(_ => AnimationDurationSeconds)
+            .ToArray();
+        return PlanAll(storyboard, durations, enableAnimation, enableAiImages, enableThreeD);
+    }
+
+    /// <summary>
+    /// Direction-aware planning. The director classifies each scene and the router
+    /// resolves provider availability into an engine, degrading along the documented
+    /// fallback chain. Duration drives choreography so beats fit the real scene.
+    /// </summary>
+    public static IReadOnlyList<SceneVisualPlan> PlanAll(
+        GenerateStoryboardResult storyboard,
+        IReadOnlyList<double> durations,
+        bool enableAnimation,
+        bool enableAiImages = false,
+        bool enableThreeD = false)
+    {
+        ArgumentNullException.ThrowIfNull(storyboard);
+        ArgumentNullException.ThrowIfNull(durations);
+        if (durations.Count != storyboard.Scenes.Count)
+        {
+            throw new ArgumentException(
+                "Durations must match the storyboard scene count.",
+                nameof(durations));
+        }
+
         var plans = new List<SceneVisualPlan>(storyboard.Scenes.Count);
-        var localFlowUsed = false;
-        var chatFlowUsed = false;
-        var laptopThreeDUsed = false;
 
         for (var index = 0; index < storyboard.Scenes.Count; index++)
         {
@@ -107,40 +120,38 @@ public static class SceneVisualPlanner
             var layout = ClassifyLayout(scene);
             var brief = BuildBrief(scene, index, layout, palette);
 
-            var template = SceneAnimationTemplate.None;
-            if (enableAnimation)
+            var direction = SceneVisualDirector.Direct(
+                scene,
+                index,
+                storyboard.Scenes.Count,
+                durations[index]) with
             {
-                if (!localFlowUsed && ContainsAny(SceneText(scene), LocalFlowKeywords))
-                {
-                    template = SceneAnimationTemplate.LocalAiFlow;
-                    localFlowUsed = true;
-                }
-                else if (!chatFlowUsed && ContainsAny(SceneText(scene), ChatFlowKeywords))
-                {
-                    template = SceneAnimationTemplate.ChatFlow;
-                    chatFlowUsed = true;
-                }
-            }
+                Choreography = SceneChoreographyPlanner.Build(brief, durations[index])
+            };
 
-            // Blender is a narrow, explicit selection: at most one scene whose text
-            // clearly maps to the trusted local-AI laptop template, and only when no
-            // higher-priority animation template already claimed the scene.
-            var threeD = SceneThreeDTemplate.None;
-            if (enableThreeD
-                && template == SceneAnimationTemplate.None
-                && !laptopThreeDUsed
-                && IsThreeDLaptopScene(scene))
-            {
-                threeD = SceneThreeDTemplate.LocalAiLaptop;
-                laptopThreeDUsed = true;
-            }
+            var route = SceneVisualRouter.Select(
+                direction,
+                enableAnimation,
+                enableAiImages,
+                enableThreeD);
 
-            var engine = SceneVisualEngineSelector.Select(template, enableAiImages, threeD);
-            var animation = engine == SceneVisualEngine.ManimAnimation
-                ? BuildAnimationParameters(brief, palette)
+            var animation = route.SelectedEngine == SceneVisualEngine.ManimAnimation
+                ? BuildAnimationParameters(brief, palette, direction)
                 : null;
 
-            plans.Add(new SceneVisualPlan(brief, engine, template, animation, threeD));
+            var threeDTemplate = route.SelectedEngine == SceneVisualEngine.ThreeD
+                ? route.ThreeDTemplate
+                : SceneThreeDTemplate.None;
+
+            plans.Add(new SceneVisualPlan(
+                brief,
+                route.SelectedEngine,
+                route.ManimTemplate,
+                animation,
+                threeDTemplate,
+                direction,
+                route.IsFallback,
+                route.IntendedEngine));
         }
 
         return plans;
@@ -224,7 +235,8 @@ public static class SceneVisualPlanner
 
     private static SceneAnimationParameters BuildAnimationParameters(
         SceneVisualBrief brief,
-        SceneVisualPalette palette)
+        SceneVisualPalette palette,
+        SceneVisualDirection direction)
     {
         // Animation parameters are display text too. Only quoted dialogue from a
         // chat scene is safe to surface; everything else stays on the template's
@@ -236,13 +248,33 @@ public static class SceneVisualPlanner
             ? brief.Cards[1].Title
             : null;
 
+        if (direction.ManimTemplate == SceneAnimationTemplate.ProcessFlow)
+        {
+            var isPull = direction.Intent == SceneVisualIntent.ModelPull;
+            var command = brief.Command ?? (isPull ? "ollama pull llama3.1:8b" : "ollama --version");
+            var steps = isPull
+                ? new[] { "Pilih model", "Unduh bobot", "Siap" }
+                : new[] { "Download", "Install", "Jalankan" };
+
+            return new(
+                brief.Kicker,
+                brief.Heading,
+                secondary,
+                tertiary,
+                palette,
+                direction.DurationSeconds,
+                command,
+                steps,
+                isPull ? 1.0 : 0.75);
+        }
+
         return new(
             brief.Kicker,
             brief.Heading,
             secondary,
             tertiary,
             palette,
-            AnimationDurationSeconds);
+            direction.DurationSeconds);
     }
 
     private static (IReadOnlyList<SceneVisualCard> Cards, string? Note) BuildCardContent(
@@ -358,17 +390,6 @@ public static class SceneVisualPlanner
 
     private static string SceneText(StoryboardScene scene) =>
         $"{scene.Heading} {scene.Visual}";
-
-    /// <summary>
-    /// Narrow, explainable rule for the trusted <c>local_ai_laptop</c> Blender
-    /// template: the scene must mention a laptop and carry a local/offline AI
-    /// signal. This is the only v1 path to the 3D engine; it is not a classifier.
-    /// </summary>
-    private static bool IsThreeDLaptopScene(StoryboardScene scene)
-    {
-        var text = SceneText(scene);
-        return ContainsAny(text, LaptopKeywords) && ContainsAny(text, LocalFlowKeywords);
-    }
 
     private static bool ContainsAny(string text, string[] keywords) =>
         keywords.Any(keyword => text.Contains(keyword, StringComparison.OrdinalIgnoreCase));

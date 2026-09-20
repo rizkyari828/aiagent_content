@@ -318,3 +318,78 @@ class ChatFlow(Scene):
         elapsed += 0.45
 
         self.wait(max(0.1, duration - elapsed))
+
+
+class ProcessFlow(Scene):
+    """Terminal process: command typed -> progress bar fills -> steps -> completion."""
+
+    def __init__(self, params, **kwargs):
+        super().__init__(**kwargs)
+        self.params = params
+
+    def construct(self):
+        colors = _colors(self.params)
+        duration = float(self.params.get("durationSeconds", 3.5))
+        accent = colors["accent"]
+        _apply_background(self, colors)
+
+        elapsed = 0.0
+        header = _header(self.params, colors)
+        self.play(Write(header), run_time=0.4)
+        elapsed += 0.4
+
+        window = RoundedRectangle(
+            width=10.4,
+            height=3.7,
+            corner_radius=0.28,
+            fill_color=PANEL_COLOR,
+            fill_opacity=0.92,
+            stroke_color=accent,
+            stroke_opacity=0.45,
+            stroke_width=3,
+        ).move_to(DOWN * 0.55)
+        title_bar = RoundedRectangle(
+            width=10.4, height=0.55, corner_radius=0.28, fill_color=WHITE, fill_opacity=0.06, stroke_width=0
+        ).align_to(window, UP)
+        window_title = _text("Terminal", 20, colors["text"], "NORMAL", opacity=0.75)
+        window_title.next_to(title_bar.get_left(), RIGHT, buff=0.72).align_to(title_bar, UP).shift(DOWN * 0.08)
+        traffic = VGroup(
+            *[Dot(radius=0.07, color=c).move_to(title_bar.get_left() + RIGHT * (0.36 + 0.26 * i) + DOWN * 0.03)
+              for i, c in enumerate(("#ff5f56", "#ffbd2e", "#27c93f"))]
+        )
+        self.play(FadeIn(window), FadeIn(title_bar), FadeIn(window_title), FadeIn(traffic), run_time=0.4)
+        elapsed += 0.4
+
+        command = _short(self.params.get("command"), 44, "ollama --version")
+        command_line = _text("$ " + command, 22, colors["text"], "NORMAL")
+        command_line.next_to(window.get_corner(UL), DOWN, buff=0.95).align_to(window, LEFT).shift(RIGHT * 0.6)
+        cursor = _text("$", 22, accent, "BOLD").move_to(command_line, aligned_edge=LEFT).shift(LEFT * 0.36)
+        self.play(FadeIn(command_line), FadeIn(cursor), run_time=0.35)
+        elapsed += 0.35
+
+        target = max(0.05, min(1.0, float(self.params.get("progressTarget", 0.75))))
+        bar_bg = RoundedRectangle(
+            width=8.6, height=0.34, corner_radius=0.17, fill_color=WHITE, fill_opacity=0.08, stroke_width=0
+        )
+        bar = RoundedRectangle(
+            width=0.05, height=0.34, corner_radius=0.17, fill_color=accent, fill_opacity=1, stroke_width=0
+        ).align_to(bar_bg, LEFT)
+        bar_group = VGroup(bar_bg, bar).next_to(command_line, DOWN, buff=0.55)
+        self.play(FadeIn(bar_group), run_time=0.2)
+        self.play(bar.animate.scale_to_fit_width(8.6 * target, about_edge=LEFT), run_time=0.85)
+        elapsed += 1.05
+
+        steps = (self.params.get("steps") or [])[:3]
+        chips = VGroup(*[_chip(str(step), colors) for step in steps])
+        if len(chips) > 0:
+            chips.arrange(RIGHT, buff=0.3).next_to(bar_group, DOWN, buff=0.5).align_to(window, LEFT).shift(RIGHT * 0.6)
+            self.play(LaggedStart(*[FadeIn(chip, shift=UP * 0.15) for chip in chips], lag_ratio=0.15), run_time=0.5)
+            elapsed += 0.5
+
+        done_anchor = chips if len(chips) > 0 else bar_group
+        done = _text("Selesai", 24, ONLINE_COLOR, "BOLD")
+        done.next_to(done_anchor, DOWN, buff=0.42).align_to(window, LEFT).shift(RIGHT * 0.6)
+        self.play(FadeIn(done, shift=UP * 0.12), run_time=0.3)
+        elapsed += 0.3
+
+        self.wait(max(0.1, duration - elapsed))

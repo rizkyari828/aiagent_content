@@ -82,6 +82,14 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `src/AIStudio.Application/Jobs/RenderVideo/RenderVideoResult.cs`, `RenderVideoJobHandler.cs`, `RenderVideoWorkflow.cs` — prefer the validated mastered audio (`audioSource=mastered`, `masteredAudioPath`/`masteredAudioContentHash`), fall back to the legacy `narration_tracks` row; scene timing, transitions and subtitles unchanged.
 - `tests/AIStudio.Tests/Rendering/GenerateAudioJobHandlerTests.cs`, `GenerateAudioWorkflowTests.cs`, `GenerateAudioContractsTests.cs`, `GenerateAudioTestDoubles.cs` — staged generation, full/partial reuse, only-failed-stage retry, input-change invalidation, disabled providers, cancellation, no GPU-gate constructor, and master-consumption render tests.
 
+## Visual Direction + Multi-Engine Choreography
+
+- `src/AIStudio.Application/Rendering/Visuals/SceneVisualIntent.cs`, `SceneVisualDirection.cs`, `AnimationPrimitive.cs`, `AnimationBeat.cs` - structured intent/composition, per-scene visual direction, curated animation primitives and choreography beats (data only; no executable content).
+- `src/AIStudio.Application/Rendering/Visuals/SceneVisualDirector.cs`, `SceneVisualRouter.cs`, `SceneVisualFingerprint.cs` - deterministic keyword director, engine router with the documented availability fallback chain, and per-scene plan fingerprint used for reuse/invalidation.
+- `src/AIStudio.Application/Rendering/Visuals/ChoreographyEvaluator.cs`, `SceneVisualSvg.cs` (`ComposeFrame`/`ComposeOverlay`), `ISceneVisualRenderer.cs` - bounded frame-state evaluation and trusted SVG frame composition; `FfmpegSceneVisualRenderer` gained `RenderAnimationAsync` (AnimatedSvg frame sequence) and `RenderImageMotionAsync` (FLUX slow push + animated overlay).
+- `src/AIStudio.Infrastructure/Rendering/Manim/templates.py` (`ProcessFlow`), `render_scene.py` - trusted process animation (command/progress/steps/completion) reused for download/install and model-pull scenes.
+- `tests/AIStudio.Tests/Rendering/SceneVisualRoutingTests.cs`, `GenerateSceneVisualsJobHandlerTests.cs`, `FfmpegSceneVisualRendererTests.cs`, `SceneVisualPlannerTests.cs` - intent classification, deterministic routing/fallback, choreography bounds, frame reveal, subtitle safe area, per-scene fingerprint reuse/invalidation, forced regeneration, and renderer command shape.
+
 ## Visual Asset Pipeline (durable planning + animation)
 
 - `src/AIStudio.Application/Rendering/Visuals/SceneVisualPlanner.cs` (v2), `SceneVisualPlan.cs`, `SceneVisualEngine.cs`, `SceneAnimationTemplate.cs`, `SceneAnimationParameters.cs`, `SceneVisualEngineSelector.cs` — deterministic storyboard-to-visual mapping and engine/template selection. v2 resolves display text only from the heading + quoted strings + concept vocabulary and never renders raw `visual` instruction prose.

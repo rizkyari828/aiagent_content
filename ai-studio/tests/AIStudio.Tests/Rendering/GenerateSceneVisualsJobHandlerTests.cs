@@ -57,17 +57,20 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
         Assert.Equal(2, result.SceneCount);
         Assert.Equal(2, result.GeneratedCount);
         Assert.Equal(0, result.SkippedCount);
-        Assert.All(result.Visuals, visual => Assert.Equal("SvgStill", visual.Engine));
+        Assert.All(result.Visuals, visual => Assert.Equal("AnimatedSvg", visual.Engine));
         Assert.All(result.Visuals, visual => Assert.Equal("None", visual.Template));
-        Assert.Equal(2, svg.Briefs.Count);
+        Assert.Equal(2, svg.AnimatedBriefs.Count);
+        Assert.Empty(svg.Briefs);
         Assert.Equal(2, assets.Assets.Count);
         Assert.All(assets.Assets, asset =>
         {
-            Assert.Equal(AssetType.Image, asset.Type);
+            Assert.Equal(AssetType.Video, asset.Type);
             Assert.Equal(AssetOrigin.Local, asset.Origin);
-            Assert.Equal(SceneAssetProvenance.GeneratedVisualSource, asset.Source);
-            Assert.Equal("SvgStill", asset.Creator);
+            Assert.Equal(SceneAssetProvenance.CurrentGeneratedVisualSource, asset.Source);
+            Assert.StartsWith("AnimatedSvg", asset.Creator);
         });
+        Assert.NotNull(result.Routing);
+        Assert.Equal(2, result.Routing!.Count);
         Assert.True(File.Exists(Path.Combine(root, result.Visuals[0].Path)));
     }
 
@@ -133,20 +136,21 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
             visual => visual.Engine == "ManimAnimation" && visual.Template == "LocalAiFlow");
         Assert.Contains(
             result.Visuals,
-            visual => visual.Engine == "ManimAnimation" && visual.Template == "ChatFlow");
-        Assert.Equal(2, manim.Calls.Count);
+            visual => visual.Engine == "AnimatedSvg" && visual.Status == "generated");
+        Assert.Single(manim.Calls);
+        Assert.Single(svg.AnimatedBriefs);
         Assert.Empty(svg.Briefs);
         Assert.All(assets.Assets, asset => Assert.Equal(AssetType.Video, asset.Type));
         Assert.All(result.Visuals, visual => Assert.EndsWith(".mp4", visual.Path));
     }
 
     [Fact]
-    public async Task Handler_UsesAiImageEngineWhenEnabled()
+    public async Task Handler_UsesAiImageEngineForClosingSceneWithMotionTreatment()
     {
         var projectId = Guid.NewGuid();
         var storyboard = AssetTestData.StoryboardJob(
             projectId,
-            GenerateStoryboardTestData.ValidResult);
+            GenerateSceneVisualsTestData.ClosingStoryboard);
         var assets = new RecordingAssetRepository();
         var svg = new StubSceneVisualRenderer();
         var aiImages = new StubImageGenerationProvider(isEnabled: true);
@@ -162,30 +166,30 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
             TestContext.Current.CancellationToken);
 
         var result = GenerateSceneVisualsResult.Deserialize(json);
-        Assert.Equal(2, result.GeneratedCount);
+        Assert.Equal(1, result.GeneratedCount);
         Assert.All(result.Visuals, visual => Assert.Equal("AiImage", visual.Engine));
-        Assert.All(result.Visuals, visual => Assert.EndsWith(".png", visual.Path));
-        Assert.Equal(2, aiImages.Requests.Count);
-        Assert.All(aiImages.Requests, request =>
-        {
-            Assert.False(string.IsNullOrWhiteSpace(request.Prompt));
-            Assert.True(request.Seed >= 0);
-        });
+        Assert.All(result.Visuals, visual => Assert.EndsWith(".mp4", visual.Path));
+        var request = Assert.Single(aiImages.Requests);
+        Assert.False(string.IsNullOrWhiteSpace(request.Prompt));
+        Assert.True(request.Seed >= 0);
+
+        // A still alone is not a scene: the motion treatment overlay must run.
+        Assert.Single(svg.MotionLabels);
         Assert.Empty(svg.Briefs);
         Assert.All(assets.Assets, asset =>
         {
-            Assert.Equal(AssetType.Image, asset.Type);
-            Assert.Equal("AiImage", asset.Creator);
+            Assert.Equal(AssetType.Video, asset.Type);
+            Assert.StartsWith("AiImage", asset.Creator);
         });
     }
 
     [Fact]
-    public async Task Handler_UsesThreeDEngineWhenEnabled()
+    public async Task Handler_UsesThreeDEngineForOpeningSceneWhenEnabled()
     {
         var projectId = Guid.NewGuid();
         var storyboard = AssetTestData.StoryboardJob(
             projectId,
-            GenerateSceneVisualsTestData.AnimatedStoryboard);
+            GenerateSceneVisualsTestData.OpeningStoryboard);
         var assets = new RecordingAssetRepository();
         var svg = new StubSceneVisualRenderer();
         var threeD = new StubThreeDRenderingProvider(isEnabled: true);
@@ -201,9 +205,7 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
             TestContext.Current.CancellationToken);
 
         var result = GenerateSceneVisualsResult.Deserialize(json);
-        var threeDVisual = Assert.Single(
-            result.Visuals,
-            visual => visual.Engine == "ThreeD");
+        var threeDVisual = Assert.Single(result.Visuals, visual => visual.Engine == "ThreeD");
         Assert.EndsWith(".mp4", threeDVisual.Path);
         Assert.Equal("LocalAiLaptop", threeDVisual.Template);
         var rendered = Assert.Single(threeD.Requests);
@@ -211,16 +213,11 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
         Assert.Equal(SceneVisualPlanner.AnimationDurationSeconds, rendered.DurationSeconds, 3);
         Assert.True(rendered.Seed >= 0);
 
-        Assert.Contains(
-            result.Visuals,
-            visual => visual.Engine == "SvgStill");
-        Assert.Single(svg.Briefs);
+        Assert.Empty(svg.Briefs);
+        Assert.Empty(svg.AnimatedBriefs);
         Assert.Contains(
             assets.Assets,
-            asset => asset.Creator == "ThreeD" && asset.Type == AssetType.Video);
-        Assert.Contains(
-            assets.Assets,
-            asset => asset.Creator == "SvgStill" && asset.Type == AssetType.Image);
+            asset => asset.Creator!.StartsWith("ThreeD", StringComparison.Ordinal) && asset.Type == AssetType.Video);
     }
 
     [Fact]
@@ -262,9 +259,10 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
             [true, true],
             24);
 
-        Assert.Equal(2, manim.Calls.Count);
+        Assert.Single(manim.Calls);
         Assert.Equal(expected[0], manim.Calls[0].Parameters.DurationSeconds, 3);
-        Assert.Equal(expected[1], manim.Calls[1].Parameters.DurationSeconds, 3);
+        Assert.Single(svg.AnimationDurations);
+        Assert.Equal(expected[1], svg.AnimationDurations[0], 3);
         Assert.NotEqual(
             SceneVisualPlanner.AnimationDurationSeconds,
             manim.Calls[0].Parameters.DurationSeconds);
@@ -360,6 +358,137 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
                 TestContext.Current.CancellationToken));
 
         Assert.Equal("content_project_not_found", exception.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Handler_RegeneratesOnlySceneWhoseFingerprintChanged()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateSceneVisualsTestData.AnimatedStoryboard);
+        var assets = new RecordingAssetRepository();
+        var svg = new StubSceneVisualRenderer();
+        var manim = new StubManimSceneRenderer(isEnabled: true);
+        var handler = CreateHandler(projectId, storyboard, assets, svg, manim);
+
+        var first = GenerateSceneVisualsResult.Deserialize(
+            await handler.ExecuteAsync(
+                GenerateSceneVisualsTestData.Job(projectId, storyboard.Id),
+                TestContext.Current.CancellationToken));
+        Assert.Equal(2, first.GeneratedCount);
+
+        // Simulate a changed plan for scene 1 only.
+        var sceneOne = assets.Assets.Single(asset => asset.SceneIndex == 1);
+        sceneOne.Replace(
+            sceneOne.Type,
+            sceneOne.Path,
+            sceneOne.ByteSize,
+            sceneOne.ContentHash,
+            SceneAssetProvenance.CurrentGeneratedVisualSource,
+            "AnimatedSvg+000000000000");
+
+        var second = GenerateSceneVisualsResult.Deserialize(
+            await handler.ExecuteAsync(
+                GenerateSceneVisualsTestData.Job(projectId, storyboard.Id),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal(1, second.GeneratedCount);
+        Assert.Equal(1, second.SkippedCount);
+        Assert.Equal("reused", second.Routing!.Single(entry => entry.SceneIndex == 0).Status);
+        Assert.Equal("generated", second.Routing!.Single(entry => entry.SceneIndex == 1).Status);
+        Assert.Equal(1, second.Visuals[0].SceneIndex);
+        Assert.Single(manim.Calls);
+        Assert.Equal(2, svg.AnimatedBriefs.Count);
+    }
+
+    [Fact]
+    public async Task Handler_RegeneratesLegacyGeneratedAssetInPlace()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateStoryboardTestData.ValidResult);
+        var assets = new RecordingAssetRepository();
+        assets.Add(RenderVideoTestData.SceneAsset(
+            projectId,
+            storyboard.Id,
+            0,
+            "visuals/old/scene_0.png",
+            [1, 2, 3],
+            source: SceneAssetProvenance.GeneratedVisualSource,
+            creator: "SvgStill"));
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            assets,
+            new StubSceneVisualRenderer());
+
+        var result = GenerateSceneVisualsResult.Deserialize(
+            await handler.ExecuteAsync(
+                GenerateSceneVisualsTestData.Job(projectId, storyboard.Id),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal(2, result.GeneratedCount);
+        Assert.Equal(2, assets.Assets.Count);
+        var regenerated = assets.Assets.Single(asset => asset.SceneIndex == 0);
+        Assert.Equal(SceneAssetProvenance.CurrentGeneratedVisualSource, regenerated.Source);
+        Assert.StartsWith("AnimatedSvg", regenerated.Creator);
+        Assert.Equal(AssetType.Video, regenerated.Type);
+    }
+
+    [Fact]
+    public async Task Handler_ForceRegeneratesEvenManualAssets()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateStoryboardTestData.ValidResult);
+        var assets = new RecordingAssetRepository();
+        assets.Add(RenderVideoTestData.SceneAsset(
+            projectId,
+            storyboard.Id,
+            0,
+            "visuals/manual.png",
+            [9, 9]));
+        var svg = new StubSceneVisualRenderer();
+        var handler = CreateHandler(projectId, storyboard, assets, svg);
+
+        var normal = GenerateSceneVisualsResult.Deserialize(
+            await handler.ExecuteAsync(
+                GenerateSceneVisualsTestData.Job(projectId, storyboard.Id),
+                TestContext.Current.CancellationToken));
+        Assert.Equal(1, normal.GeneratedCount);
+
+        var forced = GenerateSceneVisualsResult.Deserialize(
+            await handler.ExecuteAsync(
+                GenerateSceneVisualsTestData.Job(projectId, storyboard.Id, force: true),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal(2, forced.GeneratedCount);
+        Assert.All(
+            assets.Assets,
+            asset => Assert.Equal(SceneAssetProvenance.CurrentGeneratedVisualSource, asset.Source));
+    }
+
+    [Fact]
+    public void Handler_DoesNotDependOnAudioOrGpuGate()
+    {
+        var parameters = Assert
+            .Single(typeof(GenerateSceneVisualsJobHandler).GetConstructors())
+            .GetParameters();
+
+        var forbidden = new[]
+        {
+            typeof(AIStudio.Application.Rendering.AudioGeneration.ISpeechSynthesisProvider),
+            typeof(AIStudio.Application.Rendering.AudioGeneration.IMusicGenerationProvider),
+            typeof(AIStudio.Application.Rendering.AudioMixing.IAudioMixer),
+            typeof(IGpuResourceGate)
+        };
+
+        Assert.DoesNotContain(
+            parameters,
+            parameter => forbidden.Contains(parameter.ParameterType));
     }
 
     private GenerateSceneVisualsJobHandler CreateHandler(

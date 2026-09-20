@@ -20,6 +20,7 @@ import templates  # noqa: E402
 TEMPLATES = {
     "local_ai_flow": templates.LocalAiFlow,
     "chat_flow": templates.ChatFlow,
+    "process_flow": templates.ProcessFlow,
 }
 
 

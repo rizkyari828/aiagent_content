@@ -22,32 +22,36 @@ public sealed class SceneVisualPlannerTests
     }
 
     [Fact]
-    public void PlanAll_SelectsAtMostOneAnimationScenePerTemplate()
+    public void PlanAll_RoutesIntentToEngineDeterministically()
     {
         var storyboard = GenerateStoryboardResult.Deserialize(
             GenerateSceneVisualsTestData.AnimatedStoryboard);
 
         var plans = SceneVisualPlanner.PlanAll(storyboard, enableAnimation: true);
 
+        Assert.Equal(SceneVisualIntent.TechnicalFlow, plans[0].Direction!.Intent);
+        Assert.Equal(SceneVisualEngine.ManimAnimation, plans[0].Engine);
         Assert.Equal(SceneAnimationTemplate.LocalAiFlow, plans[0].Template);
-        Assert.Equal(SceneAnimationTemplate.ChatFlow, plans[1].Template);
-        Assert.All(plans, plan => Assert.Equal(SceneVisualEngine.ManimAnimation, plan.Engine));
+        Assert.False(plans[0].IsFallback);
+
+        Assert.Equal(SceneVisualIntent.Conversation, plans[1].Direction!.Intent);
+        Assert.Equal(SceneVisualEngine.AnimatedSvg, plans[1].Engine);
+        Assert.Equal(SceneAnimationTemplate.None, plans[1].Template);
     }
 
     [Fact]
-    public void PlanAll_KeepsSvgStillWhenAnimationIsDisabled()
+    public void PlanAll_FallsBackToAnimatedSvgWhenAnimationIsDisabled()
     {
         var storyboard = GenerateStoryboardResult.Deserialize(
             GenerateSceneVisualsTestData.AnimatedStoryboard);
 
         var plans = SceneVisualPlanner.PlanAll(storyboard, enableAnimation: false);
 
-        Assert.All(plans, plan =>
-        {
-            Assert.Equal(SceneVisualEngine.SvgStill, plan.Engine);
-            Assert.Equal(SceneAnimationTemplate.None, plan.Template);
-            Assert.Null(plan.Animation);
-        });
+        Assert.All(plans, plan => Assert.Equal(SceneVisualEngine.AnimatedSvg, plan.Engine));
+        Assert.True(plans[0].IsFallback);
+        Assert.Equal(SceneVisualEngine.ManimAnimation, plans[0].IntendedEngine);
+        Assert.Equal(SceneAnimationTemplate.None, plans[0].Template);
+        Assert.Null(plans[0].Animation);
     }
 
     [Fact]
@@ -119,59 +123,66 @@ public sealed class SceneVisualPlannerTests
     }
 
     [Fact]
-    public void PlanAll_UsesThreeDForSupportedLaptopSceneOnlyWhenEnabled()
+    public void PlanAll_RoutesOpeningSceneToThreeDWhenEnabled()
     {
         var storyboard = GenerateStoryboardResult.Deserialize(
-            GenerateSceneVisualsTestData.AnimatedStoryboard);
+            GenerateSceneVisualsTestData.OpeningStoryboard);
 
         var enabled = SceneVisualPlanner.PlanAll(
             storyboard,
-            enableAnimation: false,
+            enableAnimation: true,
             enableThreeD: true);
         Assert.Equal(SceneVisualEngine.ThreeD, enabled[0].Engine);
         Assert.Equal(SceneThreeDTemplate.LocalAiLaptop, enabled[0].ThreeDTemplate);
-        Assert.Equal(SceneVisualEngine.SvgStill, enabled[1].Engine);
-        Assert.Equal(SceneThreeDTemplate.None, enabled[1].ThreeDTemplate);
+        Assert.False(enabled[0].IsFallback);
+        Assert.Equal(SceneVisualIntent.Opening, enabled[0].Direction!.Intent);
 
         var disabled = SceneVisualPlanner.PlanAll(
             storyboard,
+            enableAnimation: true,
+            enableThreeD: false);
+        Assert.Equal(SceneVisualEngine.ManimAnimation, disabled[0].Engine);
+        Assert.True(disabled[0].IsFallback);
+        Assert.Equal(SceneVisualEngine.ThreeD, disabled[0].IntendedEngine);
+    }
+
+    [Fact]
+    public void PlanAll_OpeningFallsBackToAnimatedSvgWhenGpuEnginesAreDisabled()
+    {
+        var storyboard = GenerateStoryboardResult.Deserialize(
+            GenerateSceneVisualsTestData.OpeningStoryboard);
+
+        var plans = SceneVisualPlanner.PlanAll(
+            storyboard,
             enableAnimation: false,
             enableThreeD: false);
-        Assert.All(disabled, plan => Assert.Equal(SceneVisualEngine.SvgStill, plan.Engine));
+
+        Assert.Equal(SceneVisualEngine.AnimatedSvg, plans[0].Engine);
+        Assert.True(plans[0].IsFallback);
+        Assert.Equal(SceneVisualEngine.ThreeD, plans[0].IntendedEngine);
     }
 
     [Fact]
-    public void PlanAll_KeepsManimPriorityOverThreeD()
+    public void PlanAll_RoutesClosingSceneToAiImageWhenEnabled()
     {
         var storyboard = GenerateStoryboardResult.Deserialize(
-            GenerateSceneVisualsTestData.AnimatedStoryboard);
+            GenerateSceneVisualsTestData.ClosingStoryboard);
 
-        var plans = SceneVisualPlanner.PlanAll(
+        var enabled = SceneVisualPlanner.PlanAll(
             storyboard,
             enableAnimation: true,
-            enableThreeD: true);
-
-        Assert.All(plans, plan => Assert.Equal(SceneVisualEngine.ManimAnimation, plan.Engine));
-        Assert.All(plans, plan => Assert.Equal(SceneThreeDTemplate.None, plan.ThreeDTemplate));
-    }
-
-    [Fact]
-    public void PlanAll_UsesAiImageForStillScenesWhenEnabled()
-    {
-        var storyboard = GenerateStoryboardResult.Deserialize(
-            GenerateSceneVisualsTestData.AnimatedStoryboard);
-
-        var plans = SceneVisualPlanner.PlanAll(
-            storyboard,
-            enableAnimation: false,
             enableAiImages: true);
+        Assert.Equal(SceneVisualEngine.AiImage, enabled[0].Engine);
+        Assert.False(enabled[0].IsFallback);
+        Assert.Equal(SceneVisualIntent.Closing, enabled[0].Direction!.Intent);
 
-        Assert.All(plans, plan =>
-        {
-            Assert.Equal(SceneVisualEngine.AiImage, plan.Engine);
-            Assert.Equal(SceneAnimationTemplate.None, plan.Template);
-            Assert.Null(plan.Animation);
-        });
+        var disabled = SceneVisualPlanner.PlanAll(
+            storyboard,
+            enableAnimation: true,
+            enableAiImages: false);
+        Assert.Equal(SceneVisualEngine.AnimatedSvg, disabled[0].Engine);
+        Assert.True(disabled[0].IsFallback);
+        Assert.Equal(SceneVisualEngine.AiImage, disabled[0].IntendedEngine);
     }
 
     [Fact]

@@ -16,5 +16,8 @@ public enum SceneVisualEngine
     AiImage = 2,
 
     /// <summary>Repository-owned Blender template rendered to a short clip.</summary>
-    ThreeD = 3
+    ThreeD = 3,
+
+    /// <summary>Repository-owned animated SVG motion-graphics clip (CPU/FFmpeg).</summary>
+    AnimatedSvg = 4
 }

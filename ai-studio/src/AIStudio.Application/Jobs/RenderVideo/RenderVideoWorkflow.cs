@@ -24,13 +24,21 @@ public sealed class RenderVideoWorkflow(
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
 
+    public Task<Guid?> EnqueueAsync(
+        Guid contentProjectId,
+        Guid storyboardJobId,
+        CancellationToken cancellationToken) =>
+        EnqueueAsync(contentProjectId, storyboardJobId, variant: null, cancellationToken);
+
     public async Task<Guid?> EnqueueAsync(
         Guid contentProjectId,
         Guid storyboardJobId,
+        string? variant,
         CancellationToken cancellationToken)
     {
         RequireIdentifier(contentProjectId, nameof(contentProjectId));
         RequireIdentifier(storyboardJobId, nameof(storyboardJobId));
+        var normalizedVariant = NormalizeVariant(variant);
 
         var project = await contentProjects.FindByIdAsync(
             contentProjectId,
@@ -106,7 +114,7 @@ public sealed class RenderVideoWorkflow(
         }
 
         var payload = JsonSerializer.Serialize(
-            new RenderVideoJobPayload(contentProjectId, storyboardJobId),
+            new RenderVideoJobPayload(contentProjectId, storyboardJobId, normalizedVariant),
             JsonOptions);
 
         var job = Job.Create(
@@ -187,6 +195,25 @@ public sealed class RenderVideoWorkflow(
         {
             throw new ArgumentException("A non-empty GUID is required.", parameterName);
         }
+    }
+
+    private static string? NormalizeVariant(string? variant)
+    {
+        if (string.IsNullOrWhiteSpace(variant))
+        {
+            return null;
+        }
+
+        var trimmed = variant.Trim();
+        if (trimmed.Length > RenderVideoJobPayload.MaxVariantLength
+            || !trimmed.All(character => char.IsAsciiLetterOrDigit(character) || character == '-'))
+        {
+            throw Error(
+                "render_variant_invalid",
+                "Render variant must be alphanumeric with dashes and at most 40 characters.");
+        }
+
+        return trimmed;
     }
 
     private static RenderVideoException Error(

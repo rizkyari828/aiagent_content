@@ -12,15 +12,13 @@ using AIStudio.Domain.Jobs;
 namespace AIStudio.Application.Jobs.GenerateSceneVisuals;
 
 /// <summary>
-/// Durable visual generation: maps the completed storyboard into structured visual
-/// plans, renders each scene through the selected engine, persists the bytes under
-/// the approved asset root, and registers the result as a canonical
-/// <see cref="SceneAsset"/>. Scenes that already have an asset are skipped, so a
-/// re-run is idempotent and manually registered or canonical assets are preserved.
-/// Animated clips (Manim or the optional Blender 3D engine) use the same derived
-/// <see cref="SceneTiming"/> duration the renderer later uses; when narration is
-/// unavailable the deterministic animation floor is kept. Still scenes use the
-/// deterministic SVG engine unless the optional local AI image provider is enabled.
+/// Durable visual generation. It runs the deterministic director/router over the
+/// completed storyboard, then renders each scene through the routed engine:
+/// Blender ThreeD, Manim, animated SVG motion-graphics, FLUX image with motion
+/// treatment, or the deterministic SVG still. An asset produced by the current
+/// visual-direction version is reused; an older generated asset is regenerated in
+/// place; a manually registered asset is never overwritten. Per-scene routing and
+/// generated/reused/fallback status are recorded in the job result.
 /// </summary>
 public sealed class GenerateSceneVisualsJobHandler(
     IContentProjectReader contentProjects,
@@ -35,6 +33,8 @@ public sealed class GenerateSceneVisualsJobHandler(
     IMediaInspector mediaInspector,
     TimeProvider timeProvider) : IJobHandler
 {
+    private const string ImageOverlayLabel = "AI LOKAL · OFFLINE";
+
     public bool CanHandle(JobType type) => type == JobType.GenerateSceneVisuals;
 
     public async Task<string> ExecuteAsync(
@@ -46,7 +46,7 @@ public sealed class GenerateSceneVisualsJobHandler(
 
         if (job.Type != JobType.GenerateSceneVisuals)
         {
-            throw new JobExecutionException(
+            throw Error(
                 "visual_wrong_job_type",
                 $"GenerateSceneVisuals handler cannot execute job type {job.Type}.");
         }
@@ -54,7 +54,7 @@ public sealed class GenerateSceneVisualsJobHandler(
         var payload = GenerateSceneVisualsJobPayload.Deserialize(job.Payload);
         if (payload.ContentProjectId != job.ContentProjectId)
         {
-            throw new JobExecutionException(
+            throw Error(
                 "visual_invalid_payload",
                 "GenerateSceneVisuals payload contentProjectId does not match the claimed job.");
         }
@@ -64,7 +64,7 @@ public sealed class GenerateSceneVisualsJobHandler(
             cancellationToken);
         if (project is null)
         {
-            throw new JobExecutionException(
+            throw Error(
                 "content_project_not_found",
                 $"Content project '{job.ContentProjectId}' was not found.");
         }
@@ -74,81 +74,97 @@ public sealed class GenerateSceneVisualsJobHandler(
             payload.StoryboardJobId,
             cancellationToken);
 
-        var plans = SceneVisualPlanner.PlanAll(
-            storyboard,
-            manimRenderer.IsEnabled,
-            imageProvider.IsEnabled,
-            threeDRenderer.IsEnabled);
-        var animationDurations = await TryResolveAnimationDurationsAsync(
+        var animated = Enumerable.Repeat(true, storyboard.Scenes.Count).ToArray();
+        var durations = await ResolveDurationsAsync(
             job.ContentProjectId,
             payload.StoryboardJobId,
             storyboard,
-            plans,
+            animated,
             cancellationToken);
-        var registered = await assets.ListByProjectAsync(
-            job.ContentProjectId,
-            cancellationToken);
-        var registeredScenes = registered
-            .Select(asset => asset.SceneIndex)
-            .ToHashSet();
+
+        var plans = SceneVisualPlanner.PlanAll(
+            storyboard,
+            durations,
+            manimRenderer.IsEnabled,
+            imageProvider.IsEnabled,
+            threeDRenderer.IsEnabled);
 
         var generated = new List<GeneratedSceneVisual>(plans.Count);
+        var routing = new List<SceneVisualRouting>(plans.Count);
 
         for (var sceneIndex = 0; sceneIndex < plans.Count; sceneIndex++)
         {
-            if (registeredScenes.Contains(sceneIndex))
+            var plan = plans[sceneIndex];
+            var expectedCreator = SceneVisualFingerprint.Creator(plan);
+            var existing = await assets.FindBySceneAsync(
+                job.ContentProjectId,
+                sceneIndex,
+                cancellationToken);
+
+            if (!payload.Force
+                && existing is not null
+                && (!SceneAssetProvenance.IsGeneratedGraphic(existing.Source)
+                    || string.Equals(existing.Creator, expectedCreator, StringComparison.Ordinal)))
             {
-                // Existing canonical/manual asset wins; never overwrite it.
+                // Manual assets always win; a current-version generated asset is
+                // reused only when its per-scene plan fingerprint is unchanged.
+                var engine = SceneVisualFingerprint.EngineFromCreator(existing.Creator);
+                routing.Add(Route(plan, string.IsNullOrEmpty(engine) ? plan.Engine.ToString() : engine, "reused"));
                 continue;
             }
 
-            var plan = plans[sceneIndex];
             var (relativePath, bytes, assetType) = await GenerateAsync(
                 plan,
                 sceneIndex,
                 job.ContentProjectId,
                 payload.StoryboardJobId,
-                animationDurations?[sceneIndex],
                 cancellationToken);
+            var file = await WriteAsync(relativePath, bytes, cancellationToken);
 
-            AssetFileInfo file;
-            try
+            if (existing is null)
             {
-                file = await fileStore.WriteAsync(relativePath, bytes, cancellationToken);
+                var asset = SceneAsset.Create(
+                    job.ContentProjectId,
+                    payload.StoryboardJobId,
+                    sceneIndex,
+                    assetType,
+                    file.RelativePath,
+                    file.ByteSize,
+                    file.ContentHash,
+                    AssetOrigin.Local,
+                    SceneAssetProvenance.CurrentGeneratedVisualSource,
+                    expectedCreator,
+                    license: null,
+                    retrievedAt: null,
+                    timeProvider.GetUtcNow());
+                assets.Add(asset);
             }
-            catch (AssetCollectionException exception)
+            else
             {
-                throw new JobExecutionException(
-                    "visual_asset_write_failed",
-                    exception.Message,
-                    exception);
+                // Older generated asset: replace in place under the same identity.
+                existing.Replace(
+                    assetType,
+                    file.RelativePath,
+                    file.ByteSize,
+                    file.ContentHash,
+                    SceneAssetProvenance.CurrentGeneratedVisualSource,
+                    expectedCreator);
             }
 
-            var asset = SceneAsset.Create(
-                job.ContentProjectId,
-                payload.StoryboardJobId,
-                sceneIndex,
-                assetType,
-                file.RelativePath,
-                file.ByteSize,
-                file.ContentHash,
-                AssetOrigin.Local,
-                SceneAssetProvenance.GeneratedVisualSource,
-                plan.Engine.ToString(),
-                license: null,
-                retrievedAt: null,
-                timeProvider.GetUtcNow());
-
-            assets.Add(asset);
             await assets.SaveChangesAsync(cancellationToken);
 
+            var status = plan.IsFallback ? "fallback" : "generated";
             generated.Add(new GeneratedSceneVisual(
                 sceneIndex,
                 plan.Engine.ToString(),
                 TemplateName(plan),
                 file.RelativePath,
                 file.ByteSize,
-                file.ContentHash));
+                file.ContentHash,
+                plan.IntendedEngine.ToString(),
+                status,
+                plan.Direction?.Intent.ToString() ?? string.Empty));
+            routing.Add(Route(plan, plan.Engine.ToString(), status));
         }
 
         var result = new GenerateSceneVisualsResult(
@@ -156,7 +172,8 @@ public sealed class GenerateSceneVisualsJobHandler(
             plans.Count,
             generated.Count,
             plans.Count - generated.Count,
-            generated);
+            generated,
+            routing);
 
         return result.Serialize();
     }
@@ -176,27 +193,26 @@ public sealed class GenerateSceneVisualsJobHandler(
         }
         catch (SceneVisualGenerationException exception)
         {
-            // The workflow vocabulary is enqueue-facing; the handler surfaces the
-            // same stable code through the job execution boundary.
-            throw new JobExecutionException(
-                exception.ErrorCode,
-                exception.Message,
-                exception);
+            throw Error(exception.ErrorCode, exception.Message, exception);
         }
     }
 
     /// <summary>
-    /// Derives the animation clip duration from the same narration-aware allocation
-    /// the renderer uses. Narration is optional here: if it is absent or unreadable,
-    /// the deterministic animation floor remains the fallback.
+    /// Derives per-scene durations from the shared narration-aware allocation. Every
+    /// routed engine is animated (or has motion treatment), so all scenes use the
+    /// higher animation floor; when narration is absent the deterministic floor fits.
     /// </summary>
-    private async Task<double[]?> TryResolveAnimationDurationsAsync(
+    private async Task<double[]> ResolveDurationsAsync(
         Guid contentProjectId,
         Guid storyboardJobId,
         GenerateStoryboardResult storyboard,
-        IReadOnlyList<SceneVisualPlan> plans,
+        bool[] animated,
         CancellationToken cancellationToken)
     {
+        var fallback = storyboard.Scenes
+            .Select(_ => SceneVisualPlanner.AnimationDurationSeconds)
+            .ToArray();
+
         try
         {
             var narration = await narrations.FindByProjectIdAsync(
@@ -204,7 +220,7 @@ public sealed class GenerateSceneVisualsJobHandler(
                 cancellationToken);
             if (narration is null || narration.SourceJobId != storyboardJobId)
             {
-                return null;
+                return fallback;
             }
 
             var narrationFile = fileStore.Register(narration.Path);
@@ -213,22 +229,22 @@ public sealed class GenerateSceneVisualsJobHandler(
                 cancellationToken);
             if (inspection.DurationSeconds <= 0)
             {
-                return null;
+                return fallback;
             }
 
             return SceneTiming.AllocateForScenes(
                 storyboard.Scenes.Select(scene => scene.Heading).ToArray(),
                 storyboard.Scenes.Select(scene => scene.Visual).ToArray(),
-                plans.Select(plan => IsAnimated(plan.Engine)).ToArray(),
+                animated,
                 inspection.DurationSeconds);
         }
         catch (AssetCollectionException)
         {
-            return null;
+            return fallback;
         }
         catch (ProcessExecutionException)
         {
-            return null;
+            return fallback;
         }
     }
 
@@ -237,84 +253,134 @@ public sealed class GenerateSceneVisualsJobHandler(
         int sceneIndex,
         Guid contentProjectId,
         Guid storyboardJobId,
-        double? animationDurationSeconds,
         CancellationToken cancellationToken)
     {
-        var animated = IsAnimated(plan.Engine);
-        var aiImage = plan.Engine == SceneVisualEngine.AiImage;
+        var duration = plan.Direction?.DurationSeconds
+            ?? SceneVisualPlanner.AnimationDurationSeconds;
+        var animated = plan.Engine != SceneVisualEngine.SvgStill;
         var extension = animated ? "mp4" : "png";
         var relativePath =
             $"visuals/{contentProjectId:N}/{storyboardJobId:N}/scene_{sceneIndex}.{extension}";
 
         try
         {
-            byte[] bytes;
-            if (plan.Engine == SceneVisualEngine.ManimAnimation)
+            var bytes = plan.Engine switch
             {
-                var animation = plan.Animation
-                    ?? throw new JobExecutionException(
-                        "visual_plan_invalid",
-                        $"Scene {sceneIndex} selected animation without parameters.");
-                if (animationDurationSeconds is > 0)
-                {
-                    animation = animation with { DurationSeconds = animationDurationSeconds.Value };
-                }
+                SceneVisualEngine.ManimAnimation => await RenderManimAsync(plan, cancellationToken),
+                SceneVisualEngine.ThreeD => await RenderThreeDAsync(
+                    plan,
+                    storyboardJobId,
+                    sceneIndex,
+                    duration,
+                    cancellationToken),
+                SceneVisualEngine.AiImage => await RenderAiImageAsync(
+                    plan,
+                    storyboardJobId,
+                    sceneIndex,
+                    duration,
+                    cancellationToken),
+                SceneVisualEngine.AnimatedSvg => await svgRenderer.RenderAnimationAsync(
+                    plan.Brief,
+                    plan.Direction?.Choreography ?? SceneChoreography.Empty,
+                    duration,
+                    cancellationToken),
+                _ => await svgRenderer.RenderPngAsync(plan.Brief, cancellationToken)
+            };
 
-                bytes = await manimRenderer.RenderAsync(
-                    plan.Template,
-                    animation,
-                    cancellationToken);
-            }
-            else if (plan.Engine == SceneVisualEngine.ThreeD)
-            {
-                if (plan.ThreeDTemplate == SceneThreeDTemplate.None)
-                {
-                    throw new JobExecutionException(
-                        "visual_plan_invalid",
-                        $"Scene {sceneIndex} selected 3D without a template.");
-                }
-
-                var duration = animationDurationSeconds is > 0
-                    ? animationDurationSeconds.Value
-                    : SceneVisualPlanner.AnimationDurationSeconds;
-                bytes = await threeDRenderer.RenderAsync(
-                    new ThreeDRenderRequest(
-                        plan.ThreeDTemplate,
-                        plan.Brief.Palette,
-                        duration,
-                        DeriveSeed(storyboardJobId, sceneIndex)),
-                    cancellationToken);
-            }
-            else if (aiImage)
-            {
-                bytes = await imageProvider.GenerateAsync(
-                    new ImageGenerationRequest(
-                        SceneImagePrompt.Build(plan.Brief),
-                        DeriveSeed(storyboardJobId, sceneIndex)),
-                    cancellationToken);
-            }
-            else
-            {
-                bytes = await svgRenderer.RenderPngAsync(plan.Brief, cancellationToken);
-            }
-
-            return (
-                relativePath,
-                bytes,
-                animated ? AssetType.Video : AssetType.Image);
+            return (relativePath, bytes, animated ? AssetType.Video : AssetType.Image);
         }
         catch (RenderVideoException exception)
         {
-            throw new JobExecutionException(
-                exception.ErrorCode,
-                exception.Message,
-                exception);
+            throw Error(exception.ErrorCode, exception.Message, exception);
         }
     }
 
+    private async Task<byte[]> RenderManimAsync(
+        SceneVisualPlan plan,
+        CancellationToken cancellationToken)
+    {
+        var animation = plan.Animation
+            ?? throw Error(
+                "visual_plan_invalid",
+                $"Scene {plan.Brief.SceneIndex} selected Manim without parameters.");
+
+        return await manimRenderer.RenderAsync(plan.Template, animation, cancellationToken);
+    }
+
+    private async Task<byte[]> RenderThreeDAsync(
+        SceneVisualPlan plan,
+        Guid storyboardJobId,
+        int sceneIndex,
+        double durationSeconds,
+        CancellationToken cancellationToken)
+    {
+        if (plan.ThreeDTemplate == SceneThreeDTemplate.None)
+        {
+            throw Error(
+                "visual_plan_invalid",
+                $"Scene {sceneIndex} selected 3D without a template.");
+        }
+
+        return await threeDRenderer.RenderAsync(
+            new ThreeDRenderRequest(
+                plan.ThreeDTemplate,
+                plan.Brief.Palette,
+                durationSeconds,
+                DeriveSeed(storyboardJobId, sceneIndex)),
+            cancellationToken);
+    }
+
+    private async Task<byte[]> RenderAiImageAsync(
+        SceneVisualPlan plan,
+        Guid storyboardJobId,
+        int sceneIndex,
+        double durationSeconds,
+        CancellationToken cancellationToken)
+    {
+        var image = await imageProvider.GenerateAsync(
+            new ImageGenerationRequest(
+                SceneImagePrompt.Build(plan.Brief),
+                DeriveSeed(storyboardJobId, sceneIndex)),
+            cancellationToken);
+
+        // A still alone is not a scene: apply the repository-owned motion treatment.
+        return await svgRenderer.RenderImageMotionAsync(
+            image,
+            ImageOverlayLabel,
+            plan.Brief.Palette,
+            durationSeconds,
+            cancellationToken);
+    }
+
+    private async Task<AssetFileInfo> WriteAsync(
+        string relativePath,
+        byte[] bytes,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await fileStore.WriteAsync(relativePath, bytes, cancellationToken);
+        }
+        catch (AssetCollectionException exception)
+        {
+            throw Error("visual_asset_write_failed", exception.Message, exception);
+        }
+    }
+
+    private static SceneVisualRouting Route(
+        SceneVisualPlan plan,
+        string engine,
+        string status) =>
+        new(
+            plan.Brief.SceneIndex,
+            plan.IntendedEngine.ToString(),
+            engine,
+            status,
+            TemplateName(plan));
+
     /// <summary>
     /// Engine-appropriate template name for the recorded result: the Manim template
-    /// for animation, the Blender template for 3D, and <c>None</c> for stills.
+    /// for animation, the Blender template for 3D, and <c>None</c> otherwise.
     /// </summary>
     private static string TemplateName(SceneVisualPlan plan) =>
         plan.Engine switch
@@ -323,13 +389,6 @@ public sealed class GenerateSceneVisualsJobHandler(
             SceneVisualEngine.ThreeD => plan.ThreeDTemplate.ToString(),
             _ => SceneAnimationTemplate.None.ToString()
         };
-
-    /// <summary>
-    /// Animated engines produce a per-scene clip (and therefore use the higher
-    /// timing floor); the remaining engines produce a still image.
-    /// </summary>
-    private static bool IsAnimated(SceneVisualEngine engine) =>
-        engine is SceneVisualEngine.ManimAnimation or SceneVisualEngine.ThreeD;
 
     /// <summary>
     /// Stable per-scene seed so a re-run of the same storyboard reproduces the same
@@ -343,4 +402,10 @@ public sealed class GenerateSceneVisualsJobHandler(
             hash);
         return (long)(BitConverter.ToUInt64(hash) & long.MaxValue);
     }
+
+    private static JobExecutionException Error(
+        string errorCode,
+        string message,
+        Exception? innerException = null) =>
+        new(errorCode, message, innerException);
 }
