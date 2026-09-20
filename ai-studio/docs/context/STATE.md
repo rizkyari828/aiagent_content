@@ -89,6 +89,7 @@ Video #1 is DONE, including the durable animated visual pipeline: SceneVisualPla
 - PASS - `/health/ready` returns HTTP 200 (PostgreSQL Healthy) and the persistent job worker is active.
 
 ## Known issues and next task
+- **Follow-up visual polish #1 (NON-BLOCKING)**: the Manim `process_flow` template renders a large unintended hourglass/bow-tie shaped overlay through the centre of the frame that persists across frames and tints with the scene palette. Clearly visible in the Download/Install Ollama and Tarik Model AI Ringan scenes of the `narrative-sync-v1` review MP4. Investigate the `process_flow` shapes/overlay next; intentionally not fixed in the Narrative Sync v1 commit.
 
 - `FinalVideoQa` `Job.Result` is persisted but not deserialized by `GET /api/jobs/{jobId}` (`GenerateIdeaWorkflow.FindJobAsync` omits `JobType.FinalVideoQa`); read it from PostgreSQL until a focused fix is authorised.
 - Durable visual generation now exists (`GenerateSceneVisuals`), but the `SceneVisualBrief` direction is still the deterministic `SceneVisualPlanner` keyword heuristic. Letting Qwen emit structured visual direction through the same plan shape remains a future step; it is not required for Phase 3/4.
