@@ -48,7 +48,16 @@ public sealed class FfmpegVideoRenderer : IVideoRenderer
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
         var subtitlePath = request.SubtitleAbsolutePath;
         string? derivedSubtitlePath = null;
-        if (request.SubtitleAbsolutePath is not null
+        if (!string.IsNullOrWhiteSpace(request.SubtitleSrtContent))
+        {
+            derivedSubtitlePath = $"{outputPath}.{Guid.NewGuid():N}.srt";
+            await File.WriteAllTextAsync(
+                derivedSubtitlePath,
+                request.SubtitleSrtContent!,
+                cancellationToken);
+            subtitlePath = derivedSubtitlePath;
+        }
+        else if (request.SubtitleAbsolutePath is not null
             && request.SubtitleCueTexts is { Count: > 0 } cues
             && cues.Count == request.Scenes.Count)
         {
@@ -69,7 +78,7 @@ public sealed class FfmpegVideoRenderer : IVideoRenderer
             options.FrameRate,
             narrationDuration,
             options.Transition,
-            options.TransitionDurationSeconds,
+            request.TransitionDurationSeconds ?? options.TransitionDurationSeconds,
             options.EnableMotion,
             subtitlePath,
             options.Subtitle,

@@ -12,9 +12,10 @@ namespace AIStudio.Application.Jobs.RenderVideo;
 /// <summary>
 /// Durable render. The audio input is the mastered audio produced by GenerateAudio
 /// when it exists and validates; otherwise the renderer falls back to the legacy
-/// per-project narration track, so pre-orbestration projects keep working
-/// unchanged. Scene assets, transitions, subtitles and per-scene timing are
-/// untouched.
+/// per-project narration track. When the audio workspace records per-scene
+/// narrative timing, the renderer uses those speech-driven scene durations and
+/// derives phrase-level subtitles from the same approved narration, so speech,
+/// scene timing and subtitles share one source of truth.
 /// </summary>
 public sealed class RenderVideoJobHandler(
     IContentProjectReader contentProjects,
@@ -65,21 +66,29 @@ public sealed class RenderVideoJobHandler(
             payload.StoryboardJobId,
             cancellationToken);
 
+        var manifest = await audioWorkspace.TryReadManifestAsync(
+            job.ContentProjectId,
+            payload.StoryboardJobId,
+            cancellationToken);
+
         var sceneInputs = await BuildSceneInputsAsync(
             job.ContentProjectId,
             payload.StoryboardJobId,
             storyboard,
+            manifest?.Scenes,
             cancellationToken);
 
         var audio = await ResolveAudioAsync(
             job.ContentProjectId,
             payload.StoryboardJobId,
+            manifest,
             cancellationToken);
 
         var subtitle = await ResolveSubtitleAsync(
             job.ContentProjectId,
             payload.StoryboardJobId,
             storyboard,
+            manifest?.Scenes,
             cancellationToken);
 
         var relativeOutput = BuildOutputPath(
@@ -96,7 +105,9 @@ public sealed class RenderVideoJobHandler(
                     audio.AbsolutePath,
                     relativeOutput,
                     subtitle.Path,
-                    subtitle.CueTexts),
+                    subtitle.CueTexts,
+                    subtitle.SrtContent,
+                    manifest?.TransitionSeconds > 0 ? manifest.TransitionSeconds : null),
                 cancellationToken);
         }
         catch (RenderVideoException exception)
@@ -120,10 +131,11 @@ public sealed class RenderVideoJobHandler(
             audio.NarrationContentHash,
             subtitle.TrackId,
             subtitle.ContentHash,
-            subtitle.Path is not null,
+            subtitle.Path is not null || subtitle.SrtContent is not null,
             audio.Source,
             audio.MasteredPath,
-            audio.MasteredContentHash);
+            audio.MasteredContentHash,
+            subtitle.Source);
 
         return result.Serialize();
     }
@@ -132,12 +144,15 @@ public sealed class RenderVideoJobHandler(
         Guid contentProjectId,
         Guid storyboardJobId,
         GenerateStoryboardResult storyboard,
+        IReadOnlyList<AudioSceneStage>? sceneTimings,
         CancellationToken cancellationToken)
     {
         var registered = await assets.ListByProjectAsync(
             contentProjectId,
             cancellationToken);
         var byScene = registered.ToDictionary(asset => asset.SceneIndex);
+        var timingByScene = (sceneTimings ?? [])
+            .ToDictionary(scene => scene.SceneIndex);
         var sceneInputs = new List<SceneMediaInput>(storyboard.Scenes.Count);
 
         for (var sceneIndex = 0; sceneIndex < storyboard.Scenes.Count; sceneIndex++)
@@ -168,7 +183,12 @@ public sealed class RenderVideoJobHandler(
                 ? SceneVisualKind.Graphic
                 : SceneVisualKind.Photographic;
 
-            // Narration-aware timing fallback: longer scene text gets more time.
+            // Speech-driven scene duration when the audio workspace provides it;
+            // otherwise the renderer falls back to narration-aware allocation.
+            double? duration = timingByScene.TryGetValue(sceneIndex, out var timing)
+                && timing.VisualDurationSeconds > 0
+                    ? timing.VisualDurationSeconds
+                    : null;
             var scene = storyboard.Scenes[sceneIndex];
             var weight = SceneTiming.WeightFor(scene.Heading, scene.Visual);
 
@@ -176,7 +196,8 @@ public sealed class RenderVideoJobHandler(
                 assetFile.AbsolutePath,
                 asset.Type,
                 VisualKind: visualKind,
-                Weight: weight));
+                Weight: weight,
+                DurationSeconds: duration));
         }
 
         return sceneInputs;
@@ -189,12 +210,9 @@ public sealed class RenderVideoJobHandler(
     private async Task<ResolvedAudio> ResolveAudioAsync(
         Guid contentProjectId,
         Guid storyboardJobId,
+        AudioProductionManifest? manifest,
         CancellationToken cancellationToken)
     {
-        var manifest = await audioWorkspace.TryReadManifestAsync(
-            contentProjectId,
-            storyboardJobId,
-            cancellationToken);
         var master = await audioWorkspace.TryResolveStageAsync(
             manifest,
             AudioProductionWorkspace.MasterStage,
@@ -243,18 +261,48 @@ public sealed class RenderVideoJobHandler(
             MasteredContentHash: null);
     }
 
+    /// <summary>
+    /// When the audio workspace records per-scene narrative timing, subtitles are
+    /// derived from the same approved narration text and constrained to each scene.
+    /// Otherwise the canonical operator subtitle track is used as a fallback.
+    /// </summary>
     private async Task<ResolvedSubtitle> ResolveSubtitleAsync(
         Guid contentProjectId,
         Guid storyboardJobId,
         GenerateStoryboardResult storyboard,
+        IReadOnlyList<AudioSceneStage>? sceneTimings,
         CancellationToken cancellationToken)
     {
+        if (sceneTimings is { Count: > 0 })
+        {
+            var slices = sceneTimings
+                .Where(scene => !string.IsNullOrWhiteSpace(scene.NarrationText))
+                .OrderBy(scene => scene.SceneIndex)
+                .Select(scene => new NarrationSubtitleScene(
+                    scene.SceneIndex,
+                    scene.NarrationText,
+                    scene.NarrationStartSeconds,
+                    scene.NarrationDurationSeconds))
+                .ToArray();
+
+            if (slices.Length > 0)
+            {
+                return new ResolvedSubtitle(
+                    Path: null,
+                    TrackId: null,
+                    ContentHash: null,
+                    CueTexts: null,
+                    SrtContent: SubtitleTimeline.BuildFromNarration(slices),
+                    Source: "narrative");
+            }
+        }
+
         var subtitle = await subtitles.FindByProjectIdAsync(
             contentProjectId,
             cancellationToken);
         if (subtitle is null || subtitle.SourceJobId != storyboardJobId)
         {
-            return new ResolvedSubtitle(null, null, null, null);
+            return new ResolvedSubtitle(null, null, null, null, null, "none");
         }
 
         var subtitleFile = ReadVerified(
@@ -263,9 +311,6 @@ public sealed class RenderVideoJobHandler(
             "render_subtitle_unreadable",
             "render_subtitle_hash_mismatch");
 
-        // Re-time the operator's own cues to the derived scene boundaries.
-        // Only a one-cue-per-scene mapping is re-timed; any other shape keeps
-        // the canonical timing as the deterministic fallback.
         IReadOnlyList<string>? cueTexts = null;
         var canonicalCues = SubtitleTimeline.ReadCueTexts(
             await File.ReadAllTextAsync(subtitleFile.AbsolutePath, cancellationToken));
@@ -278,7 +323,9 @@ public sealed class RenderVideoJobHandler(
             subtitleFile.AbsolutePath,
             subtitle.Id,
             subtitleFile.ContentHash,
-            cueTexts);
+            cueTexts,
+            null,
+            "canonical");
     }
 
     private async Task<GenerateStoryboardResult> FindStoryboardAsync(
@@ -365,5 +412,7 @@ public sealed class RenderVideoJobHandler(
         string? Path,
         Guid? TrackId,
         string? ContentHash,
-        IReadOnlyList<string>? CueTexts);
+        IReadOnlyList<string>? CueTexts,
+        string? SrtContent,
+        string Source);
 }

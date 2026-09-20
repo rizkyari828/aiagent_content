@@ -13,3 +13,12 @@ public sealed record SceneVisualPlan(
     SceneVisualDirection? Direction = null,
     bool IsFallback = false,
     SceneVisualEngine IntendedEngine = SceneVisualEngine.SvgStill);
+
+/// <summary>
+/// The narration window inside one scene. Beats are scheduled within this window so
+/// motion explains the words currently being spoken.
+/// </summary>
+public sealed record SceneNarrationWindow(
+    int SceneIndex,
+    double NarrationStartWithinScene,
+    double NarrationDurationSeconds);

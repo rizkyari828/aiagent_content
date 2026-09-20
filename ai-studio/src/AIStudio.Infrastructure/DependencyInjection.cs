@@ -28,6 +28,7 @@ using AIStudio.Infrastructure.Persistence;
 using AIStudio.Infrastructure.Rendering;
 using AIStudio.Infrastructure.Rendering.AudioGeneration;
 using AIStudio.Infrastructure.Rendering.AudioMixing;
+using AIStudio.Infrastructure.Rendering.AudioProduction;
 using AIStudio.Infrastructure.Scripts;
 using AIStudio.Infrastructure.Subtitles;
 using Microsoft.EntityFrameworkCore;
@@ -361,6 +362,7 @@ public static class DependencyInjection
         // Deterministic workspace layout + narrow reuse manifest shared by the
         // GenerateAudio handler and the renderer.
         services.AddSingleton<AudioProductionWorkspace>();
+        services.AddSingleton<IAudioNarrationAssembler, FfmpegNarrationAssembler>();
         services.AddScoped<IJobHandler, GenerateAudioJobHandler>();
         services.AddScoped<GenerateAudioWorkflow>();
     }

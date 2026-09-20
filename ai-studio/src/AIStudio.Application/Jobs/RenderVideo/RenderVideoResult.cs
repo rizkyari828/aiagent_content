@@ -25,7 +25,8 @@ public sealed record RenderVideoResult(
     bool SubtitleBurnedIn = false,
     string AudioSource = RenderAudioSources.Narration,
     string? MasteredAudioPath = null,
-    string? MasteredAudioContentHash = null)
+    string? MasteredAudioContentHash = null,
+    string? SubtitleSource = null)
 {
     public const int ContentHashLength = 64;
     public const int MaxOutputPathLength = 1024;
@@ -96,12 +97,6 @@ public sealed record RenderVideoResult(
         {
             throw InvalidResult(
                 "RenderVideo result subtitle fields must both be present or both be absent.");
-        }
-
-        if (result.SubtitleBurnedIn && result.SubtitleTrackId is null)
-        {
-            throw InvalidResult(
-                "RenderVideo result cannot be marked subtitleBurnedIn without a subtitle track.");
         }
 
         if ((result.NarrationTrackId is null) != (result.NarrationContentHash is null))

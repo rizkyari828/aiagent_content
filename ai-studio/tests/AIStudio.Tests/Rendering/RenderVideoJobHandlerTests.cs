@@ -5,6 +5,7 @@ using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Application.Jobs.RenderVideo;
 using AIStudio.Application.Rendering;
 using AIStudio.Application.Rendering.AudioProduction;
+using AIStudio.Application.Rendering.Narration;
 using AIStudio.Domain.Assets;
 using AIStudio.Domain.Narration;
 using AIStudio.Domain.Subtitles;
@@ -700,6 +701,107 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
                         0,
                         0)
                 }),
+            TestContext.Current.CancellationToken);
+
+        return workspace;
+    }
+
+    [Fact]
+    public async Task Handler_UsesSpeechDrivenDurationsAndNarrativeSubtitles()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateStoryboardTestData.ValidResult);
+        var scene0 = new byte[] { 1 };
+        var scene1 = new byte[] { 2 };
+        WriteFile("scene-0.png", scene0);
+        WriteFile("scene-1.png", scene1);
+        var processRunner = FakeFfmpeg.WritingOutput([42, 42], durationSeconds: 4.25);
+        var workspace = await SeedNarrativeAsync(
+            processRunner,
+            projectId,
+            storyboard.Id);
+
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            [
+                RenderVideoTestData.SceneAsset(projectId, storyboard.Id, 0, "scene-0.png", scene0),
+                RenderVideoTestData.SceneAsset(projectId, storyboard.Id, 1, "scene-1.png", scene1)
+            ],
+            narration: null,
+            processRunner,
+            workspace: workspace);
+
+        var resultJson = await handler.ExecuteAsync(
+            RenderVideoTestData.CreateJob(projectId, storyboard.Id),
+            TestContext.Current.CancellationToken);
+
+        var result = RenderVideoResult.Deserialize(resultJson);
+        Assert.Equal(RenderAudioSources.Mastered, result.AudioSource);
+        Assert.Equal("narrative", result.SubtitleSource);
+        Assert.Null(result.SubtitleTrackId);
+        Assert.True(result.SubtitleBurnedIn);
+
+        // Speech-driven scene durations reach the planner: crossfade offset is
+        // scene0 (3.2s) minus the transition (0.35s).
+        var ffmpeg = Assert.Single(
+            processRunner.Requests,
+            request => request.FileName.Contains("ffmpeg", StringComparison.OrdinalIgnoreCase));
+        var filter = Filter(ffmpeg.Arguments);
+        Assert.Contains("offset=2.85", filter);
+    }
+
+    private async Task<AudioProductionWorkspace> SeedNarrativeAsync(
+        IProcessRunner processRunner,
+        Guid projectId,
+        Guid storyboardJobId)
+    {
+        var storage = Options.Create(new AssetStorageOptions { RootPath = root });
+        var workspace = new AudioProductionWorkspace(
+            new LocalAssetFileStore(storage),
+            new FfprobeMediaInspector(
+                Options.Create(new RenderingOptions()),
+                processRunner));
+
+        var masterBytes = new byte[] { 9, 9 };
+        var masterRelative = AudioProductionWorkspace.FilePath(
+            projectId,
+            storyboardJobId,
+            AudioProductionWorkspace.MasterFileName);
+        WriteFile(masterRelative, masterBytes);
+
+        var scenes = new[]
+        {
+            new AudioSceneStage(
+                0, "narration/scene_0.wav", new string('a', 64), 1, 48000, 1,
+                2.95, 0.25, 0.0, 3.2, 0.25, 0.45, "Narration for Why local AI."),
+            new AudioSceneStage(
+                1, "narration/scene_1.wav", new string('b', 64), 1, 48000, 1,
+                0.95, 2.85, 2.85, 1.4, 0.25, 0.45, "Narration for Run the workflow.")
+        };
+
+        await workspace.SaveManifestAsync(
+            projectId,
+            storyboardJobId,
+            new AudioProductionManifest(
+                AudioProductionWorkspace.Version,
+                new Dictionary<string, AudioProductionStage>
+                {
+                    [AudioProductionWorkspace.MasterStage] = new AudioProductionStage(
+                        "master-fingerprint",
+                        masterRelative,
+                        RenderVideoTestData.Hash(masterBytes),
+                        masterBytes.Length,
+                        4.25,
+                        0,
+                        0)
+                },
+                scenes,
+                NarrativeTiming.TransitionSeconds,
+                3.9,
+                4.25),
             TestContext.Current.CancellationToken);
 
         return workspace;

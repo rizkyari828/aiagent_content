@@ -2,11 +2,14 @@ using System.Text.Json;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.GenerateAudio;
+using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Application.Rendering;
 using AIStudio.Application.Rendering.AudioGeneration;
 using AIStudio.Application.Rendering.AudioMixing;
 using AIStudio.Application.Rendering.AudioProduction;
+using AIStudio.Application.Rendering.Narration;
 using AIStudio.Domain.Jobs;
+using AIStudio.Domain.Scripts;
 using AIStudio.Infrastructure.Assets;
 using AIStudio.Tests.Assets;
 using AIStudio.Tests.Jobs;
@@ -37,7 +40,7 @@ public sealed class GenerateAudioJobHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task ExecuteAsync_GeneratesAllThreeStages()
+    public async Task ExecuteAsync_UsesReviewedScriptNarrationPerScene()
     {
         var projectId = Guid.NewGuid();
         var storyboard = Storyboard(projectId);
@@ -48,20 +51,30 @@ public sealed class GenerateAudioJobHandlerTests : IDisposable
 
         var result = await RunAsync(handler, projectId, storyboard.Id);
 
-        Assert.Equal(storyboard.Id, result.StoryboardJobId);
+        // One VoxCPM clip per scene, spoken from the reviewed narration.
+        Assert.Equal(2, speech.CallCount);
+        Assert.Equal("Narration for Why local AI.", speech.Requests[0].Text);
+        Assert.Equal("Narration for Run the workflow.", speech.Requests[1].Text);
+        Assert.All(speech.Requests, request => Assert.Equal(SpeechVoiceProfile.Formal, request.Voice));
+
         Assert.False(result.NarrationReused);
         Assert.False(result.MusicReused);
         Assert.False(result.MasterReused);
-        Assert.Equal(1, speech.CallCount);
         Assert.Equal(1, music.CallCount);
         Assert.Equal(1, mixer.CallCount);
-
-        Assert.Contains("Local AI Storyboard", speech.Requests[0].Text);
-        Assert.Contains("Why local AI", speech.Requests[0].Text);
         Assert.Equal(90, music.Requests[0].Bpm);
         Assert.Equal(42, music.Requests[0].Seed);
         Assert.True(music.Requests[0].Instrumental);
         Assert.Equal(12, music.Requests[0].DurationSeconds);
+
+        Assert.NotNull(result.Scenes);
+        Assert.Equal(2, result.Scenes!.Count);
+        Assert.Equal(0, result.Scenes[0].SceneIndex);
+        Assert.Equal("Why local AI", result.Scenes[0].Heading);
+        Assert.Equal(2, result.Scenes[0].NarrationDurationSeconds);
+        Assert.True(result.Scenes[0].VisualDurationSeconds > 2);
+        Assert.Equal("Narration for Why local AI.", result.Scenes[0].NarrationText);
+        Assert.Equal(NarrativeTiming.TransitionSeconds, result.TransitionSeconds);
 
         Assert.Equal(48000, result.Narration.SampleRate);
         Assert.Equal(1, result.Narration.Channels);
@@ -86,13 +99,13 @@ public sealed class GenerateAudioJobHandlerTests : IDisposable
         Assert.True(second.NarrationReused);
         Assert.True(second.MusicReused);
         Assert.True(second.MasterReused);
-        Assert.Equal(1, speech.CallCount);
+        Assert.Equal(2, speech.CallCount);
         Assert.Equal(1, music.CallCount);
         Assert.Equal(1, mixer.CallCount);
     }
 
     [Fact]
-    public async Task ExecuteAsync_MusicFailureThenRetryReusesNarration()
+    public async Task ExecuteAsync_MusicFailureThenRetryReusesSceneNarration()
     {
         var projectId = Guid.NewGuid();
         var storyboard = Storyboard(projectId);
@@ -104,7 +117,7 @@ public sealed class GenerateAudioJobHandlerTests : IDisposable
         var failure = await Assert.ThrowsAsync<JobExecutionException>(
             () => RunAsync(handler, projectId, storyboard.Id));
         Assert.Equal("audio_music_failed", failure.ErrorCode);
-        Assert.Equal(1, speech.CallCount);
+        Assert.Equal(2, speech.CallCount);
         Assert.Equal(0, mixer.CallCount);
 
         music.IsEnabled = true;
@@ -113,7 +126,7 @@ public sealed class GenerateAudioJobHandlerTests : IDisposable
         Assert.True(retry.NarrationReused);
         Assert.False(retry.MusicReused);
         Assert.False(retry.MasterReused);
-        Assert.Equal(1, speech.CallCount);
+        Assert.Equal(2, speech.CallCount);
         Assert.Equal(1, music.CallCount);
         Assert.Equal(1, mixer.CallCount);
     }
@@ -134,7 +147,7 @@ public sealed class GenerateAudioJobHandlerTests : IDisposable
         var failure = await Assert.ThrowsAsync<JobExecutionException>(
             () => RunAsync(handler, projectId, storyboard.Id));
         Assert.Equal("audio_mix_failed", failure.ErrorCode);
-        Assert.Equal(1, speech.CallCount);
+        Assert.Equal(2, speech.CallCount);
         Assert.Equal(1, music.CallCount);
 
         mixer.Handler = null;
@@ -143,14 +156,38 @@ public sealed class GenerateAudioJobHandlerTests : IDisposable
         Assert.True(retry.NarrationReused);
         Assert.True(retry.MusicReused);
         Assert.False(retry.MasterReused);
-        Assert.Equal(1, speech.CallCount);
+        Assert.Equal(2, speech.CallCount);
         Assert.Equal(1, music.CallCount);
-        // Only the failed mix stage is retried.
         Assert.Equal(2, mixer.CallCount);
     }
 
     [Fact]
-    public async Task ExecuteAsync_RegeneratesOnlyMissingStage()
+    public async Task ExecuteAsync_RegeneratesOnlyChangedSceneNarration()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = Storyboard(projectId);
+        var speech = new FakeSpeechSynthesisProvider(root);
+        var music = new FakeMusicGenerationProvider(root);
+        var mixer = new FakeAudioMixer(root);
+        var handler = CreateHandler(projectId, storyboard, speech, music, mixer);
+
+        await RunAsync(handler, projectId, storyboard.Id);
+        File.Delete(Path.Combine(
+            root,
+            AudioProductionWorkspace.SceneNarrationPath(projectId, storyboard.Id, 0)));
+
+        var retry = await RunAsync(handler, projectId, storyboard.Id);
+
+        // Only scene 0's clip is regenerated; identical bytes keep the rest valid.
+        Assert.Equal(3, speech.CallCount);
+        Assert.Equal(1, music.CallCount);
+        Assert.Equal(1, mixer.CallCount);
+        Assert.True(retry.MusicReused);
+        Assert.True(retry.MasterReused);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RegeneratesAssembledNarrationWhenMissing()
     {
         var projectId = Guid.NewGuid();
         var storyboard = Storyboard(projectId);
@@ -169,7 +206,6 @@ public sealed class GenerateAudioJobHandlerTests : IDisposable
 
         var retry = await RunAsync(handler, projectId, storyboard.Id);
 
-        // Same narration bytes -> same hash -> music and master stay valid.
         Assert.False(retry.NarrationReused);
         Assert.True(retry.MusicReused);
         Assert.True(retry.MasterReused);
@@ -179,7 +215,7 @@ public sealed class GenerateAudioJobHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task ExecuteAsync_ChangedVoiceInvalidatesNarrationAndMixOnly()
+    public async Task ExecuteAsync_ChangedVoiceRegeneratesScenesAndMix()
     {
         var projectId = Guid.NewGuid();
         var storyboard = Storyboard(projectId);
@@ -198,9 +234,42 @@ public sealed class GenerateAudioJobHandlerTests : IDisposable
         Assert.False(retry.NarrationReused);
         Assert.True(retry.MusicReused);
         Assert.False(retry.MasterReused);
-        Assert.Equal(2, speech.CallCount);
+        Assert.Equal(4, speech.CallCount);
         Assert.Equal(1, music.CallCount);
         Assert.Equal(2, mixer.CallCount);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RejectsMissingOrDraftReviewedScript()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = Storyboard(projectId);
+
+        var missing = await Assert.ThrowsAsync<JobExecutionException>(
+            () => RunAsync(
+                CreateHandler(
+                    projectId,
+                    storyboard,
+                    new FakeSpeechSynthesisProvider(root),
+                    new FakeMusicGenerationProvider(root),
+                    new FakeAudioMixer(root),
+                    includeScript: false),
+                projectId,
+                storyboard.Id));
+        Assert.Equal("audio_narration_source_missing", missing.ErrorCode);
+
+        var draft = await Assert.ThrowsAsync<JobExecutionException>(
+            () => RunAsync(
+                CreateHandler(
+                    projectId,
+                    storyboard,
+                    new FakeSpeechSynthesisProvider(root),
+                    new FakeMusicGenerationProvider(root),
+                    new FakeAudioMixer(root),
+                    approved: false),
+                projectId,
+                storyboard.Id));
+        Assert.Equal("audio_narration_source_not_approved", draft.ErrorCode);
     }
 
     [Fact]
@@ -339,6 +408,27 @@ public sealed class GenerateAudioJobHandlerTests : IDisposable
     private static JobSnapshot Storyboard(Guid projectId) =>
         AssetTestData.StoryboardJob(projectId, GenerateStoryboardTestData.ValidResult);
 
+    /// <summary>Reviewed script with one section per storyboard scene.</summary>
+    private static string ReviewedScriptJson(string storyboardResult)
+    {
+        var storyboard = GenerateStoryboardResult.Deserialize(storyboardResult);
+        var content = new
+        {
+            title = storyboard.Title,
+            openingHook = string.Empty,
+            sections = storyboard.Scenes.Select(scene => new
+            {
+                heading = scene.Heading,
+                narration = $"Narration for {scene.Heading}."
+            }),
+            closing = string.Empty
+        };
+
+        return JsonSerializer.Serialize(
+            content,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+    }
+
     private async Task<GenerateAudioResult> RunAsync(
         GenerateAudioJobHandler handler,
         Guid projectId,
@@ -370,18 +460,28 @@ public sealed class GenerateAudioJobHandlerTests : IDisposable
         JobSnapshot storyboard,
         FakeSpeechSynthesisProvider speech,
         FakeMusicGenerationProvider music,
-        FakeAudioMixer mixer)
+        FakeAudioMixer mixer,
+        bool approved = true,
+        bool includeScript = true)
     {
         var storage = Options.Create(new AssetStorageOptions { RootPath = root });
-        var workspace = new AudioProductionWorkspace(
-            new LocalAssetFileStore(storage),
-            new FakeAudioInspector());
+        var fileStore = new LocalAssetFileStore(storage);
+        var workspace = new AudioProductionWorkspace(fileStore, new FakeAudioInspector());
+        var reviewed = includeScript
+            ? GenerateStoryboardTestData.Script(
+                projectId,
+                approved ? ScriptReviewStatus.Approved : ScriptReviewStatus.Draft,
+                ReviewedScriptJson(storyboard.Result!))
+            : null;
 
         return new GenerateAudioJobHandler(
             new StubContentProjectReader(
                 new ContentProjectSnapshot(projectId, "Project", "Brief")),
             new StubJobReader(storyboard),
+            new StubScriptReviewRepository(reviewed),
+            fileStore,
             workspace,
+            new FakeNarrationAssembler(),
             speech,
             music,
             mixer);

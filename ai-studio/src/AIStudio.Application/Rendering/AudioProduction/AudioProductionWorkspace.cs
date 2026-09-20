@@ -23,7 +23,7 @@ public sealed class AudioProductionWorkspace(
     IAssetFileStore fileStore,
     IMediaInspector mediaInspector)
 {
-    public const string Version = "audio-production/v1";
+    public const string Version = "audio-production/v2";
 
     public const string NarrationStage = "narration";
     public const string MusicStage = "music";
@@ -32,6 +32,8 @@ public sealed class AudioProductionWorkspace(
     public const string NarrationFileName = "narration.wav";
     public const string MusicFileName = "music.wav";
     public const string MasterFileName = "master.wav";
+
+    private const string SceneNarrationDirectory = "narration";
 
     private const string ManifestFileName = "manifest.json";
 
@@ -46,6 +48,16 @@ public sealed class AudioProductionWorkspace(
         Guid storyboardJobId,
         string fileName) =>
         $"{Directory(contentProjectId, storyboardJobId)}/{fileName}";
+
+    /// <summary>Logical stage key for one scene's narration fingerprint.</summary>
+    public static string SceneStageName(int sceneIndex) => $"narration.scene.{sceneIndex}";
+
+    /// <summary>Deterministic relative path for one scene's narration clip.</summary>
+    public static string SceneNarrationPath(
+        Guid contentProjectId,
+        Guid storyboardJobId,
+        int sceneIndex) =>
+        $"{Directory(contentProjectId, storyboardJobId)}/{SceneNarrationDirectory}/scene_{sceneIndex}.wav";
 
     public static string ManifestPath(Guid contentProjectId, Guid storyboardJobId) =>
         FilePath(contentProjectId, storyboardJobId, ManifestFileName);

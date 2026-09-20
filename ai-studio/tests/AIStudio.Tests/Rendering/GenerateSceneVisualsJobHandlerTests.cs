@@ -5,6 +5,7 @@ using AIStudio.Application.Jobs.GenerateSceneVisuals;
 using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Application.Narration;
 using AIStudio.Application.Rendering;
+using AIStudio.Application.Rendering.AudioProduction;
 using AIStudio.Application.Rendering.Visuals;
 using AIStudio.Domain.Assets;
 using AIStudio.Domain.Jobs;
@@ -345,6 +346,10 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
             new StubNarrationRepository(null),
             new LocalAssetFileStore(
                 Options.Create(new AssetStorageOptions { RootPath = root })),
+            new AudioProductionWorkspace(
+                new LocalAssetFileStore(
+                    Options.Create(new AssetStorageOptions { RootPath = root })),
+                FakeMediaInspector.Returning(new MediaInspection(0, false, false, false, 0, 0))),
             new StubSceneVisualRenderer(),
             new StubManimSceneRenderer(isEnabled: false),
             new StubImageGenerationProvider(isEnabled: false),
@@ -500,22 +505,28 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
         INarrationRepository? narrations = null,
         IMediaInspector? mediaInspector = null,
         StubImageGenerationProvider? imageProvider = null,
-        StubThreeDRenderingProvider? threeDRenderer = null) =>
-        new(
+        StubThreeDRenderingProvider? threeDRenderer = null)
+    {
+        var inspector = mediaInspector
+            ?? FakeMediaInspector.Returning(new MediaInspection(0, false, false, false, 0, 0));
+        var storage = Options.Create(new AssetStorageOptions { RootPath = root });
+        var fileStore = new LocalAssetFileStore(storage);
+
+        return new GenerateSceneVisualsJobHandler(
             new StubContentProjectReader(
                 new ContentProjectSnapshot(projectId, "Project", "Brief")),
             new StubJobReader(storyboard),
             assets,
             narrations ?? new StubNarrationRepository(null),
-            new LocalAssetFileStore(
-                Options.Create(new AssetStorageOptions { RootPath = root })),
+            fileStore,
+            new AudioProductionWorkspace(fileStore, inspector),
             svg,
             manim ?? new StubManimSceneRenderer(isEnabled: false),
             imageProvider ?? new StubImageGenerationProvider(isEnabled: false),
             threeDRenderer ?? new StubThreeDRenderingProvider(isEnabled: false),
-            mediaInspector ?? FakeMediaInspector.Returning(
-                new MediaInspection(0, false, false, false, 0, 0)),
+            inspector,
             new AssetStubTimeProvider(AssetTestData.Now));
+    }
 
     private void WriteFile(string relativePath, byte[] bytes)
     {

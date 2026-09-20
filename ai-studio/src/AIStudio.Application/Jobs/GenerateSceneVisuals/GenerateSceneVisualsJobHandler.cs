@@ -5,6 +5,7 @@ using AIStudio.Application.Content;
 using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Application.Narration;
 using AIStudio.Application.Rendering;
+using AIStudio.Application.Rendering.AudioProduction;
 using AIStudio.Application.Rendering.Visuals;
 using AIStudio.Domain.Assets;
 using AIStudio.Domain.Jobs;
@@ -26,6 +27,7 @@ public sealed class GenerateSceneVisualsJobHandler(
     IAssetRepository assets,
     INarrationRepository narrations,
     IAssetFileStore fileStore,
+    AudioProductionWorkspace audioWorkspace,
     ISceneVisualRenderer svgRenderer,
     IManimSceneRenderer manimRenderer,
     IImageGenerationProvider imageProvider,
@@ -75,7 +77,7 @@ public sealed class GenerateSceneVisualsJobHandler(
             cancellationToken);
 
         var animated = Enumerable.Repeat(true, storyboard.Scenes.Count).ToArray();
-        var durations = await ResolveDurationsAsync(
+        var timing = await ResolveTimingAsync(
             job.ContentProjectId,
             payload.StoryboardJobId,
             storyboard,
@@ -84,10 +86,11 @@ public sealed class GenerateSceneVisualsJobHandler(
 
         var plans = SceneVisualPlanner.PlanAll(
             storyboard,
-            durations,
+            timing.Durations,
             manimRenderer.IsEnabled,
             imageProvider.IsEnabled,
-            threeDRenderer.IsEnabled);
+            threeDRenderer.IsEnabled,
+            timing.Windows);
 
         var generated = new List<GeneratedSceneVisual>(plans.Count);
         var routing = new List<SceneVisualRouting>(plans.Count);
@@ -198,11 +201,12 @@ public sealed class GenerateSceneVisualsJobHandler(
     }
 
     /// <summary>
-    /// Derives per-scene durations from the shared narration-aware allocation. Every
-    /// routed engine is animated (or has motion treatment), so all scenes use the
-    /// higher animation floor; when narration is absent the deterministic floor fits.
+    /// Prefers the speech-driven per-scene timing recorded by GenerateAudio (scene
+    /// length and narration window). When no audio workspace exists it falls back to
+    /// the shared narration-aware allocation; when narration is absent the
+    /// deterministic animation floor fits.
     /// </summary>
-    private async Task<double[]> ResolveDurationsAsync(
+    private async Task<(double[] Durations, IReadOnlyList<SceneNarrationWindow>? Windows)> ResolveTimingAsync(
         Guid contentProjectId,
         Guid storyboardJobId,
         GenerateStoryboardResult storyboard,
@@ -213,6 +217,26 @@ public sealed class GenerateSceneVisualsJobHandler(
             .Select(_ => SceneVisualPlanner.AnimationDurationSeconds)
             .ToArray();
 
+        var manifest = await audioWorkspace.TryReadManifestAsync(
+            contentProjectId,
+            storyboardJobId,
+            cancellationToken);
+        if (manifest?.Scenes is { Count: > 0 } scenes
+            && scenes.Count == storyboard.Scenes.Count)
+        {
+            var ordered = scenes.OrderBy(scene => scene.SceneIndex).ToArray();
+            var durations = ordered
+                .Select(scene => scene.VisualDurationSeconds)
+                .ToArray();
+            var windows = ordered
+                .Select(scene => new SceneNarrationWindow(
+                    scene.SceneIndex,
+                    scene.NarrationStartSeconds - scene.VisualStartSeconds,
+                    scene.NarrationDurationSeconds))
+                .ToArray();
+            return (durations, windows);
+        }
+
         try
         {
             var narration = await narrations.FindByProjectIdAsync(
@@ -220,7 +244,7 @@ public sealed class GenerateSceneVisualsJobHandler(
                 cancellationToken);
             if (narration is null || narration.SourceJobId != storyboardJobId)
             {
-                return fallback;
+                return (fallback, null);
             }
 
             var narrationFile = fileStore.Register(narration.Path);
@@ -229,22 +253,22 @@ public sealed class GenerateSceneVisualsJobHandler(
                 cancellationToken);
             if (inspection.DurationSeconds <= 0)
             {
-                return fallback;
+                return (fallback, null);
             }
 
-            return SceneTiming.AllocateForScenes(
+            return (SceneTiming.AllocateForScenes(
                 storyboard.Scenes.Select(scene => scene.Heading).ToArray(),
                 storyboard.Scenes.Select(scene => scene.Visual).ToArray(),
                 animated,
-                inspection.DurationSeconds);
+                inspection.DurationSeconds), null);
         }
         catch (AssetCollectionException)
         {
-            return fallback;
+            return (fallback, null);
         }
         catch (ProcessExecutionException)
         {
-            return fallback;
+            return (fallback, null);
         }
     }
 

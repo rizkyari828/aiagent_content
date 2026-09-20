@@ -1,36 +1,41 @@
 using System.Globalization;
-using System.Text;
 using AIStudio.Application.Assets;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs.GenerateStoryboard;
+using AIStudio.Application.Rendering;
 using AIStudio.Application.Rendering.AudioGeneration;
 using AIStudio.Application.Rendering.AudioMixing;
 using AIStudio.Application.Rendering.AudioProduction;
+using AIStudio.Application.Rendering.Narration;
+using AIStudio.Application.Scripts;
 using AIStudio.Domain.Jobs;
+using AIStudio.Domain.Scripts;
 
 namespace AIStudio.Application.Jobs.GenerateAudio;
 
 /// <summary>
-/// Durable audio production with three internally staged, retry-safe steps:
-/// narration (VoxCPM2), background music (ACE-Step) and the final mastered mix
-/// (the CPU-only mixer). Each stage records its effective input fingerprint in the
-/// workspace manifest, so a retry reuses every artifact whose inputs are unchanged
-/// and regenerates only the missing or invalidated stages.
+/// Durable audio production with staged, retry-safe steps: per-scene narration from
+/// the approved reviewed script (VoxCPM2), deterministic assembly into one narration
+/// track, background music (ACE-Step) and the mastered mix (CPU-only mixer). The
+/// reviewed narration is the single source of truth for speech, subtitles, scene
+/// timing and choreography. Each stage records its effective input fingerprint in
+/// the workspace manifest, so a retry regenerates only changed or missing stages.
 /// <para>
-/// This handler owns no GPU lease: the speech and music providers acquire the
-/// shared resource gate around their own processes, and the mixer is CPU-only.
+/// This handler owns no GPU lease: the providers acquire the shared gate around
+/// their own processes and the assembler/mixer are CPU-only.
 /// </para>
 /// </summary>
 public sealed class GenerateAudioJobHandler(
     IContentProjectReader contentProjects,
     IJobReader jobs,
+    IScriptReviewRepository scripts,
+    IAssetFileStore fileStore,
     AudioProductionWorkspace workspace,
+    IAudioNarrationAssembler assembler,
     ISpeechSynthesisProvider speechProvider,
     IMusicGenerationProvider musicProvider,
     IAudioMixer audioMixer) : IJobHandler
 {
-    // Fixed, deterministic v2 audio defaults. A changed value changes the stage
-    // fingerprint and therefore forces regeneration of exactly that stage.
     private const string MusicBrief =
         "instrumental modern ambient electronic background music, warm futuristic technology mood, "
         + "low energy, clean production, subtle synth textures, soft rhythmic pulse, "
@@ -41,9 +46,7 @@ public sealed class GenerateAudioJobHandler(
     private const double MinMusicSeconds = 5;
     private const double MaxMusicSeconds = 120;
 
-    // Stage versions force regeneration when the production behavior changes even
-    // though the literal content inputs did not.
-    private const string SpeechStageVersion = "voxcpm2/v1";
+    private const string SpeechStageVersion = "voxcpm2/v2";
     private const string MusicStageVersion = "acestep-turbo/v1";
     private const string MixStageVersion = "audio-mixing/v1";
 
@@ -86,9 +89,12 @@ public sealed class GenerateAudioJobHandler(
             payload.StoryboardJobId,
             cancellationToken);
 
-        var voice = ParseVoice(payload.VoiceProfile);
-        var narrationText = BuildNarrationText(storyboard);
+        var narrations = await LoadSceneNarrationsAsync(
+            job.ContentProjectId,
+            storyboard,
+            cancellationToken);
 
+        var voice = ParseVoice(payload.VoiceProfile);
         var manifest = await workspace.TryReadManifestAsync(
             job.ContentProjectId,
             payload.StoryboardJobId,
@@ -97,13 +103,82 @@ public sealed class GenerateAudioJobHandler(
             ? new Dictionary<string, AudioProductionStage>()
             : new Dictionary<string, AudioProductionStage>(manifest.Stages);
 
-        // --- 1. Narration ---------------------------------------------------
+        // --- 1. Per-scene narration ----------------------------------------
+        var scenes = new List<GeneratedSceneNarration>(narrations.Count);
+        foreach (var sceneNarration in narrations)
+        {
+            var stageName = AudioProductionWorkspace.SceneStageName(sceneNarration.SceneIndex);
+            var fingerprint = AudioProductionFingerprint.Compute(
+                stageName,
+                sceneNarration.Text,
+                voice.ToString(),
+                payload.Locale,
+                SpeechStageVersion);
+
+            var artifact = await workspace.TryReuseAsync(
+                manifest,
+                stageName,
+                fingerprint,
+                cancellationToken);
+            var reused = artifact is not null;
+
+            if (artifact is null)
+            {
+                if (!speechProvider.IsEnabled)
+                {
+                    throw Error(
+                        "audio_narration_failed",
+                        "The speech synthesis provider is not enabled.");
+                }
+
+                artifact = await SynthesizeSceneAsync(
+                    job,
+                    payload,
+                    sceneNarration,
+                    voice,
+                    cancellationToken);
+            }
+
+            stages[stageName] = AudioProductionWorkspace.ToStage(fingerprint, artifact);
+            await PersistAsync(
+                job,
+                payload.StoryboardJobId,
+                stages,
+                manifest?.Scenes,
+                manifest?.TransitionSeconds ?? 0,
+                manifest?.NarrationDurationSeconds ?? 0,
+                manifest?.TotalDurationSeconds ?? 0,
+                cancellationToken);
+
+            scenes.Add(new GeneratedSceneNarration(sceneNarration, artifact, reused));
+        }
+
+        // --- 2. Scene timing -------------------------------------------------
+        var timing = BuildTimeline(scenes, NarrativeTiming.TransitionSeconds);
+        var sceneStages = scenes
+            .Select((scene, index) => new AudioSceneStage(
+                scene.Narration.SceneIndex,
+                scene.Artifact.RelativePath,
+                scene.Artifact.ContentHash,
+                scene.Artifact.ByteSize,
+                scene.Artifact.SampleRate,
+                scene.Artifact.Channels,
+                scene.Artifact.DurationSeconds,
+                timing[index].NarrationStartSeconds,
+                timing[index].VisualStartSeconds,
+                timing[index].VisualDurationSeconds,
+                NarrativeTiming.IntroLeadSeconds,
+                NarrativeTiming.OutroHoldSeconds,
+                scene.Narration.Text))
+            .ToArray();
+
+        // --- 3. Assemble the narration track ---------------------------------
         var narrationFingerprint = AudioProductionFingerprint.Compute(
             AudioProductionWorkspace.NarrationStage,
-            narrationText,
-            voice.ToString(),
-            payload.Locale,
-            SpeechStageVersion);
+            string.Join(',', scenes.Select(scene => scene.Artifact.ContentHash)),
+            timing[^1].TotalDurationSeconds.ToString("0.###", CultureInfo.InvariantCulture),
+            NarrativeTiming.TransitionSeconds.ToString("0.###", CultureInfo.InvariantCulture),
+            NarrativeTiming.Version);
 
         var narration = await workspace.TryReuseAsync(
             manifest,
@@ -114,26 +189,27 @@ public sealed class GenerateAudioJobHandler(
 
         if (narration is null)
         {
-            if (!speechProvider.IsEnabled)
-            {
-                throw Error(
-                    "audio_narration_failed",
-                    "The speech synthesis provider is not enabled.");
-            }
-
-            narration = await SynthesizeNarrationAsync(
+            narration = await AssembleNarrationAsync(
                 job,
                 payload,
-                narrationText,
-                voice,
+                scenes,
+                timing,
                 cancellationToken);
         }
 
         stages[AudioProductionWorkspace.NarrationStage] =
             AudioProductionWorkspace.ToStage(narrationFingerprint, narration);
-        await PersistAsync(job, payload.StoryboardJobId, stages, cancellationToken);
+        await PersistAsync(
+            job,
+            payload.StoryboardJobId,
+            stages,
+            sceneStages,
+            NarrativeTiming.TransitionSeconds,
+            timing[^1].NarrationEndSeconds,
+            timing[^1].TotalDurationSeconds,
+            cancellationToken);
 
-        // --- 2. Background music -------------------------------------------
+        // --- 4. Background music ---------------------------------------------
         var musicDuration = ResolveMusicDuration(narration.DurationSeconds);
         var musicFingerprint = AudioProductionFingerprint.Compute(
             AudioProductionWorkspace.MusicStage,
@@ -160,18 +236,22 @@ public sealed class GenerateAudioJobHandler(
                     "The music generation provider is not enabled.");
             }
 
-            music = await GenerateMusicAsync(
-                job,
-                payload,
-                musicDuration,
-                cancellationToken);
+            music = await GenerateMusicAsync(job, payload, musicDuration, cancellationToken);
         }
 
         stages[AudioProductionWorkspace.MusicStage] =
             AudioProductionWorkspace.ToStage(musicFingerprint, music);
-        await PersistAsync(job, payload.StoryboardJobId, stages, cancellationToken);
+        await PersistAsync(
+            job,
+            payload.StoryboardJobId,
+            stages,
+            sceneStages,
+            NarrativeTiming.TransitionSeconds,
+            timing[^1].NarrationEndSeconds,
+            timing[^1].TotalDurationSeconds,
+            cancellationToken);
 
-        // --- 3. Final mastered mix -----------------------------------------
+        // --- 5. Final mastered mix -------------------------------------------
         var masterFingerprint = AudioProductionFingerprint.Compute(
             AudioProductionWorkspace.MasterStage,
             narration.ContentHash,
@@ -192,7 +272,15 @@ public sealed class GenerateAudioJobHandler(
 
         stages[AudioProductionWorkspace.MasterStage] =
             AudioProductionWorkspace.ToStage(masterFingerprint, master);
-        await PersistAsync(job, payload.StoryboardJobId, stages, cancellationToken);
+        await PersistAsync(
+            job,
+            payload.StoryboardJobId,
+            stages,
+            sceneStages,
+            NarrativeTiming.TransitionSeconds,
+            timing[^1].NarrationEndSeconds,
+            timing[^1].TotalDurationSeconds,
+            cancellationToken);
 
         var result = new GenerateAudioResult(
             payload.StoryboardJobId,
@@ -201,28 +289,75 @@ public sealed class GenerateAudioJobHandler(
             ToArtifact(master),
             narrationReused,
             musicReused,
-            masterReused);
+            masterReused,
+            scenes
+                .Select((scene, index) => new GenerateAudioScene(
+                    scene.Narration.SceneIndex,
+                    scene.Narration.Heading,
+                    scene.Narration.Text,
+                    scene.Artifact.RelativePath,
+                    scene.Artifact.ContentHash,
+                    scene.Artifact.DurationSeconds,
+                    timing[index].NarrationStartSeconds,
+                    timing[index].VisualStartSeconds,
+                    timing[index].VisualDurationSeconds,
+                    scene.Reused))
+                .ToArray(),
+            NarrativeTiming.TransitionSeconds);
 
         return result.Serialize();
     }
 
-    private async Task<AudioProductionArtifact> SynthesizeNarrationAsync(
+    private async Task<IReadOnlyList<SceneNarrationText>> LoadSceneNarrationsAsync(
+        Guid contentProjectId,
+        GenerateStoryboardResult storyboard,
+        CancellationToken cancellationToken)
+    {
+        var reviewed = await scripts.FindByProjectIdAsync(
+            contentProjectId,
+            cancellationToken);
+        if (reviewed is null)
+        {
+            throw Error(
+                "audio_narration_source_missing",
+                "The content project does not have a reviewed script.");
+        }
+
+        if (reviewed.Status != ScriptReviewStatus.Approved)
+        {
+            throw Error(
+                "audio_narration_source_not_approved",
+                "Narration requires an approved reviewed script.");
+        }
+
+        try
+        {
+            var script = ReviewedNarrationScript.Parse(reviewed.Content);
+            return script.MapToScenes(storyboard);
+        }
+        catch (AudioProductionException exception)
+        {
+            throw Error(exception.ErrorCode, exception.Message, exception);
+        }
+    }
+
+    private async Task<AudioProductionArtifact> SynthesizeSceneAsync(
         ClaimedJob job,
         GenerateAudioJobPayload payload,
-        string narrationText,
+        SceneNarrationText narration,
         SpeechVoiceProfile voice,
         CancellationToken cancellationToken)
     {
-        var relativePath = AudioProductionWorkspace.FilePath(
+        var relativePath = AudioProductionWorkspace.SceneNarrationPath(
             job.ContentProjectId,
             payload.StoryboardJobId,
-            AudioProductionWorkspace.NarrationFileName);
+            narration.SceneIndex);
 
         try
         {
             var output = await speechProvider.SynthesizeAsync(
                 new SpeechSynthesisRequest(
-                    narrationText,
+                    narration.Text,
                     voice,
                     relativePath,
                     payload.Locale),
@@ -238,6 +373,50 @@ public sealed class GenerateAudioJobHandler(
         {
             throw Error(exception.ErrorCode, exception.Message, exception);
         }
+    }
+
+    private async Task<AudioProductionArtifact> AssembleNarrationAsync(
+        ClaimedJob job,
+        GenerateAudioJobPayload payload,
+        IReadOnlyList<GeneratedSceneNarration> scenes,
+        IReadOnlyList<SceneTimingSlice> timing,
+        CancellationToken cancellationToken)
+    {
+        var segments = scenes
+            .Select((scene, index) => new NarrationSegment(
+                scene.Artifact.AbsolutePath,
+                timing[index].NarrationStartSeconds))
+            .ToArray();
+
+        byte[] bytes;
+        try
+        {
+            bytes = await assembler.AssembleAsync(
+                segments,
+                timing[^1].TotalDurationSeconds,
+                cancellationToken);
+        }
+        catch (RenderVideoException exception)
+        {
+            throw Error("audio_narration_assembly_failed", exception.Message, exception);
+        }
+
+        var relativePath = AudioProductionWorkspace.FilePath(
+            job.ContentProjectId,
+            payload.StoryboardJobId,
+            AudioProductionWorkspace.NarrationFileName);
+
+        AssetFileInfo file;
+        try
+        {
+            file = await fileStore.WriteAsync(relativePath, bytes, cancellationToken);
+        }
+        catch (AssetCollectionException exception)
+        {
+            throw Error("audio_asset_write_failed", exception.Message, exception);
+        }
+
+        return await workspace.DescribeAsync(file.RelativePath, cancellationToken);
     }
 
     private async Task<AudioProductionArtifact> GenerateMusicAsync(
@@ -305,15 +484,59 @@ public sealed class GenerateAudioJobHandler(
         }
     }
 
+    /// <summary>
+    /// Scene timeline: each scene is <c>introLead + narration + outroHold</c> and
+    /// consecutive scenes overlap by the render transition, so the assembled
+    /// narration and the rendered video share exactly the same total duration.
+    /// </summary>
+    private static SceneTimingSlice[] BuildTimeline(
+        IReadOnlyList<GeneratedSceneNarration> scenes,
+        double transitionSeconds)
+    {
+        var slices = new SceneTimingSlice[scenes.Count];
+        var cumulative = 0d;
+
+        for (var index = 0; index < scenes.Count; index++)
+        {
+            var narration = scenes[index].Artifact.DurationSeconds;
+            var sceneTotal = Math.Clamp(
+                NarrativeTiming.IntroLeadSeconds + narration + NarrativeTiming.OutroHoldSeconds,
+                NarrativeTiming.MinSceneSeconds,
+                NarrativeTiming.MaxSceneSeconds);
+
+            var visualStart = cumulative - (index * transitionSeconds);
+            var narrationStart = visualStart + NarrativeTiming.IntroLeadSeconds;
+            cumulative += sceneTotal;
+
+            slices[index] = new SceneTimingSlice(
+                visualStart,
+                narrationStart,
+                sceneTotal,
+                narrationStart + narration);
+        }
+
+        var total = cumulative - ((scenes.Count - 1) * transitionSeconds);
+        slices[^1] = slices[^1] with { TotalDurationSeconds = total };
+        return slices;
+    }
+
     private async Task PersistAsync(
         ClaimedJob job,
         Guid storyboardJobId,
         IReadOnlyDictionary<string, AudioProductionStage> stages,
+        IReadOnlyList<AudioSceneStage>? scenes,
+        double transitionSeconds,
+        double narrationDurationSeconds,
+        double totalDurationSeconds,
         CancellationToken cancellationToken)
     {
         var manifest = new AudioProductionManifest(
             AudioProductionWorkspace.Version,
-            new Dictionary<string, AudioProductionStage>(stages));
+            new Dictionary<string, AudioProductionStage>(stages),
+            scenes,
+            transitionSeconds,
+            narrationDurationSeconds,
+            totalDurationSeconds);
 
         try
         {
@@ -351,30 +574,6 @@ public sealed class GenerateAudioJobHandler(
         }
     }
 
-    /// <summary>
-    /// Deterministic narration text: the storyboard title followed by each scene
-    /// heading. This is always available for a completed storyboard and needs no
-    /// extra AI call.
-    /// </summary>
-    private static string BuildNarrationText(GenerateStoryboardResult storyboard)
-    {
-        var builder = new StringBuilder(storyboard.Title.Trim().TrimEnd('.'));
-        builder.Append('.');
-
-        foreach (var scene in storyboard.Scenes)
-        {
-            var heading = scene.Heading.Trim().TrimEnd('.');
-            if (heading.Length == 0)
-            {
-                continue;
-            }
-
-            builder.Append(' ').Append(heading).Append('.');
-        }
-
-        return builder.ToString().Trim();
-    }
-
     private static double ResolveMusicDuration(double narrationSeconds) =>
         Math.Clamp(
             Math.Ceiling(narrationSeconds) + MusicTailSeconds,
@@ -408,4 +607,18 @@ public sealed class GenerateAudioJobHandler(
         string message,
         Exception? innerException = null) =>
         new(errorCode, message, innerException);
+
+    private sealed record GeneratedSceneNarration(
+        SceneNarrationText Narration,
+        AudioProductionArtifact Artifact,
+        bool Reused);
+
+    private sealed record SceneTimingSlice(
+        double VisualStartSeconds,
+        double NarrationStartSeconds,
+        double VisualDurationSeconds,
+        double NarrationEndSeconds)
+    {
+        public double TotalDurationSeconds { get; init; }
+    }
 }

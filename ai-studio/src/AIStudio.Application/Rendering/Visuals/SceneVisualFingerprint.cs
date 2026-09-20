@@ -33,6 +33,7 @@ public static class SceneVisualFingerprint
             .Append(plan.ThreeDTemplate).Append('|')
             .Append(plan.IntendedEngine).Append('|')
             .Append(plan.IsFallback).Append('|')
+            .Append(Number(plan.Direction?.DurationSeconds ?? 0)).Append('|')
             .Append(plan.Brief.Heading).Append('|')
             .Append(plan.Brief.Kicker).Append('|')
             .Append(plan.Brief.Layout).Append('|')

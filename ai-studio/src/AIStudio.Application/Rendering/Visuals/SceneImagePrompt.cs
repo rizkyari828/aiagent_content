@@ -14,7 +14,9 @@ public static class SceneImagePrompt
         + "generous empty margins, cinematic soft lighting";
 
     private const string NoText =
-        "no text, no words, no letters, no numbers, no captions, no watermark, no logo";
+        "absolutely no text, no words, no letters, no numbers, no typography, "
+        + "no captions, no labels, no signage, no logos or brand marks, "
+        + "blank unlabeled screens, no watermark, no interface text, no user-interface elements";
 
     public static string Build(SceneVisualBrief brief)
     {

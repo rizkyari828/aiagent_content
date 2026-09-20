@@ -82,6 +82,13 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `src/AIStudio.Application/Jobs/RenderVideo/RenderVideoResult.cs`, `RenderVideoJobHandler.cs`, `RenderVideoWorkflow.cs` — prefer the validated mastered audio (`audioSource=mastered`, `masteredAudioPath`/`masteredAudioContentHash`), fall back to the legacy `narration_tracks` row; scene timing, transitions and subtitles unchanged.
 - `tests/AIStudio.Tests/Rendering/GenerateAudioJobHandlerTests.cs`, `GenerateAudioWorkflowTests.cs`, `GenerateAudioContractsTests.cs`, `GenerateAudioTestDoubles.cs` — staged generation, full/partial reuse, only-failed-stage retry, input-change invalidation, disabled providers, cancellation, no GPU-gate constructor, and master-consumption render tests.
 
+## Narrative Sync + Scene Timing
+
+- `src/AIStudio.Application/Rendering/Narration/ReviewedNarrationScript.cs`, `NarrationText.cs`, `NarrativeTiming.cs` - parse the approved reviewed script, map it to storyboard scenes (positional/heading, else `audio_narration_source_unmapped`), strip quotes for TTS-safe text, and centralize lead/hold/transition constants.
+- `src/AIStudio.Application/Jobs/GenerateAudio/GenerateAudioJobHandler.cs`, `GenerateAudioResult.cs` - per-scene VoxCPM2 narration, CPU assembly, BGM/master, and per-scene narration+timing evidence.
+- `src/AIStudio.Application/Rendering/AudioProduction/AudioProductionManifest.cs`, `AudioProductionWorkspace.cs`, `IAudioNarrationAssembler.cs`, `src/AIStudio.Infrastructure/Rendering/AudioProduction/FfmpegNarrationAssembler.cs` - manifest v2 with per-scene narration/timing; deterministic `adelay`+`amix` narration assembly.
+- `SubtitleTimeline.cs` (`BuildFromNarration`), `RenderVideoJobHandler.cs`, `FfmpegCommandPlan.cs` (`ResolveContentDurations`), `SceneVisualDirector.cs` (`SceneChoreographyPlanner`) - phrase subtitles and beats constrained to each scene's speech window, explicit speech-driven scene durations into the renderer.
+
 ## Visual Direction + Multi-Engine Choreography
 
 - `src/AIStudio.Application/Rendering/Visuals/SceneVisualIntent.cs`, `SceneVisualDirection.cs`, `AnimationPrimitive.cs`, `AnimationBeat.cs` - structured intent/composition, per-scene visual direction, curated animation primitives and choreography beats (data only; no executable content).

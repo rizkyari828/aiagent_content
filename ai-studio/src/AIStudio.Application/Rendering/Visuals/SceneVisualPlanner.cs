@@ -100,7 +100,8 @@ public static class SceneVisualPlanner
         IReadOnlyList<double> durations,
         bool enableAnimation,
         bool enableAiImages = false,
-        bool enableThreeD = false)
+        bool enableThreeD = false,
+        IReadOnlyList<SceneNarrationWindow>? narrationWindows = null)
     {
         ArgumentNullException.ThrowIfNull(storyboard);
         ArgumentNullException.ThrowIfNull(durations);
@@ -112,6 +113,8 @@ public static class SceneVisualPlanner
         }
 
         var plans = new List<SceneVisualPlan>(storyboard.Scenes.Count);
+        var windows = (narrationWindows ?? [])
+            .ToDictionary(window => window.SceneIndex);
 
         for (var index = 0; index < storyboard.Scenes.Count; index++)
         {
@@ -119,6 +122,7 @@ public static class SceneVisualPlanner
             var palette = PaletteCycle[index % PaletteCycle.Length];
             var layout = ClassifyLayout(scene);
             var brief = BuildBrief(scene, index, layout, palette);
+            windows.TryGetValue(index, out var window);
 
             var direction = SceneVisualDirector.Direct(
                 scene,
@@ -126,7 +130,10 @@ public static class SceneVisualPlanner
                 storyboard.Scenes.Count,
                 durations[index]) with
             {
-                Choreography = SceneChoreographyPlanner.Build(brief, durations[index])
+                Choreography = SceneChoreographyPlanner.Build(
+                    brief,
+                    durations[index],
+                    window)
             };
 
             var route = SceneVisualRouter.Select(

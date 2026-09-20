@@ -375,6 +375,20 @@ public sealed class FfmpegCommandPlanTests
         Assert.Contains("-filter_complex", arguments);
     }
 
+    [Fact]
+    public void ResolveContentDurations_UsesExplicitSpeechDrivenDurations()
+    {
+        var scenes = new[]
+        {
+            new SceneMediaInput("/root/scene-0.mp4", AssetType.Video, DurationSeconds: 3.2),
+            new SceneMediaInput("/root/scene-1.mp4", AssetType.Video, DurationSeconds: 1.4)
+        };
+
+        var durations = FfmpegCommandPlan.ResolveContentDurations(scenes, 4.25);
+
+        Assert.Equal(new[] { 3.2, 1.4 }, durations);
+    }
+
     private static IReadOnlyList<string> Build(
         IReadOnlyList<SceneMediaInput> scenes,
         double narrationSeconds,

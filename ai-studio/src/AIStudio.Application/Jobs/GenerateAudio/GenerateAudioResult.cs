@@ -12,8 +12,24 @@ public sealed record GenerateAudioArtifact(
     int Channels);
 
 /// <summary>
-/// Canonical GenerateAudio evidence: the three durable stage artifacts plus which
-/// of them were reused from a previous run. Nothing here holds file bytes.
+/// One scene's narration evidence: the reviewed narration text, the measured clip,
+/// and its resolved position on the production timeline.
+/// </summary>
+public sealed record GenerateAudioScene(
+    int SceneIndex,
+    string Heading,
+    string NarrationText,
+    string NarrationPath,
+    string ContentHash,
+    double NarrationDurationSeconds,
+    double NarrationStartSeconds,
+    double VisualStartSeconds,
+    double VisualDurationSeconds,
+    bool Reused);
+
+/// <summary>
+/// Canonical GenerateAudio evidence: the assembled narration, BGM and mastered mix,
+/// plus per-scene narration/timing. Nothing here holds file bytes.
 /// </summary>
 public sealed record GenerateAudioResult(
     Guid StoryboardJobId,
@@ -22,7 +38,9 @@ public sealed record GenerateAudioResult(
     GenerateAudioArtifact Master,
     bool NarrationReused,
     bool MusicReused,
-    bool MasterReused)
+    bool MasterReused,
+    IReadOnlyList<GenerateAudioScene>? Scenes = null,
+    double TransitionSeconds = 0)
 {
     public const int ContentHashLength = 64;
     public const int MaxPathLength = 1024;
@@ -63,11 +81,39 @@ public sealed record GenerateAudioResult(
             throw InvalidResult("GenerateAudio result requires a storyboardJobId.");
         }
 
+        var scenes = (result.Scenes ?? [])
+            .Select(NormalizeScene)
+            .ToArray();
+
         return result with
         {
             Narration = NormalizeArtifact(result.Narration, "narration"),
             Music = NormalizeArtifact(result.Music, "music"),
-            Master = NormalizeArtifact(result.Master, "master")
+            Master = NormalizeArtifact(result.Master, "master"),
+            Scenes = scenes
+        };
+    }
+
+    private static GenerateAudioScene NormalizeScene(GenerateAudioScene scene)
+    {
+        if (scene.SceneIndex < 0)
+        {
+            throw InvalidResult("GenerateAudio scene index cannot be negative.");
+        }
+
+        if (scene.NarrationDurationSeconds <= 0
+            || scene.NarrationStartSeconds < 0
+            || scene.VisualStartSeconds < 0
+            || scene.VisualDurationSeconds <= 0)
+        {
+            throw InvalidResult($"GenerateAudio scene {scene.SceneIndex} timing is invalid.");
+        }
+
+        var path = RequireText(scene.NarrationPath, MaxPathLength, "narrationPath");
+        return scene with
+        {
+            NarrationPath = path,
+            ContentHash = RequireHash(scene.ContentHash, "narration contentHash")
         };
     }
 
@@ -95,24 +141,35 @@ public sealed record GenerateAudioResult(
             throw InvalidResult($"GenerateAudio {stage} format is invalid.");
         }
 
-        var path = artifact.Path?.Trim();
-        if (string.IsNullOrEmpty(path) || path.Length > MaxPathLength)
-        {
-            throw InvalidResult($"GenerateAudio {stage} path is invalid.");
-        }
-
-        if (string.IsNullOrWhiteSpace(artifact.ContentHash)
-            || artifact.ContentHash.Length != ContentHashLength
-            || !artifact.ContentHash.All(Uri.IsHexDigit))
-        {
-            throw InvalidResult($"GenerateAudio {stage} content hash must be a SHA-256 value.");
-        }
-
         return artifact with
         {
-            Path = path,
-            ContentHash = artifact.ContentHash.ToLowerInvariant()
+            Path = RequireText(artifact.Path, MaxPathLength, $"{stage} path"),
+            ContentHash = RequireHash(artifact.ContentHash, $"{stage} contentHash")
         };
+    }
+
+    private static string RequireHash(string? value, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(value)
+            || value.Length != ContentHashLength
+            || !value.All(Uri.IsHexDigit))
+        {
+            throw InvalidResult($"GenerateAudio result field '{fieldName}' must be a SHA-256 value.");
+        }
+
+        return value.ToLowerInvariant();
+    }
+
+    private static string RequireText(string? value, int maxLength, string fieldName)
+    {
+        var normalized = value?.Trim();
+        if (string.IsNullOrEmpty(normalized) || normalized.Length > maxLength)
+        {
+            throw InvalidResult(
+                $"GenerateAudio result field '{fieldName}' must contain 1 to {maxLength} characters.");
+        }
+
+        return normalized;
     }
 
     private static JobExecutionException InvalidResult(

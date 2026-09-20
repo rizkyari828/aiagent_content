@@ -225,11 +225,14 @@ public static class SceneVisualDirector
 /// </summary>
 public static class SceneChoreographyPlanner
 {
-    private const double LeadInSeconds = 0.35;
-    private const double BeatSeconds = 0.42;
-    private const double TailHoldSeconds = 0.55;
+    private const double DefaultBeatSeconds = 0.42;
+    private const double DefaultLeadInSeconds = 0.35;
+    private const double DefaultTailHoldSeconds = 0.55;
 
-    public static SceneChoreography Build(SceneVisualBrief brief, double durationSeconds)
+    public static SceneChoreography Build(
+        SceneVisualBrief brief,
+        double durationSeconds,
+        SceneNarrationWindow? narrationWindow = null)
     {
         ArgumentNullException.ThrowIfNull(brief);
         if (durationSeconds <= 0)
@@ -237,104 +240,135 @@ public static class SceneChoreographyPlanner
             return SceneChoreography.Empty;
         }
 
+        var (start, span) = Schedule(narrationWindow, durationSeconds);
         var beats = brief.Layout switch
         {
-            SceneVisualLayout.Cards => Cards(brief, durationSeconds),
-            SceneVisualLayout.Chat => Chat(durationSeconds),
-            SceneVisualLayout.Window => Window(brief, durationSeconds),
-            _ => Hero(brief, durationSeconds)
+            SceneVisualLayout.Cards => Cards(brief, start, span),
+            SceneVisualLayout.Chat => Chat(start, span),
+            SceneVisualLayout.Window => Window(brief, start, span),
+            _ => Hero(brief, start, span)
         };
 
-        return new SceneChoreography(beats);
+        return new SceneChoreography(Trim(beats, durationSeconds));
     }
 
-    private static List<AnimationBeat> Cards(SceneVisualBrief brief, double duration)
+    /// <summary>
+    /// The narration window drives beat timing: motion is scheduled relative to the
+    /// speech, not the whole scene. Without a window it degrades to the previous
+    /// scene-relative defaults.
+    /// </summary>
+    private static (double Start, double Span) Schedule(
+        SceneNarrationWindow? window,
+        double duration)
+    {
+        if (window is not null && window.NarrationDurationSeconds > 0)
+        {
+            return (
+                Math.Max(0, window.NarrationStartWithinScene),
+                window.NarrationDurationSeconds);
+        }
+
+        return (DefaultLeadInSeconds, Math.Max(DefaultBeatSeconds, duration - 0.9));
+    }
+
+    private static List<AnimationBeat> Cards(SceneVisualBrief brief, double start, double span)
     {
         var beats = new List<AnimationBeat>();
         var count = Math.Clamp(brief.Cards.Count, 1, 4);
-        var usable = Math.Max(BeatSeconds, duration - LeadInSeconds - TailHoldSeconds);
-        var step = usable / count;
+        var step = (span * 0.9) / count;
 
         for (var index = 0; index < count; index++)
         {
             beats.Add(new AnimationBeat(
-                LeadInSeconds + index * step,
-                Math.Min(BeatSeconds, step),
+                start + index * step,
+                Math.Min(DefaultBeatSeconds, Math.Max(0.25, step)),
                 index == 0 ? AnimationPrimitive.FadeIn : AnimationPrimitive.SlideIn,
                 $"card{index}"));
         }
 
         beats.Add(new AnimationBeat(
-            LeadInSeconds + count * step,
+            start + (span * 0.8),
             0.5,
             AnimationPrimitive.ScalePulse,
             $"card{count - 1}"));
 
         if (!string.IsNullOrWhiteSpace(brief.Note))
         {
-            beats.Add(new AnimationBeat(LeadInSeconds, 0.5, AnimationPrimitive.FadeIn, "note"));
+            beats.Add(new AnimationBeat(start, 0.5, AnimationPrimitive.FadeIn, "note"));
         }
 
-        return Trim(beats, duration);
+        return beats;
     }
 
-    private static List<AnimationBeat> Chat(double duration)
+    private static List<AnimationBeat> Chat(double start, double span)
     {
-        var beats = new List<AnimationBeat>
-        {
-            new(0.3, 0.42, AnimationPrimitive.SlideIn, "bubble0"),
-            new(1.0, 0.7, AnimationPrimitive.ScalePulse, "typing"),
-            new(1.7, 0.5, AnimationPrimitive.FadeIn, "bubble1")
-        };
-
-        return Trim(beats, duration);
+        return
+        [
+            new(start, DefaultBeatSeconds, AnimationPrimitive.SlideIn, "bubble0"),
+            new(start + (span * 0.3), 0.7, AnimationPrimitive.ScalePulse, "typing"),
+            new(start + (span * 0.55), 0.5, AnimationPrimitive.FadeIn, "bubble1")
+        ];
     }
 
-    private static List<AnimationBeat> Window(SceneVisualBrief brief, double duration)
+    private static List<AnimationBeat> Window(SceneVisualBrief brief, double start, double span)
     {
         var beats = new List<AnimationBeat>();
-        var cursor = 0.35;
 
         if (!string.IsNullOrWhiteSpace(brief.Command))
         {
-            beats.Add(new AnimationBeat(cursor, 0.9, AnimationPrimitive.TypeText, "command", brief.Command));
-            cursor += 0.9;
+            beats.Add(new AnimationBeat(
+                start,
+                Math.Min(0.9, Math.Max(0.4, span * 0.35)),
+                AnimationPrimitive.TypeText,
+                "command",
+                brief.Command));
         }
 
         if (brief.Progress > 0)
         {
-            beats.Add(new AnimationBeat(cursor, 1.2, AnimationPrimitive.Progress, "progress"));
-            cursor += 1.2;
+            beats.Add(new AnimationBeat(
+                start + (span * 0.35),
+                Math.Min(1.2, Math.Max(0.5, span * 0.4)),
+                AnimationPrimitive.Progress,
+                "progress"));
         }
 
         beats.Add(new AnimationBeat(
-            Math.Min(cursor, Math.Max(0, duration - 0.5)),
+            start + (span * 0.85),
             0.45,
             AnimationPrimitive.Checkmark,
             "check"));
 
         if (!string.IsNullOrWhiteSpace(brief.Note))
         {
-            beats.Add(new AnimationBeat(0.4, 0.5, AnimationPrimitive.FadeIn, "note"));
+            beats.Add(new AnimationBeat(start, 0.5, AnimationPrimitive.FadeIn, "note"));
         }
 
-        return Trim(beats, duration);
+        return beats;
     }
 
-    private static List<AnimationBeat> Hero(SceneVisualBrief brief, double duration)
+    private static List<AnimationBeat> Hero(SceneVisualBrief brief, double start, double span)
     {
         var beats = new List<AnimationBeat>
         {
-            new(0.3, 0.5, AnimationPrimitive.FadeIn, "card0")
+            new(start, 0.5, AnimationPrimitive.FadeIn, "card0")
         };
 
         if (brief.Cards.Count > 1)
         {
-            beats.Add(new AnimationBeat(0.7, 0.5, AnimationPrimitive.SlideIn, "chip0"));
+            beats.Add(new AnimationBeat(
+                start + (span * 0.25),
+                0.5,
+                AnimationPrimitive.SlideIn,
+                "chip0"));
         }
 
-        beats.Add(new AnimationBeat(1.1, 0.6, AnimationPrimitive.ScalePulse, "card0"));
-        return Trim(beats, duration);
+        beats.Add(new AnimationBeat(
+            start + (span * 0.6),
+            0.6,
+            AnimationPrimitive.ScalePulse,
+            "card0"));
+        return beats;
     }
 
     private static List<AnimationBeat> Trim(List<AnimationBeat> beats, double duration)

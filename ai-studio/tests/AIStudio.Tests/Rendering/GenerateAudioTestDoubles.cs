@@ -139,7 +139,8 @@ internal sealed class FakeAudioInspector : IMediaInspector
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var inspection = Path.GetFileName(absolutePath) switch
+        var name = Path.GetFileName(absolutePath);
+        var inspection = name switch
         {
             AudioProductionWorkspace.NarrationFileName =>
                 new MediaInspection(10, false, true, false, 0, 0, 48000, 1),
@@ -147,10 +148,47 @@ internal sealed class FakeAudioInspector : IMediaInspector
                 new MediaInspection(12, false, true, false, 0, 0, 48000, 2),
             AudioProductionWorkspace.MasterFileName =>
                 new MediaInspection(10, false, true, false, 0, 0, 48000, 2),
+            _ when name.StartsWith("scene_", StringComparison.Ordinal)
+                && name.EndsWith(".wav", StringComparison.Ordinal) =>
+                new MediaInspection(2, false, true, false, 0, 0, 48000, 1),
             _ => new MediaInspection(0, false, false, false, 0, 0, 0, 0)
         };
 
         return Task.FromResult(inspection);
+    }
+}
+
+/// <summary>
+/// Deterministic assembler fake: concatenates the scene clip bytes so a changed
+/// scene changes the assembled narration hash, exactly like the real assembler.
+/// </summary>
+internal sealed class FakeNarrationAssembler : IAudioNarrationAssembler
+{
+    public int CallCount { get; private set; }
+
+    public Task<byte[]> AssembleAsync(
+        IReadOnlyList<NarrationSegment> segments,
+        double totalDurationSeconds,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        CallCount++;
+
+        var bytes = new List<byte>();
+        foreach (var segment in segments)
+        {
+            if (File.Exists(segment.AbsolutePath))
+            {
+                bytes.AddRange(File.ReadAllBytes(segment.AbsolutePath));
+            }
+        }
+
+        if (bytes.Count == 0)
+        {
+            bytes.AddRange([9, 9, 9, 9]);
+        }
+
+        return Task.FromResult(bytes.ToArray());
     }
 }
 

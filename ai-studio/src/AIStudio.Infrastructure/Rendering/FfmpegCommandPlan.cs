@@ -376,6 +376,14 @@ public static class FfmpegCommandPlan
         double narrationSeconds)
     {
         ArgumentNullException.ThrowIfNull(scenes);
+
+        // Narrative-sync: when the caller supplies explicit speech-driven scene
+        // durations, use them directly instead of allocating proportionally.
+        if (scenes.Count > 0 && scenes.All(scene => scene.DurationSeconds is > 0))
+        {
+            return scenes.Select(scene => scene.DurationSeconds!.Value).ToArray();
+        }
+
         var weights = new double[scenes.Count];
         var minimums = new double[scenes.Count];
         for (var index = 0; index < scenes.Count; index++)
