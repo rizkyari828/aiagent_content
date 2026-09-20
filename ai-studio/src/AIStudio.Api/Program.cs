@@ -67,6 +67,7 @@ app.MapSubtitleApi();
 app.MapRenderApi();
 app.MapFinalVideoQaApi();
 app.MapVisualApi();
+app.MapAudioApi();
 
 app.Run();
 

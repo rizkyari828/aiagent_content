@@ -13,6 +13,7 @@ public sealed class PlaceholderJobHandler : IJobHandler
             and not JobType.RenderVideo
             and not JobType.FinalVideoQa
             and not JobType.GenerateSceneVisuals
+            and not JobType.GenerateAudio
         && Enum.IsDefined(type);
 
     public Task<string> ExecuteAsync(

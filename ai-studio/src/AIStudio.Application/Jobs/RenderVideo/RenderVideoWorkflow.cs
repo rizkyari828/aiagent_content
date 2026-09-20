@@ -7,6 +7,7 @@ using AIStudio.Application.Content;
 using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Application.Narration;
 using AIStudio.Application.Rendering;
+using AIStudio.Application.Rendering.AudioProduction;
 using AIStudio.Domain.Jobs;
 
 namespace AIStudio.Application.Jobs.RenderVideo;
@@ -17,6 +18,7 @@ public sealed class RenderVideoWorkflow(
     IJobReader jobs,
     IAssetRepository assets,
     INarrationRepository narrations,
+    AudioProductionWorkspace audioWorkspace,
     TimeProvider timeProvider)
 {
     private static readonly JsonSerializerOptions JsonOptions =
@@ -68,18 +70,39 @@ public sealed class RenderVideoWorkflow(
         var narration = await narrations.FindByProjectIdAsync(
             contentProjectId,
             cancellationToken);
-        if (narration is null)
-        {
-            throw Error(
-                "render_narration_not_found",
-                $"Content project '{contentProjectId}' does not have a narration track.");
-        }
 
-        if (narration.SourceJobId != storyboardJobId)
+        var manifest = await audioWorkspace.TryReadManifestAsync(
+            contentProjectId,
+            storyboardJobId,
+            cancellationToken);
+        var master = await audioWorkspace.TryResolveStageAsync(
+            manifest,
+            AudioProductionWorkspace.MasterStage,
+            cancellationToken);
+
+        string audioHash;
+        if (master is not null)
         {
-            throw Error(
-                "render_narration_storyboard_mismatch",
-                "The narration track belongs to a different storyboard.");
+            // The mastered audio from GenerateAudio supersedes the narration track.
+            audioHash = master.ContentHash;
+        }
+        else
+        {
+            if (narration is null)
+            {
+                throw Error(
+                    "render_audio_missing",
+                    $"Content project '{contentProjectId}' does not have narration or mastered audio.");
+            }
+
+            if (narration.SourceJobId != storyboardJobId)
+            {
+                throw Error(
+                    "render_narration_storyboard_mismatch",
+                    "The narration track belongs to a different storyboard.");
+            }
+
+            audioHash = narration.ContentHash;
         }
 
         var payload = JsonSerializer.Serialize(
@@ -89,7 +112,7 @@ public sealed class RenderVideoWorkflow(
         var job = Job.Create(
             contentProjectId,
             JobType.RenderVideo,
-            ComputeInputVersionHash(payload, storyboard, byScene.Values, narration.ContentHash),
+            ComputeInputVersionHash(payload, storyboard, byScene.Values, audioHash),
             payload,
             timeProvider.GetUtcNow());
 
@@ -137,7 +160,7 @@ public sealed class RenderVideoWorkflow(
         string payload,
         GenerateStoryboardResult storyboard,
         IEnumerable<Domain.Assets.SceneAsset> assets,
-        string narrationHash)
+        string audioHash)
     {
         var builder = new StringBuilder(payload)
             .Append('\n')
@@ -151,7 +174,7 @@ public sealed class RenderVideoWorkflow(
                 .Append(asset.ContentHash);
         }
 
-        builder.Append('\n').Append(narrationHash);
+        builder.Append('\n').Append(audioHash);
 
         return Convert
             .ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())))

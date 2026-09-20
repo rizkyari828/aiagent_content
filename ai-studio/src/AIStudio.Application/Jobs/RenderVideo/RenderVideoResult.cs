@@ -3,6 +3,12 @@ using System.Text.Json.Serialization;
 
 namespace AIStudio.Application.Jobs.RenderVideo;
 
+/// <summary>
+/// Canonical render evidence. <see cref="AudioSource"/> records which audio the
+/// render consumed: the legacy per-project narration track (<c>narration</c>) or
+/// the mastered audio produced by GenerateAudio (<c>mastered</c>). Legacy results
+/// that predate the mastered-audio path deserialize as <c>narration</c>.
+/// </summary>
 public sealed record RenderVideoResult(
     string OutputPath,
     string ContentHash,
@@ -11,12 +17,15 @@ public sealed record RenderVideoResult(
     int Width,
     int Height,
     Guid StoryboardJobId,
-    Guid NarrationTrackId,
+    Guid? NarrationTrackId,
     int SceneCount,
-    string NarrationContentHash,
+    string? NarrationContentHash,
     Guid? SubtitleTrackId = null,
     string? SubtitleContentHash = null,
-    bool SubtitleBurnedIn = false)
+    bool SubtitleBurnedIn = false,
+    string AudioSource = RenderAudioSources.Narration,
+    string? MasteredAudioPath = null,
+    string? MasteredAudioContentHash = null)
 {
     public const int ContentHashLength = 64;
     public const int MaxOutputPathLength = 1024;
@@ -58,11 +67,6 @@ public sealed record RenderVideoResult(
             throw InvalidResult("RenderVideo result requires a storyboardJobId.");
         }
 
-        if (result.NarrationTrackId == Guid.Empty)
-        {
-            throw InvalidResult("RenderVideo result requires a narrationTrackId.");
-        }
-
         if (result.SceneCount < 1)
         {
             throw InvalidResult("RenderVideo result requires at least one scene.");
@@ -100,6 +104,31 @@ public sealed record RenderVideoResult(
                 "RenderVideo result cannot be marked subtitleBurnedIn without a subtitle track.");
         }
 
+        if ((result.NarrationTrackId is null) != (result.NarrationContentHash is null))
+        {
+            throw InvalidResult(
+                "RenderVideo result narration fields must both be present or both be absent.");
+        }
+
+        if (result.AudioSource is not (RenderAudioSources.Narration or RenderAudioSources.Mastered))
+        {
+            throw InvalidResult("RenderVideo result audioSource is not supported.");
+        }
+
+        if (result.AudioSource == RenderAudioSources.Narration
+            && result.NarrationTrackId is null)
+        {
+            throw InvalidResult(
+                "RenderVideo result requires a narration track when audioSource is narration.");
+        }
+
+        if (result.AudioSource == RenderAudioSources.Mastered
+            && string.IsNullOrWhiteSpace(result.MasteredAudioPath))
+        {
+            throw InvalidResult(
+                "RenderVideo result requires a mastered audio path when audioSource is mastered.");
+        }
+
         return result with
         {
             OutputPath = RequireText(
@@ -107,10 +136,18 @@ public sealed record RenderVideoResult(
                 MaxOutputPathLength,
                 "outputPath"),
             ContentHash = RequireHash(result.ContentHash, "contentHash"),
-            NarrationContentHash = RequireHash(result.NarrationContentHash, "narrationContentHash"),
+            NarrationContentHash = result.NarrationContentHash is null
+                ? null
+                : RequireHash(result.NarrationContentHash, "narrationContentHash"),
             SubtitleContentHash = result.SubtitleContentHash is null
                 ? null
-                : RequireHash(result.SubtitleContentHash, "subtitleContentHash")
+                : RequireHash(result.SubtitleContentHash, "subtitleContentHash"),
+            MasteredAudioPath = string.IsNullOrWhiteSpace(result.MasteredAudioPath)
+                ? null
+                : RequireText(result.MasteredAudioPath, MaxOutputPathLength, "masteredAudioPath"),
+            MasteredAudioContentHash = result.AudioSource == RenderAudioSources.Mastered
+                ? RequireHash(result.MasteredAudioContentHash, "masteredAudioContentHash")
+                : null
         };
     }
 
@@ -143,4 +180,11 @@ public sealed record RenderVideoResult(
         string message,
         Exception? innerException = null) =>
         new("render_video_invalid_result", message, innerException);
+}
+
+public static class RenderAudioSources
+{
+    public const string Narration = "narration";
+
+    public const string Mastered = "mastered";
 }

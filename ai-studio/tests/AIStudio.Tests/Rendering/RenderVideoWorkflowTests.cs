@@ -1,12 +1,16 @@
+using System.IO;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.RenderVideo;
 using AIStudio.Application.Rendering;
+using AIStudio.Application.Rendering.AudioProduction;
 using AIStudio.Domain.Assets;
 using AIStudio.Domain.Jobs;
 using AIStudio.Domain.Narration;
+using AIStudio.Infrastructure.Assets;
 using AIStudio.Tests.Assets;
 using AIStudio.Tests.Jobs;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace AIStudio.Tests.Rendering;
@@ -193,7 +197,81 @@ public sealed class RenderVideoWorkflowTests
                 storyboardJob.Id,
                 TestContext.Current.CancellationToken));
 
-        Assert.Equal("render_narration_not_found", exception.ErrorCode);
+        Assert.Equal("render_audio_missing", exception.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Enqueue_AcceptsMasteredAudioWithoutNarrationTrack()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboardJob = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateStoryboardTestData.ValidResult);
+        var dbContext = new RecordingDbContext();
+        var masterBytes = new byte[] { 1, 2, 3 };
+        var workspace = await SeedMasterAsync(projectId, storyboardJob.Id, masterBytes);
+        var workflow = CreateWorkflow(
+            dbContext,
+            projectId,
+            storyboardJob,
+            [
+                RenderVideoTestData.SceneAsset(projectId, storyboardJob.Id, 0, "scene-0.png", [1]),
+                RenderVideoTestData.SceneAsset(projectId, storyboardJob.Id, 1, "scene-1.png", [2])
+            ],
+            narration: null,
+            workspace);
+
+        var jobId = await workflow.EnqueueAsync(
+            projectId,
+            storyboardJob.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(jobId);
+        var job = Assert.IsType<Job>(dbContext.AddedJob);
+        Assert.Equal(JobType.RenderVideo, job.Type);
+    }
+
+    private async Task<AudioProductionWorkspace> SeedMasterAsync(
+        Guid projectId,
+        Guid storyboardJobId,
+        byte[] masterBytes)
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "aistudio-render-workflow-tests",
+            Guid.NewGuid().ToString("N"));
+        var storage = Options.Create(new AssetStorageOptions { RootPath = root });
+        var masterRelative = AudioProductionWorkspace.FilePath(
+            projectId,
+            storyboardJobId,
+            AudioProductionWorkspace.MasterFileName);
+        var masterPath = Path.Combine(root, masterRelative);
+        Directory.CreateDirectory(Path.GetDirectoryName(masterPath)!);
+        File.WriteAllBytes(masterPath, masterBytes);
+
+        var workspace = new AudioProductionWorkspace(
+            new LocalAssetFileStore(storage),
+            FakeMediaInspector.Returning(new MediaInspection(12, false, true, false, 0, 0, 0, 0)));
+
+        await workspace.SaveManifestAsync(
+            projectId,
+            storyboardJobId,
+            new AudioProductionManifest(
+                AudioProductionWorkspace.Version,
+                new Dictionary<string, AudioProductionStage>
+                {
+                    [AudioProductionWorkspace.MasterStage] = new AudioProductionStage(
+                        "master-fingerprint",
+                        masterRelative,
+                        RenderVideoTestData.Hash(masterBytes),
+                        masterBytes.Length,
+                        12,
+                        0,
+                        0)
+                }),
+            TestContext.Current.CancellationToken);
+
+        return workspace;
     }
 
     private static RenderVideoWorkflow CreateWorkflow(
@@ -201,7 +279,8 @@ public sealed class RenderVideoWorkflowTests
         Guid? projectId,
         JobSnapshot? storyboard,
         IReadOnlyList<SceneAsset> assets,
-        NarrationTrack? narration) =>
+        NarrationTrack? narration,
+        AudioProductionWorkspace? workspace = null) =>
         new(
             dbContext,
             new StubContentProjectReader(
@@ -211,5 +290,14 @@ public sealed class RenderVideoWorkflowTests
             new StubJobReader(storyboard),
             new StubAssetRepository([.. assets]),
             new StubNarrationRepository(narration),
+            workspace ?? new AudioProductionWorkspace(
+                new LocalAssetFileStore(Options.Create(new AssetStorageOptions
+                {
+                    RootPath = Path.Combine(
+                        Path.GetTempPath(),
+                        "aistudio-render-workflow-tests",
+                        Guid.NewGuid().ToString("N"))
+                })),
+                FakeMediaInspector.Returning(new MediaInspection(12, false, true, false, 0, 0, 0, 0))),
             new AssetStubTimeProvider(AssetTestData.Now));
 }

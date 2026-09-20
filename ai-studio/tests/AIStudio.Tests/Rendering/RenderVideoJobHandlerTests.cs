@@ -4,6 +4,7 @@ using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Application.Jobs.RenderVideo;
 using AIStudio.Application.Rendering;
+using AIStudio.Application.Rendering.AudioProduction;
 using AIStudio.Domain.Assets;
 using AIStudio.Domain.Narration;
 using AIStudio.Domain.Subtitles;
@@ -236,7 +237,7 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
                 RenderVideoTestData.CreateJob(projectId, storyboard.Id),
                 TestContext.Current.CancellationToken));
 
-        Assert.Equal("render_narration_not_found", exception.ErrorCode);
+        Assert.Equal("render_audio_missing", exception.ErrorCode);
         Assert.Equal(0, processRunner.CallCount);
     }
 
@@ -557,6 +558,153 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
         Assert.DoesNotContain("fadeblack", filter);
     }
 
+    [Fact]
+    public async Task Handler_UsesMasteredAudioWhenWorkspaceHasValidMaster()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateStoryboardTestData.ValidResult);
+        var scene0 = new byte[] { 1 };
+        var scene1 = new byte[] { 2 };
+        WriteFile("scene-0.png", scene0);
+        WriteFile("scene-1.png", scene1);
+        var masterBytes = new byte[] { 9, 9, 9 };
+        var masterRelative = AudioProductionWorkspace.FilePath(
+            projectId,
+            storyboard.Id,
+            AudioProductionWorkspace.MasterFileName);
+        WriteFile(masterRelative, masterBytes);
+        var processRunner = FakeFfmpeg.WritingOutput([42, 42]);
+        var workspace = await SeedMasterAsync(
+            processRunner,
+            projectId,
+            storyboard.Id,
+            masterRelative,
+            masterBytes);
+
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            [
+                RenderVideoTestData.SceneAsset(projectId, storyboard.Id, 0, "scene-0.png", scene0),
+                RenderVideoTestData.SceneAsset(projectId, storyboard.Id, 1, "scene-1.png", scene1)
+            ],
+            narration: null,
+            processRunner,
+            workspace: workspace);
+
+        var resultJson = await handler.ExecuteAsync(
+            RenderVideoTestData.CreateJob(projectId, storyboard.Id),
+            TestContext.Current.CancellationToken);
+
+        var result = RenderVideoResult.Deserialize(resultJson);
+        Assert.Equal(RenderAudioSources.Mastered, result.AudioSource);
+        Assert.Equal(masterRelative, result.MasteredAudioPath);
+        Assert.Equal(RenderVideoTestData.Hash(masterBytes), result.MasteredAudioContentHash);
+        Assert.Null(result.NarrationTrackId);
+        Assert.Null(result.NarrationContentHash);
+
+        var ffmpegRequest = Assert.Single(
+            processRunner.Requests,
+            request => request.FileName.Contains("ffmpeg", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(Path.Combine(root, masterRelative), ffmpegRequest.Arguments);
+    }
+
+    [Fact]
+    public async Task Handler_FallsBackToNarrationWhenMasterFileIsMissing()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateStoryboardTestData.ValidResult);
+        var scene0 = new byte[] { 1 };
+        var scene1 = new byte[] { 2 };
+        var narrationBytes = new byte[] { 3 };
+        WriteFile("scene-0.png", scene0);
+        WriteFile("scene-1.png", scene1);
+        WriteFile("narration.wav", narrationBytes);
+        var narration = RenderVideoTestData.Narration(
+            projectId,
+            storyboard.Id,
+            "narration.wav",
+            narrationBytes);
+        var processRunner = FakeFfmpeg.WritingOutput([42, 42]);
+        var masterRelative = AudioProductionWorkspace.FilePath(
+            projectId,
+            storyboard.Id,
+            AudioProductionWorkspace.MasterFileName);
+        // Manifest points at a master that no longer exists on disk.
+        var workspace = await SeedMasterAsync(
+            processRunner,
+            projectId,
+            storyboard.Id,
+            masterRelative,
+            [9, 9, 9],
+            writeMasterFile: false);
+
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            [
+                RenderVideoTestData.SceneAsset(projectId, storyboard.Id, 0, "scene-0.png", scene0),
+                RenderVideoTestData.SceneAsset(projectId, storyboard.Id, 1, "scene-1.png", scene1)
+            ],
+            narration,
+            processRunner,
+            workspace: workspace);
+
+        var resultJson = await handler.ExecuteAsync(
+            RenderVideoTestData.CreateJob(projectId, storyboard.Id),
+            TestContext.Current.CancellationToken);
+
+        var result = RenderVideoResult.Deserialize(resultJson);
+        Assert.Equal(RenderAudioSources.Narration, result.AudioSource);
+        Assert.Equal(narration.Id, result.NarrationTrackId);
+        Assert.Equal(RenderVideoTestData.Hash(narrationBytes), result.NarrationContentHash);
+    }
+
+    private async Task<AudioProductionWorkspace> SeedMasterAsync(
+        IProcessRunner processRunner,
+        Guid projectId,
+        Guid storyboardJobId,
+        string masterRelative,
+        byte[] masterBytes,
+        bool writeMasterFile = true)
+    {
+        if (writeMasterFile)
+        {
+            WriteFile(masterRelative, masterBytes);
+        }
+
+        var storage = Options.Create(new AssetStorageOptions { RootPath = root });
+        var workspace = new AudioProductionWorkspace(
+            new LocalAssetFileStore(storage),
+            new FfprobeMediaInspector(
+                Options.Create(new RenderingOptions()),
+                processRunner));
+
+        await workspace.SaveManifestAsync(
+            projectId,
+            storyboardJobId,
+            new AudioProductionManifest(
+                AudioProductionWorkspace.Version,
+                new Dictionary<string, AudioProductionStage>
+                {
+                    [AudioProductionWorkspace.MasterStage] = new AudioProductionStage(
+                        "master-fingerprint",
+                        masterRelative,
+                        RenderVideoTestData.Hash(masterBytes),
+                        masterBytes.Length,
+                        12,
+                        0,
+                        0)
+                }),
+            TestContext.Current.CancellationToken);
+
+        return workspace;
+    }
+
     private static string Filter(FakeProcessRunner processRunner) =>
         Filter(processRunner.Requests[1].Arguments);
 
@@ -583,23 +731,25 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
         IReadOnlyList<SceneAsset> assets,
         NarrationTrack? narration,
         IProcessRunner processRunner,
-        SubtitleTrack? subtitle = null) =>
-        new(
+        SubtitleTrack? subtitle = null,
+        AudioProductionWorkspace? workspace = null)
+    {
+        var storage = Options.Create(new AssetStorageOptions { RootPath = root });
+        var rendering = Options.Create(new RenderingOptions());
+        var fileStore = new LocalAssetFileStore(storage);
+        var inspector = new FfprobeMediaInspector(rendering, processRunner);
+
+        return new RenderVideoJobHandler(
             new StubContentProjectReader(
                 new ContentProjectSnapshot(projectId, "Project", "Brief")),
             new StubJobReader(storyboard),
             new StubAssetRepository([.. assets]),
             new StubNarrationRepository(narration),
             new StubSubtitleRepository(subtitle),
-            new LocalAssetFileStore(
-                Options.Create(new AssetStorageOptions { RootPath = root })),
-            new FfmpegVideoRenderer(
-                Options.Create(new RenderingOptions()),
-                Options.Create(new AssetStorageOptions { RootPath = root }),
-                processRunner,
-                new FfprobeMediaInspector(
-                    Options.Create(new RenderingOptions()),
-                    processRunner)));
+            fileStore,
+            new FfmpegVideoRenderer(rendering, storage, processRunner, inspector),
+            workspace ?? new AudioProductionWorkspace(fileStore, inspector));
+    }
 
     private void WriteFile(string relativePath, byte[] bytes)
     {

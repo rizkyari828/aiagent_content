@@ -5,6 +5,7 @@ using AIStudio.Application.Abstractions.Persistence;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs.GenerateScript;
 using AIStudio.Application.Jobs.GenerateStoryboard;
+using AIStudio.Application.Jobs.GenerateAudio;
 using AIStudio.Application.Jobs.RenderVideo;
 using AIStudio.Domain.Content;
 using AIStudio.Domain.Jobs;
@@ -101,6 +102,7 @@ public sealed class GenerateIdeaWorkflow(
                 JobType.GenerateScript => GenerateScriptResult.Deserialize(job.Result),
                 JobType.GenerateStoryboard => GenerateStoryboardResult.Deserialize(job.Result),
                 JobType.RenderVideo => RenderVideoResult.Deserialize(job.Result),
+                JobType.GenerateAudio => GenerateAudioResult.Deserialize(job.Result),
                 _ => null
             }
             : null;

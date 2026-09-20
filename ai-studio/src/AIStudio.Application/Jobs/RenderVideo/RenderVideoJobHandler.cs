@@ -3,11 +3,19 @@ using AIStudio.Application.Content;
 using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Application.Narration;
 using AIStudio.Application.Rendering;
+using AIStudio.Application.Rendering.AudioProduction;
 using AIStudio.Application.Subtitles;
 using AIStudio.Domain.Jobs;
 
 namespace AIStudio.Application.Jobs.RenderVideo;
 
+/// <summary>
+/// Durable render. The audio input is the mastered audio produced by GenerateAudio
+/// when it exists and validates; otherwise the renderer falls back to the legacy
+/// per-project narration track, so pre-orbestration projects keep working
+/// unchanged. Scene assets, transitions, subtitles and per-scene timing are
+/// untouched.
+/// </summary>
 public sealed class RenderVideoJobHandler(
     IContentProjectReader contentProjects,
     IJobReader jobs,
@@ -15,7 +23,8 @@ public sealed class RenderVideoJobHandler(
     INarrationRepository narrations,
     ISubtitleRepository subtitles,
     IAssetFileStore fileStore,
-    IVideoRenderer renderer) : IJobHandler
+    IVideoRenderer renderer,
+    AudioProductionWorkspace audioWorkspace) : IJobHandler
 {
     public bool CanHandle(JobType type) => type == JobType.RenderVideo;
 
@@ -56,8 +65,74 @@ public sealed class RenderVideoJobHandler(
             payload.StoryboardJobId,
             cancellationToken);
 
-        var registered = await assets.ListByProjectAsync(
+        var sceneInputs = await BuildSceneInputsAsync(
             job.ContentProjectId,
+            payload.StoryboardJobId,
+            storyboard,
+            cancellationToken);
+
+        var audio = await ResolveAudioAsync(
+            job.ContentProjectId,
+            payload.StoryboardJobId,
+            cancellationToken);
+
+        var subtitle = await ResolveSubtitleAsync(
+            job.ContentProjectId,
+            payload.StoryboardJobId,
+            storyboard,
+            cancellationToken);
+
+        var relativeOutput = $"renders/{job.ContentProjectId:N}/{payload.StoryboardJobId:N}.mp4";
+
+        VideoRenderOutput output;
+        try
+        {
+            output = await renderer.RenderAsync(
+                new VideoRenderRequest(
+                    sceneInputs,
+                    audio.AbsolutePath,
+                    relativeOutput,
+                    subtitle.Path,
+                    subtitle.CueTexts),
+                cancellationToken);
+        }
+        catch (RenderVideoException exception)
+        {
+            throw new JobExecutionException(
+                exception.ErrorCode,
+                exception.Message,
+                exception);
+        }
+
+        var result = new RenderVideoResult(
+            output.RelativePath,
+            output.ContentHash,
+            output.ByteSize,
+            output.DurationSeconds,
+            output.Width,
+            output.Height,
+            payload.StoryboardJobId,
+            audio.NarrationTrackId,
+            sceneInputs.Count,
+            audio.NarrationContentHash,
+            subtitle.TrackId,
+            subtitle.ContentHash,
+            subtitle.Path is not null,
+            audio.Source,
+            audio.MasteredPath,
+            audio.MasteredContentHash);
+
+        return result.Serialize();
+    }
+
+    private async Task<IReadOnlyList<SceneMediaInput>> BuildSceneInputsAsync(
+        Guid contentProjectId,
+        Guid storyboardJobId,
+        GenerateStoryboardResult storyboard,
+        CancellationToken cancellationToken)
+    {
+        var registered = await assets.ListByProjectAsync(
+            contentProjectId,
             cancellationToken);
         var byScene = registered.ToDictionary(asset => asset.SceneIndex);
         var sceneInputs = new List<SceneMediaInput>(storyboard.Scenes.Count);
@@ -71,7 +146,7 @@ public sealed class RenderVideoJobHandler(
                     $"Scene {sceneIndex} has no registered asset.");
             }
 
-            if (asset.SourceJobId != payload.StoryboardJobId)
+            if (asset.SourceJobId != storyboardJobId)
             {
                 throw new JobExecutionException(
                     "render_asset_storyboard_mismatch",
@@ -101,17 +176,49 @@ public sealed class RenderVideoJobHandler(
                 Weight: weight));
         }
 
+        return sceneInputs;
+    }
+
+    /// <summary>
+    /// Prefers the mastered audio from the GenerateAudio workspace. When it is
+    /// missing or no longer valid, the legacy narration track is required.
+    /// </summary>
+    private async Task<ResolvedAudio> ResolveAudioAsync(
+        Guid contentProjectId,
+        Guid storyboardJobId,
+        CancellationToken cancellationToken)
+    {
+        var manifest = await audioWorkspace.TryReadManifestAsync(
+            contentProjectId,
+            storyboardJobId,
+            cancellationToken);
+        var master = await audioWorkspace.TryResolveStageAsync(
+            manifest,
+            AudioProductionWorkspace.MasterStage,
+            cancellationToken);
+
+        if (master is not null)
+        {
+            return new ResolvedAudio(
+                master.AbsolutePath,
+                RenderAudioSources.Mastered,
+                NarrationTrackId: null,
+                NarrationContentHash: null,
+                master.RelativePath,
+                master.ContentHash);
+        }
+
         var narration = await narrations.FindByProjectIdAsync(
-            job.ContentProjectId,
+            contentProjectId,
             cancellationToken);
         if (narration is null)
         {
             throw new JobExecutionException(
-                "render_narration_not_found",
-                $"Content project '{job.ContentProjectId}' does not have a narration track.");
+                "render_audio_missing",
+                $"Content project '{contentProjectId}' does not have narration or mastered audio.");
         }
 
-        if (narration.SourceJobId != payload.StoryboardJobId)
+        if (narration.SourceJobId != storyboardJobId)
         {
             throw new JobExecutionException(
                 "render_narration_storyboard_mismatch",
@@ -124,74 +231,51 @@ public sealed class RenderVideoJobHandler(
             "render_narration_unreadable",
             "render_narration_hash_mismatch");
 
-        string? subtitlePath = null;
-        Guid? subtitleTrackId = null;
-        string? subtitleContentHash = null;
-        IReadOnlyList<string>? subtitleCueTexts = null;
-
-        var subtitle = await subtitles.FindByProjectIdAsync(
-            job.ContentProjectId,
-            cancellationToken);
-        if (subtitle is not null && subtitle.SourceJobId == payload.StoryboardJobId)
-        {
-            var subtitleFile = ReadVerified(
-                subtitle.Path,
-                subtitle.ContentHash,
-                "render_subtitle_unreadable",
-                "render_subtitle_hash_mismatch");
-            subtitlePath = subtitleFile.AbsolutePath;
-            subtitleTrackId = subtitle.Id;
-            subtitleContentHash = subtitleFile.ContentHash;
-
-            // Re-time the operator's own cues to the derived scene boundaries.
-            // Only a one-cue-per-scene mapping is re-timed; any other shape keeps
-            // the canonical timing as the deterministic fallback.
-            var canonicalCues = SubtitleTimeline.ReadCueTexts(
-                await File.ReadAllTextAsync(subtitlePath, cancellationToken));
-            if (canonicalCues.Count == storyboard.Scenes.Count)
-            {
-                subtitleCueTexts = canonicalCues;
-            }
-        }
-
-        var relativeOutput = $"renders/{job.ContentProjectId:N}/{payload.StoryboardJobId:N}.mp4";
-
-        VideoRenderOutput output;
-        try
-        {
-            output = await renderer.RenderAsync(
-                new VideoRenderRequest(
-                    sceneInputs,
-                    narrationFile.AbsolutePath,
-                    relativeOutput,
-                    subtitlePath,
-                    subtitleCueTexts),
-                cancellationToken);
-        }
-        catch (RenderVideoException exception)
-        {
-            throw new JobExecutionException(
-                exception.ErrorCode,
-                exception.Message,
-                exception);
-        }
-
-        var result = new RenderVideoResult(
-            output.RelativePath,
-            output.ContentHash,
-            output.ByteSize,
-            output.DurationSeconds,
-            output.Width,
-            output.Height,
-            payload.StoryboardJobId,
+        return new ResolvedAudio(
+            narrationFile.AbsolutePath,
+            RenderAudioSources.Narration,
             narration.Id,
-            sceneInputs.Count,
             narrationFile.ContentHash,
-            subtitleTrackId,
-            subtitleContentHash,
-            subtitlePath is not null);
+            MasteredPath: null,
+            MasteredContentHash: null);
+    }
 
-        return result.Serialize();
+    private async Task<ResolvedSubtitle> ResolveSubtitleAsync(
+        Guid contentProjectId,
+        Guid storyboardJobId,
+        GenerateStoryboardResult storyboard,
+        CancellationToken cancellationToken)
+    {
+        var subtitle = await subtitles.FindByProjectIdAsync(
+            contentProjectId,
+            cancellationToken);
+        if (subtitle is null || subtitle.SourceJobId != storyboardJobId)
+        {
+            return new ResolvedSubtitle(null, null, null, null);
+        }
+
+        var subtitleFile = ReadVerified(
+            subtitle.Path,
+            subtitle.ContentHash,
+            "render_subtitle_unreadable",
+            "render_subtitle_hash_mismatch");
+
+        // Re-time the operator's own cues to the derived scene boundaries.
+        // Only a one-cue-per-scene mapping is re-timed; any other shape keeps
+        // the canonical timing as the deterministic fallback.
+        IReadOnlyList<string>? cueTexts = null;
+        var canonicalCues = SubtitleTimeline.ReadCueTexts(
+            await File.ReadAllTextAsync(subtitleFile.AbsolutePath, cancellationToken));
+        if (canonicalCues.Count == storyboard.Scenes.Count)
+        {
+            cueTexts = canonicalCues;
+        }
+
+        return new ResolvedSubtitle(
+            subtitleFile.AbsolutePath,
+            subtitle.Id,
+            subtitleFile.ContentHash,
+            cueTexts);
     }
 
     private async Task<GenerateStoryboardResult> FindStoryboardAsync(
@@ -257,4 +341,18 @@ public sealed class RenderVideoJobHandler(
 
         return file;
     }
+
+    private sealed record ResolvedAudio(
+        string AbsolutePath,
+        string Source,
+        Guid? NarrationTrackId,
+        string? NarrationContentHash,
+        string? MasteredPath,
+        string? MasteredContentHash);
+
+    private sealed record ResolvedSubtitle(
+        string? Path,
+        Guid? TrackId,
+        string? ContentHash,
+        IReadOnlyList<string>? CueTexts);
 }

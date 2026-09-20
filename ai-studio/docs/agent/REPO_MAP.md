@@ -74,6 +74,14 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `src/AIStudio.Infrastructure/Rendering/VoxCPM2/synthesize.py`, `src/AIStudio.Infrastructure/Rendering/ACE-Step/generate.py` — repository-owned launchers: read one constrained JSON request and write one result JSON; no request-supplied code, paths, or CLI flags.
 - `tests/AIStudio.Tests/Rendering/VoxCpmSpeechSynthesisProviderTests.cs`, `AceStepMusicGenerationProviderTests.cs`, `AudioGenerationTestSupport.cs`, `AudioGenerationEndToEndTests.cs` — voice/seed mapping, validation, error codes, GPU-gate lifecycle, shell-safety, and a real-runtime E2E gated by `AISTUDIO_VOXCPM_*` / `AISTUDIO_ACESTEP_*` env vars.
 
+## Production Orchestration v2 (durable audio + mastered render)
+
+- `src/AIStudio.Application/Jobs/GenerateAudio/GenerateAudioWorkflow.cs`, `GenerateAudioJobHandler.cs`, `GenerateAudioJobPayload.cs`, `GenerateAudioResult.cs` — one durable job with three retry-safe stages (narration, BGM, mastered mix); narration text derived from the storyboard title + scene headings; maps `audio_narration_failed` / `audio_music_failed` / `audio_mix_failed` / `audio_artifact_invalid`; holds no GPU lease.
+- `src/AIStudio.Application/Rendering/AudioProduction/AudioProductionWorkspace.cs`, `AudioProductionManifest.cs`, `AudioProductionFingerprint.cs`, `AudioProductionException.cs` — deterministic `audio/{projectId}/{storyboardJobId}/` layout plus a narrow `manifest.json` fingerprint/artifact reuse mechanism (validates fingerprint, SHA-256, byte size and probed audio/format); shared by GenerateAudio and the renderer.
+- `src/AIStudio.Api/Endpoints/AudioEndpoints.cs` — `POST /api/content-projects/{id}/storyboard-jobs/{storyboardJobId}/audio-jobs`.
+- `src/AIStudio.Application/Jobs/RenderVideo/RenderVideoResult.cs`, `RenderVideoJobHandler.cs`, `RenderVideoWorkflow.cs` — prefer the validated mastered audio (`audioSource=mastered`, `masteredAudioPath`/`masteredAudioContentHash`), fall back to the legacy `narration_tracks` row; scene timing, transitions and subtitles unchanged.
+- `tests/AIStudio.Tests/Rendering/GenerateAudioJobHandlerTests.cs`, `GenerateAudioWorkflowTests.cs`, `GenerateAudioContractsTests.cs`, `GenerateAudioTestDoubles.cs` — staged generation, full/partial reuse, only-failed-stage retry, input-change invalidation, disabled providers, cancellation, no GPU-gate constructor, and master-consumption render tests.
+
 ## Visual Asset Pipeline (durable planning + animation)
 
 - `src/AIStudio.Application/Rendering/Visuals/SceneVisualPlanner.cs` (v2), `SceneVisualPlan.cs`, `SceneVisualEngine.cs`, `SceneAnimationTemplate.cs`, `SceneAnimationParameters.cs`, `SceneVisualEngineSelector.cs` — deterministic storyboard-to-visual mapping and engine/template selection. v2 resolves display text only from the heading + quoted strings + concept vocabulary and never renders raw `visual` instruction prose.

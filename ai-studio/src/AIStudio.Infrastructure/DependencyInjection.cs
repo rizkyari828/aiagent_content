@@ -4,6 +4,7 @@ using AIStudio.Application.Assets;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.FinalVideoQa;
+using AIStudio.Application.Jobs.GenerateAudio;
 using AIStudio.Application.Jobs.GenerateIdea;
 using AIStudio.Application.Jobs.GenerateScript;
 using AIStudio.Application.Jobs.GenerateStoryboard;
@@ -12,6 +13,7 @@ using AIStudio.Application.Narration;
 using AIStudio.Application.Rendering;
 using AIStudio.Application.Rendering.AudioGeneration;
 using AIStudio.Application.Rendering.AudioMixing;
+using AIStudio.Application.Rendering.AudioProduction;
 using AIStudio.Application.Jobs.GenerateSceneVisuals;
 using AIStudio.Application.Rendering.Visuals;
 using AIStudio.Application.Scripts;
@@ -57,6 +59,7 @@ public static class DependencyInjection
         AddAssetStorage(services, configuration);
         AddRendering(services, configuration);
         AddAudioGeneration(services, configuration);
+        AddAudioProduction(services);
 
         return services;
     }
@@ -351,6 +354,15 @@ public static class DependencyInjection
 
         services.AddSingleton<ISpeechSynthesisProvider, VoxCpmSpeechSynthesisProvider>();
         services.AddSingleton<IMusicGenerationProvider, AceStepMusicGenerationProvider>();
+    }
+
+    private static void AddAudioProduction(IServiceCollection services)
+    {
+        // Deterministic workspace layout + narrow reuse manifest shared by the
+        // GenerateAudio handler and the renderer.
+        services.AddSingleton<AudioProductionWorkspace>();
+        services.AddScoped<IJobHandler, GenerateAudioJobHandler>();
+        services.AddScoped<GenerateAudioWorkflow>();
     }
 
     private static bool IsValidBaseUrl(string? value) =>
