@@ -13,5 +13,8 @@ public enum SceneVisualEngine
     ManimAnimation = 1,
 
     /// <summary>Local text-to-image model rendered to a still PNG.</summary>
-    AiImage = 2
+    AiImage = 2,
+
+    /// <summary>Repository-owned Blender template rendered to a short clip.</summary>
+    ThreeD = 3
 }

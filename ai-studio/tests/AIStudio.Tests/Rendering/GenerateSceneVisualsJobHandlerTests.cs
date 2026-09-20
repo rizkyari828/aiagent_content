@@ -180,6 +180,50 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task Handler_UsesThreeDEngineWhenEnabled()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateSceneVisualsTestData.AnimatedStoryboard);
+        var assets = new RecordingAssetRepository();
+        var svg = new StubSceneVisualRenderer();
+        var threeD = new StubThreeDRenderingProvider(isEnabled: true);
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            assets,
+            svg,
+            threeDRenderer: threeD);
+
+        var json = await handler.ExecuteAsync(
+            GenerateSceneVisualsTestData.Job(projectId, storyboard.Id),
+            TestContext.Current.CancellationToken);
+
+        var result = GenerateSceneVisualsResult.Deserialize(json);
+        var threeDVisual = Assert.Single(
+            result.Visuals,
+            visual => visual.Engine == "ThreeD");
+        Assert.EndsWith(".mp4", threeDVisual.Path);
+        Assert.Equal("LocalAiLaptop", threeDVisual.Template);
+        var rendered = Assert.Single(threeD.Requests);
+        Assert.Equal(SceneThreeDTemplate.LocalAiLaptop, rendered.Template);
+        Assert.Equal(SceneVisualPlanner.AnimationDurationSeconds, rendered.DurationSeconds, 3);
+        Assert.True(rendered.Seed >= 0);
+
+        Assert.Contains(
+            result.Visuals,
+            visual => visual.Engine == "SvgStill");
+        Assert.Single(svg.Briefs);
+        Assert.Contains(
+            assets.Assets,
+            asset => asset.Creator == "ThreeD" && asset.Type == AssetType.Video);
+        Assert.Contains(
+            assets.Assets,
+            asset => asset.Creator == "SvgStill" && asset.Type == AssetType.Image);
+    }
+
+    [Fact]
     public async Task Handler_UsesNarrationDerivedDurationForAnimatedClips()
     {
         var projectId = Guid.NewGuid();
@@ -306,6 +350,7 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
             new StubSceneVisualRenderer(),
             new StubManimSceneRenderer(isEnabled: false),
             new StubImageGenerationProvider(isEnabled: false),
+            new StubThreeDRenderingProvider(isEnabled: false),
             FakeMediaInspector.Returning(new MediaInspection(0, false, false, false, 0, 0)),
             new AssetStubTimeProvider(AssetTestData.Now));
 
@@ -325,7 +370,8 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
         StubManimSceneRenderer? manim = null,
         INarrationRepository? narrations = null,
         IMediaInspector? mediaInspector = null,
-        StubImageGenerationProvider? imageProvider = null) =>
+        StubImageGenerationProvider? imageProvider = null,
+        StubThreeDRenderingProvider? threeDRenderer = null) =>
         new(
             new StubContentProjectReader(
                 new ContentProjectSnapshot(projectId, "Project", "Brief")),
@@ -337,6 +383,7 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
             svg,
             manim ?? new StubManimSceneRenderer(isEnabled: false),
             imageProvider ?? new StubImageGenerationProvider(isEnabled: false),
+            threeDRenderer ?? new StubThreeDRenderingProvider(isEnabled: false),
             mediaInspector ?? FakeMediaInspector.Returning(
                 new MediaInspection(0, false, false, false, 0, 0)),
             new AssetStubTimeProvider(AssetTestData.Now));

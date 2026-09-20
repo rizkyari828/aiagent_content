@@ -201,6 +201,34 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         services
+            .AddOptions<BlenderOptions>()
+            .Bind(configuration.GetSection(BlenderOptions.SectionName))
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.ExecutablePath),
+                "Blender:ExecutablePath is required.")
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.TemplateDirectory),
+                "Blender:TemplateDirectory is required.")
+            .Validate(
+                options => options.TimeoutSeconds is >= 1 and <= 7200,
+                "Blender:TimeoutSeconds must be between 1 and 7200.")
+            .Validate(
+                options => options.Samples is >= 1 and <= 4096,
+                "Blender:Samples must be between 1 and 4096.")
+            .Validate(
+                options => options.Width is >= 16 and <= 7680 && options.Width % 2 == 0,
+                "Blender:Width must be an even number between 16 and 7680.")
+            .Validate(
+                options => options.Height is >= 16 and <= 4320 && options.Height % 2 == 0,
+                "Blender:Height must be an even number between 16 and 4320.")
+            .Validate(
+                options => options.FramesPerSecond is >= 1 and <= 120,
+                "Blender:FramesPerSecond must be between 1 and 120.")
+            .ValidateOnStart();
+
+        services.AddSingleton<IThreeDRenderingProvider, BlenderThreeDRenderingProvider>();
+
+        services
             .AddOptions<ComfyUiOptions>()
             .Bind(configuration.GetSection(ComfyUiOptions.SectionName))
             .Validate(

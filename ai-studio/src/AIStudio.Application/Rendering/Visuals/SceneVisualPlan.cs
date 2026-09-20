@@ -8,4 +8,5 @@ public sealed record SceneVisualPlan(
     SceneVisualBrief Brief,
     SceneVisualEngine Engine,
     SceneAnimationTemplate Template = SceneAnimationTemplate.None,
-    SceneAnimationParameters? Animation = null);
+    SceneAnimationParameters? Animation = null,
+    SceneThreeDTemplate ThreeDTemplate = SceneThreeDTemplate.None);

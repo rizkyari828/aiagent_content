@@ -17,10 +17,10 @@ namespace AIStudio.Application.Jobs.GenerateSceneVisuals;
 /// the approved asset root, and registers the result as a canonical
 /// <see cref="SceneAsset"/>. Scenes that already have an asset are skipped, so a
 /// re-run is idempotent and manually registered or canonical assets are preserved.
-/// Animated clips use the same derived <see cref="SceneTiming"/> duration the
-/// renderer later uses; when narration is unavailable the deterministic animation
-/// floor is kept. Still scenes use the deterministic SVG engine unless the optional
-/// local AI image provider is enabled.
+/// Animated clips (Manim or the optional Blender 3D engine) use the same derived
+/// <see cref="SceneTiming"/> duration the renderer later uses; when narration is
+/// unavailable the deterministic animation floor is kept. Still scenes use the
+/// deterministic SVG engine unless the optional local AI image provider is enabled.
 /// </summary>
 public sealed class GenerateSceneVisualsJobHandler(
     IContentProjectReader contentProjects,
@@ -31,6 +31,7 @@ public sealed class GenerateSceneVisualsJobHandler(
     ISceneVisualRenderer svgRenderer,
     IManimSceneRenderer manimRenderer,
     IImageGenerationProvider imageProvider,
+    IThreeDRenderingProvider threeDRenderer,
     IMediaInspector mediaInspector,
     TimeProvider timeProvider) : IJobHandler
 {
@@ -76,7 +77,8 @@ public sealed class GenerateSceneVisualsJobHandler(
         var plans = SceneVisualPlanner.PlanAll(
             storyboard,
             manimRenderer.IsEnabled,
-            imageProvider.IsEnabled);
+            imageProvider.IsEnabled,
+            threeDRenderer.IsEnabled);
         var animationDurations = await TryResolveAnimationDurationsAsync(
             job.ContentProjectId,
             payload.StoryboardJobId,
@@ -143,7 +145,7 @@ public sealed class GenerateSceneVisualsJobHandler(
             generated.Add(new GeneratedSceneVisual(
                 sceneIndex,
                 plan.Engine.ToString(),
-                plan.Template.ToString(),
+                TemplateName(plan),
                 file.RelativePath,
                 file.ByteSize,
                 file.ContentHash));
@@ -217,7 +219,7 @@ public sealed class GenerateSceneVisualsJobHandler(
             return SceneTiming.AllocateForScenes(
                 storyboard.Scenes.Select(scene => scene.Heading).ToArray(),
                 storyboard.Scenes.Select(scene => scene.Visual).ToArray(),
-                plans.Select(plan => plan.Engine == SceneVisualEngine.ManimAnimation).ToArray(),
+                plans.Select(plan => IsAnimated(plan.Engine)).ToArray(),
                 inspection.DurationSeconds);
         }
         catch (AssetCollectionException)
@@ -238,7 +240,7 @@ public sealed class GenerateSceneVisualsJobHandler(
         double? animationDurationSeconds,
         CancellationToken cancellationToken)
     {
-        var animated = plan.Engine == SceneVisualEngine.ManimAnimation;
+        var animated = IsAnimated(plan.Engine);
         var aiImage = plan.Engine == SceneVisualEngine.AiImage;
         var extension = animated ? "mp4" : "png";
         var relativePath =
@@ -247,7 +249,7 @@ public sealed class GenerateSceneVisualsJobHandler(
         try
         {
             byte[] bytes;
-            if (animated)
+            if (plan.Engine == SceneVisualEngine.ManimAnimation)
             {
                 var animation = plan.Animation
                     ?? throw new JobExecutionException(
@@ -261,6 +263,26 @@ public sealed class GenerateSceneVisualsJobHandler(
                 bytes = await manimRenderer.RenderAsync(
                     plan.Template,
                     animation,
+                    cancellationToken);
+            }
+            else if (plan.Engine == SceneVisualEngine.ThreeD)
+            {
+                if (plan.ThreeDTemplate == SceneThreeDTemplate.None)
+                {
+                    throw new JobExecutionException(
+                        "visual_plan_invalid",
+                        $"Scene {sceneIndex} selected 3D without a template.");
+                }
+
+                var duration = animationDurationSeconds is > 0
+                    ? animationDurationSeconds.Value
+                    : SceneVisualPlanner.AnimationDurationSeconds;
+                bytes = await threeDRenderer.RenderAsync(
+                    new ThreeDRenderRequest(
+                        plan.ThreeDTemplate,
+                        plan.Brief.Palette,
+                        duration,
+                        DeriveSeed(storyboardJobId, sceneIndex)),
                     cancellationToken);
             }
             else if (aiImage)
@@ -289,6 +311,25 @@ public sealed class GenerateSceneVisualsJobHandler(
                 exception);
         }
     }
+
+    /// <summary>
+    /// Engine-appropriate template name for the recorded result: the Manim template
+    /// for animation, the Blender template for 3D, and <c>None</c> for stills.
+    /// </summary>
+    private static string TemplateName(SceneVisualPlan plan) =>
+        plan.Engine switch
+        {
+            SceneVisualEngine.ManimAnimation => plan.Template.ToString(),
+            SceneVisualEngine.ThreeD => plan.ThreeDTemplate.ToString(),
+            _ => SceneAnimationTemplate.None.ToString()
+        };
+
+    /// <summary>
+    /// Animated engines produce a per-scene clip (and therefore use the higher
+    /// timing floor); the remaining engines produce a still image.
+    /// </summary>
+    private static bool IsAnimated(SceneVisualEngine engine) =>
+        engine is SceneVisualEngine.ManimAnimation or SceneVisualEngine.ThreeD;
 
     /// <summary>
     /// Stable per-scene seed so a re-run of the same storyboard reproduces the same

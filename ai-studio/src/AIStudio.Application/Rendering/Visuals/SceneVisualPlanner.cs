@@ -36,6 +36,9 @@ public static class SceneVisualPlanner
     private static readonly string[] LocalFlowKeywords =
         ["cloud", "gpu", "internet", "lokal", "local", "offline"];
 
+    private static readonly string[] LaptopKeywords =
+        ["laptop", "notebook"];
+
     private static readonly string[] ChatFlowKeywords =
         ["chat", "percakapan", "prompt", "jawaban", "assistant"];
 
@@ -88,12 +91,14 @@ public static class SceneVisualPlanner
     public static IReadOnlyList<SceneVisualPlan> PlanAll(
         GenerateStoryboardResult storyboard,
         bool enableAnimation,
-        bool enableAiImages = false)
+        bool enableAiImages = false,
+        bool enableThreeD = false)
     {
         ArgumentNullException.ThrowIfNull(storyboard);
         var plans = new List<SceneVisualPlan>(storyboard.Scenes.Count);
         var localFlowUsed = false;
         var chatFlowUsed = false;
+        var laptopThreeDUsed = false;
 
         for (var index = 0; index < storyboard.Scenes.Count; index++)
         {
@@ -117,12 +122,25 @@ public static class SceneVisualPlanner
                 }
             }
 
-            var engine = SceneVisualEngineSelector.Select(template, enableAiImages);
+            // Blender is a narrow, explicit selection: at most one scene whose text
+            // clearly maps to the trusted local-AI laptop template, and only when no
+            // higher-priority animation template already claimed the scene.
+            var threeD = SceneThreeDTemplate.None;
+            if (enableThreeD
+                && template == SceneAnimationTemplate.None
+                && !laptopThreeDUsed
+                && IsThreeDLaptopScene(scene))
+            {
+                threeD = SceneThreeDTemplate.LocalAiLaptop;
+                laptopThreeDUsed = true;
+            }
+
+            var engine = SceneVisualEngineSelector.Select(template, enableAiImages, threeD);
             var animation = engine == SceneVisualEngine.ManimAnimation
                 ? BuildAnimationParameters(brief, palette)
                 : null;
 
-            plans.Add(new SceneVisualPlan(brief, engine, template, animation));
+            plans.Add(new SceneVisualPlan(brief, engine, template, animation, threeD));
         }
 
         return plans;
@@ -340,6 +358,17 @@ public static class SceneVisualPlanner
 
     private static string SceneText(StoryboardScene scene) =>
         $"{scene.Heading} {scene.Visual}";
+
+    /// <summary>
+    /// Narrow, explainable rule for the trusted <c>local_ai_laptop</c> Blender
+    /// template: the scene must mention a laptop and carry a local/offline AI
+    /// signal. This is the only v1 path to the 3D engine; it is not a classifier.
+    /// </summary>
+    private static bool IsThreeDLaptopScene(StoryboardScene scene)
+    {
+        var text = SceneText(scene);
+        return ContainsAny(text, LaptopKeywords) && ContainsAny(text, LocalFlowKeywords);
+    }
 
     private static bool ContainsAny(string text, string[] keywords) =>
         keywords.Any(keyword => text.Contains(keyword, StringComparison.OrdinalIgnoreCase));

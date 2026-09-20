@@ -64,6 +64,27 @@ internal sealed class StubImageGenerationProvider(
     }
 }
 
+internal sealed class StubThreeDRenderingProvider(
+    bool isEnabled = true,
+    Func<ThreeDRenderRequest, byte[]>? render = null)
+    : IThreeDRenderingProvider
+{
+    public bool IsEnabled { get; } = isEnabled;
+
+    public List<ThreeDRenderRequest> Requests { get; } = [];
+
+    public Task<byte[]> RenderAsync(
+        ThreeDRenderRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Requests.Add(request);
+        return Task.FromResult(
+            render?.Invoke(request)
+            ?? new byte[] { 0, 0, 0, 1, 102, 116, 121, 112 });
+    }
+}
+
 internal static class GenerateSceneVisualsTestData
 {
     private static readonly JsonSerializerOptions JsonOptions =

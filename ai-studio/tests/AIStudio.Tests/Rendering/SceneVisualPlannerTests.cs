@@ -103,6 +103,59 @@ public sealed class SceneVisualPlannerTests
     }
 
     [Fact]
+    public void Select_PrefersThreeDOverAiImageButNotOverManim()
+    {
+        Assert.Equal(
+            SceneVisualEngine.ThreeD,
+            SceneVisualEngineSelector.Select(
+                SceneAnimationTemplate.None,
+                enableAiImages: true,
+                threeDTemplate: SceneThreeDTemplate.LocalAiLaptop));
+        Assert.Equal(
+            SceneVisualEngine.ManimAnimation,
+            SceneVisualEngineSelector.Select(
+                SceneAnimationTemplate.LocalAiFlow,
+                threeDTemplate: SceneThreeDTemplate.LocalAiLaptop));
+    }
+
+    [Fact]
+    public void PlanAll_UsesThreeDForSupportedLaptopSceneOnlyWhenEnabled()
+    {
+        var storyboard = GenerateStoryboardResult.Deserialize(
+            GenerateSceneVisualsTestData.AnimatedStoryboard);
+
+        var enabled = SceneVisualPlanner.PlanAll(
+            storyboard,
+            enableAnimation: false,
+            enableThreeD: true);
+        Assert.Equal(SceneVisualEngine.ThreeD, enabled[0].Engine);
+        Assert.Equal(SceneThreeDTemplate.LocalAiLaptop, enabled[0].ThreeDTemplate);
+        Assert.Equal(SceneVisualEngine.SvgStill, enabled[1].Engine);
+        Assert.Equal(SceneThreeDTemplate.None, enabled[1].ThreeDTemplate);
+
+        var disabled = SceneVisualPlanner.PlanAll(
+            storyboard,
+            enableAnimation: false,
+            enableThreeD: false);
+        Assert.All(disabled, plan => Assert.Equal(SceneVisualEngine.SvgStill, plan.Engine));
+    }
+
+    [Fact]
+    public void PlanAll_KeepsManimPriorityOverThreeD()
+    {
+        var storyboard = GenerateStoryboardResult.Deserialize(
+            GenerateSceneVisualsTestData.AnimatedStoryboard);
+
+        var plans = SceneVisualPlanner.PlanAll(
+            storyboard,
+            enableAnimation: true,
+            enableThreeD: true);
+
+        Assert.All(plans, plan => Assert.Equal(SceneVisualEngine.ManimAnimation, plan.Engine));
+        Assert.All(plans, plan => Assert.Equal(SceneThreeDTemplate.None, plan.ThreeDTemplate));
+    }
+
+    [Fact]
     public void PlanAll_UsesAiImageForStillScenesWhenEnabled()
     {
         var storyboard = GenerateStoryboardResult.Deserialize(
