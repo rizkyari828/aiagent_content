@@ -26,6 +26,7 @@ from manim import (
     UP,
     UL,
     UR,
+    UpdateFromAlphaFunc,
     VGroup,
     WHITE,
     Write,
@@ -51,6 +52,63 @@ PALETTES = {
 
 # The burned subtitles sit in the bottom ~90px of a 720p frame (~1.0 unit).
 SAFE_BOTTOM_Y = -3.0
+
+# Progress bar geometry. A RoundedRectangle whose corner radius exceeds half of
+# its smallest side makes Manim's ``round_corners`` emit crossing line segments
+# (a bow-tie/hourglass path). The fill is therefore rebuilt as a valid capsule at
+# every animation frame (never stretched), so its height and rounded caps stay
+# fixed while only its width grows from the left.
+BAR_WIDTH = 8.6
+BAR_HEIGHT = 0.34
+BAR_CORNER_RADIUS = 0.17
+
+
+def _rounded_rect(width, height, corner_radius, **kwargs):
+    """RoundedRectangle with the corner radius clamped to the shape's half-extent.
+
+    Clamping prevents the degenerate, self-intersecting path Manim produces when
+    ``corner_radius`` is larger than half of ``width`` or ``height``.
+    """
+    safe_radius = max(0.0, min(corner_radius, width / 2.0, height / 2.0))
+    return RoundedRectangle(
+        width=width,
+        height=height,
+        corner_radius=safe_radius,
+        **kwargs,
+    )
+
+
+def progress_fill(colors, value, track):
+    """Return a valid left-anchored capsule fill for a progress ``value`` in [0, 1].
+
+    The width never drops below ``2 * corner_radius`` so the shape stays a valid
+    capsule. Because the shape is rebuilt (not stretched), the rounded caps keep
+    their radius and the bar height stays constant.
+    """
+    width = max(2 * BAR_CORNER_RADIUS, BAR_WIDTH * value)
+    fill = _rounded_rect(
+        width,
+        BAR_HEIGHT,
+        BAR_CORNER_RADIUS,
+        fill_color=colors["accent"],
+        fill_opacity=1,
+        stroke_width=0,
+    )
+    # Place the fill's left edge at the track's left edge, vertically centred on it.
+    fill.move_to(track.get_left(), aligned_edge=LEFT)
+    return fill
+
+
+def build_progress_track():
+    """Return the rounded progress track (the fill is built by ``progress_fill``)."""
+    return _rounded_rect(
+        BAR_WIDTH,
+        BAR_HEIGHT,
+        BAR_CORNER_RADIUS,
+        fill_color=WHITE,
+        fill_opacity=0.08,
+        stroke_width=0,
+    )
 
 
 def _colors(params):
@@ -108,7 +166,7 @@ def _header(params, colors):
 
 def _chip(label, colors, highlight=False):
     text = _text(label, 20, colors["background"] if highlight else colors["text"], "BOLD")
-    box = RoundedRectangle(
+    box = _rounded_rect(
         width=text.width + 0.5,
         height=0.56,
         corner_radius=0.28,
@@ -338,7 +396,7 @@ class ProcessFlow(Scene):
         self.play(Write(header), run_time=0.4)
         elapsed += 0.4
 
-        window = RoundedRectangle(
+        window = _rounded_rect(
             width=10.4,
             height=3.7,
             corner_radius=0.28,
@@ -348,7 +406,7 @@ class ProcessFlow(Scene):
             stroke_opacity=0.45,
             stroke_width=3,
         ).move_to(DOWN * 0.55)
-        title_bar = RoundedRectangle(
+        title_bar = _rounded_rect(
             width=10.4, height=0.55, corner_radius=0.28, fill_color=WHITE, fill_opacity=0.06, stroke_width=0
         ).align_to(window, UP)
         window_title = _text("Terminal", 20, colors["text"], "NORMAL", opacity=0.75)
@@ -368,15 +426,24 @@ class ProcessFlow(Scene):
         elapsed += 0.35
 
         target = max(0.05, min(1.0, float(self.params.get("progressTarget", 0.75))))
-        bar_bg = RoundedRectangle(
-            width=8.6, height=0.34, corner_radius=0.17, fill_color=WHITE, fill_opacity=0.08, stroke_width=0
+        bar_bg = build_progress_track()
+        bar_group = (
+            VGroup(bar_bg)
+            .next_to(command_line, DOWN, buff=0.55)
+            .align_to(window, LEFT)
+            .shift(RIGHT * 0.6)
         )
-        bar = RoundedRectangle(
-            width=0.05, height=0.34, corner_radius=0.17, fill_color=accent, fill_opacity=1, stroke_width=0
-        ).align_to(bar_bg, LEFT)
-        bar_group = VGroup(bar_bg, bar).next_to(command_line, DOWN, buff=0.55)
-        self.play(FadeIn(bar_group), run_time=0.2)
-        self.play(bar.animate.scale_to_fit_width(8.6 * target, about_edge=LEFT), run_time=0.85)
+        bar = progress_fill(colors, 0.0, bar_bg)
+        self.play(FadeIn(bar_group), FadeIn(bar), run_time=0.2)
+        self.play(
+            UpdateFromAlphaFunc(
+                bar,
+                lambda mob, alpha: mob.become(
+                    progress_fill(colors, target * alpha, bar_bg)
+                ),
+            ),
+            run_time=0.85,
+        )
         elapsed += 1.05
 
         steps = (self.params.get("steps") or [])[:3]

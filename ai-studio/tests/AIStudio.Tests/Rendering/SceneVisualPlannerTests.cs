@@ -72,6 +72,41 @@ public sealed class SceneVisualPlannerTests
     }
 
     [Fact]
+    public void PlanAll_ProcessFlowDifferentiatesInstallFromPullAndBoundsProgress()
+    {
+        var storyboard = GenerateStoryboardResult.Deserialize(
+            """
+            {
+              "title": "Terminal",
+              "scenes": [
+                { "heading": "Langkah 1: Download dan Install Ollama", "visual": "Terminal install dengan progress bar download." },
+                { "heading": "Langkah 2: Tarik Model AI Ringan", "visual": "Terminal pull model dengan progress bar unduh." }
+              ]
+            }
+            """);
+
+        var plans = SceneVisualPlanner.PlanAll(storyboard, [4.0, 4.0], enableAnimation: true);
+
+        Assert.All(plans, plan =>
+        {
+            Assert.Equal(SceneAnimationTemplate.ProcessFlow, plan.Template);
+            Assert.Equal(SceneVisualEngine.ManimAnimation, plan.Engine);
+            Assert.NotNull(plan.Animation);
+            Assert.False(string.IsNullOrWhiteSpace(plan.Animation!.Command));
+            Assert.NotEmpty(plan.Animation.Steps ?? []);
+            Assert.InRange(plan.Animation.ProgressTarget, 0.05, 1.0);
+        });
+
+        // Install and Pull stay visually related (same ProcessFlow template) but
+        // must not be identical: command, step labels and progress differ by intent.
+        Assert.NotEqual(plans[0].Animation!.Command, plans[1].Animation!.Command);
+        Assert.NotEqual(
+            string.Join(',', plans[0].Animation!.Steps!),
+            string.Join(',', plans[1].Animation!.Steps!));
+        Assert.NotEqual(plans[0].Animation!.ProgressTarget, plans[1].Animation!.ProgressTarget);
+    }
+
+    [Fact]
     public void PlanAll_CyclesPalettesAndKeepsSceneIndexes()
     {
         var storyboard = GenerateStoryboardResult.Deserialize(
