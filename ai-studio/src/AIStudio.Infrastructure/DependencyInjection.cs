@@ -10,6 +10,7 @@ using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Application.Jobs.RenderVideo;
 using AIStudio.Application.Narration;
 using AIStudio.Application.Rendering;
+using AIStudio.Application.Rendering.AudioGeneration;
 using AIStudio.Application.Rendering.AudioMixing;
 using AIStudio.Application.Jobs.GenerateSceneVisuals;
 using AIStudio.Application.Rendering.Visuals;
@@ -23,6 +24,7 @@ using AIStudio.Infrastructure.Jobs;
 using AIStudio.Infrastructure.Narration;
 using AIStudio.Infrastructure.Persistence;
 using AIStudio.Infrastructure.Rendering;
+using AIStudio.Infrastructure.Rendering.AudioGeneration;
 using AIStudio.Infrastructure.Rendering.AudioMixing;
 using AIStudio.Infrastructure.Scripts;
 using AIStudio.Infrastructure.Subtitles;
@@ -54,6 +56,7 @@ public static class DependencyInjection
         AddAiGateway(services, configuration);
         AddAssetStorage(services, configuration);
         AddRendering(services, configuration);
+        AddAudioGeneration(services, configuration);
 
         return services;
     }
@@ -294,6 +297,60 @@ public static class DependencyInjection
                     UriKind.Absolute);
                 client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
             });
+    }
+
+    private static void AddAudioGeneration(
+        IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services
+            .AddOptions<SpeechSynthesisOptions>()
+            .Bind(configuration.GetSection(SpeechSynthesisOptions.SectionName))
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.VoxCpm2.PythonExecutable),
+                "SpeechSynthesis:VoxCPM2:PythonExecutable is required.")
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.VoxCpm2.ScriptPath),
+                "SpeechSynthesis:VoxCPM2:ScriptPath is required.")
+            .Validate(
+                options => options.VoxCpm2.TimeoutSeconds is >= 1 and <= 3600,
+                "SpeechSynthesis:VoxCPM2:TimeoutSeconds must be between 1 and 3600.")
+            .Validate(
+                options => options.VoxCpm2.InferenceTimesteps is >= 1 and <= 100,
+                "SpeechSynthesis:VoxCPM2:InferenceTimesteps must be between 1 and 100.")
+            .Validate(
+                options => options.VoxCpm2.ExpectedSampleRate is >= 8000 and <= 192000,
+                "SpeechSynthesis:VoxCPM2:ExpectedSampleRate must be between 8000 and 192000.")
+            .ValidateOnStart();
+
+        services
+            .AddOptions<MusicGenerationOptions>()
+            .Bind(configuration.GetSection(MusicGenerationOptions.SectionName))
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.AceStep.PythonExecutable),
+                "MusicGeneration:AceStep:PythonExecutable is required.")
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.AceStep.ScriptPath),
+                "MusicGeneration:AceStep:ScriptPath is required.")
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.AceStep.Model),
+                "MusicGeneration:AceStep:Model is required.")
+            .Validate(
+                options => options.AceStep.TimeoutSeconds is >= 1 and <= 7200,
+                "MusicGeneration:AceStep:TimeoutSeconds must be between 1 and 7200.")
+            .Validate(
+                options => options.AceStep.InferenceSteps is >= 1 and <= 100,
+                "MusicGeneration:AceStep:InferenceSteps must be between 1 and 100.")
+            .Validate(
+                options => options.AceStep.ExpectedSampleRate is >= 8000 and <= 192000,
+                "MusicGeneration:AceStep:ExpectedSampleRate must be between 8000 and 192000.")
+            .Validate(
+                options => options.AceStep.ExpectedChannels is 1 or 2,
+                "MusicGeneration:AceStep:ExpectedChannels must be 1 or 2.")
+            .ValidateOnStart();
+
+        services.AddSingleton<ISpeechSynthesisProvider, VoxCpmSpeechSynthesisProvider>();
+        services.AddSingleton<IMusicGenerationProvider, AceStepMusicGenerationProvider>();
     }
 
     private static bool IsValidBaseUrl(string? value) =>

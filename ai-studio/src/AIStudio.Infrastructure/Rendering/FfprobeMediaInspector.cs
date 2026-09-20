@@ -12,7 +12,7 @@ public sealed class FfprobeMediaInspector : IMediaInspector
         "-v",
         "error",
         "-show_entries",
-        "format=duration:stream=codec_type,width,height",
+        "format=duration:stream=codec_type,width,height,sample_rate,channels",
         "-of",
         "json"
     ];
@@ -70,6 +70,8 @@ public sealed class FfprobeMediaInspector : IMediaInspector
             var hasSubtitle = false;
             var width = 0;
             var height = 0;
+            var sampleRate = 0;
+            var channels = 0;
 
             if (root.TryGetProperty("streams", out var streams)
                 && streams.ValueKind == JsonValueKind.Array)
@@ -98,6 +100,18 @@ public sealed class FfprobeMediaInspector : IMediaInspector
                             break;
                         case "audio":
                             hasAudio = true;
+                            if (sampleRate <= 0
+                                && TryGetIntValue(stream, "sample_rate", out var streamSampleRate))
+                            {
+                                sampleRate = streamSampleRate;
+                            }
+
+                            if (channels <= 0
+                                && TryGetPositiveInt(stream, "channels", out var streamChannels))
+                            {
+                                channels = streamChannels;
+                            }
+
                             break;
                         case "subtitle":
                             hasSubtitle = true;
@@ -106,7 +120,15 @@ public sealed class FfprobeMediaInspector : IMediaInspector
                 }
             }
 
-            return new MediaInspection(duration, hasVideo, hasAudio, hasSubtitle, width, height);
+            return new MediaInspection(
+                duration,
+                hasVideo,
+                hasAudio,
+                hasSubtitle,
+                width,
+                height,
+                sampleRate,
+                channels);
         }
         catch (JsonException exception)
         {
@@ -127,6 +149,29 @@ public sealed class FfprobeMediaInspector : IMediaInspector
             && property.ValueKind == JsonValueKind.Number
             && property.TryGetInt32(out value)
             && value > 0;
+    }
+
+    private static bool TryGetIntValue(
+        JsonElement element,
+        string propertyName,
+        out int value)
+    {
+        value = 0;
+        if (!element.TryGetProperty(propertyName, out var property))
+        {
+            return false;
+        }
+
+        return property.ValueKind switch
+        {
+            JsonValueKind.Number => property.TryGetInt32(out value),
+            JsonValueKind.String => int.TryParse(
+                property.GetString(),
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out value),
+            _ => false
+        };
     }
 
     private static string Summarize(string value)

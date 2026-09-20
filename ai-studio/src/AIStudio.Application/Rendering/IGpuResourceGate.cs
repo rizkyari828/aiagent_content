@@ -26,4 +26,8 @@ public static class GpuWorkloads
     public const string Blender = "blender";
 
     public const string Ollama = "ollama";
+
+    public const string SpeechSynthesis = "speech";
+
+    public const string MusicGeneration = "music";
 }

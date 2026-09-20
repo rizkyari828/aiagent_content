@@ -65,6 +65,15 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `src/AIStudio.Infrastructure/Rendering/AudioMixing/FfmpegAudioMixCommandPlan.cs`, `AudioMixingOptions.cs` — safe argument/filter plan (narration/music `loudnorm`, sidechain ducking, fades, `alimiter`, 48 kHz stereo) with every value centralized in options.
 - `tests/AIStudio.Tests/Rendering/FfmpegAudioMixCommandPlanTests.cs`, `FfmpegAudioMixerTests.cs`, `FfmpegAudioMixerIntegrationTests.cs` — argument safety/format/ducking/fade/limiter, missing input, FFmpeg failure, cancellation, space-containing paths, path traversal, and a real-FFmpeg smoke test (skips without ffmpeg).
 
+## Audio Generation (local providers)
+
+- `src/AIStudio.Application/Rendering/AudioGeneration/ISpeechSynthesisProvider.cs`, `SpeechSynthesisRequest.cs`, `SpeechSynthesisResult.cs`, `SpeechVoiceProfile.cs`, `SpeechSynthesisException.cs` — local TTS boundary: curated voice presets, text data only, approved asset output, `speech_*` errors.
+- `src/AIStudio.Application/Rendering/AudioGeneration/IMusicGenerationProvider.cs`, `MusicGenerationRequest.cs`, `MusicGenerationResult.cs`, `MusicGenerationException.cs` — local music boundary: caption/duration/bpm/instrumental/seed, approved asset output, `music_*` errors.
+- `src/AIStudio.Infrastructure/Rendering/AudioGeneration/VoxCpmSpeechSynthesisProvider.cs`, `SpeechSynthesisOptions.cs` — launches repository-owned `Rendering/VoxCPM2/synthesize.py` with trusted python/model paths plus one JSON request, persists via `IAssetFileStore`, verifies via `IMediaInspector`, holds `IGpuResourceGate` across the GPU process only; `SpeechSynthesis:VoxCPM2:*`, disabled by default.
+- `src/AIStudio.Infrastructure/Rendering/AudioGeneration/AceStepMusicGenerationProvider.cs`, `MusicGenerationOptions.cs` — launches repository-owned `Rendering/ACE-Step/generate.py` (`AceStepHandler`/`generate_music`, `acestep-v15-turbo`) with trusted python/project/model paths plus one JSON request; same gate/persist/probe rules; `MusicGeneration:AceStep:*`, disabled by default.
+- `src/AIStudio.Infrastructure/Rendering/VoxCPM2/synthesize.py`, `src/AIStudio.Infrastructure/Rendering/ACE-Step/generate.py` — repository-owned launchers: read one constrained JSON request and write one result JSON; no request-supplied code, paths, or CLI flags.
+- `tests/AIStudio.Tests/Rendering/VoxCpmSpeechSynthesisProviderTests.cs`, `AceStepMusicGenerationProviderTests.cs`, `AudioGenerationTestSupport.cs`, `AudioGenerationEndToEndTests.cs` — voice/seed mapping, validation, error codes, GPU-gate lifecycle, shell-safety, and a real-runtime E2E gated by `AISTUDIO_VOXCPM_*` / `AISTUDIO_ACESTEP_*` env vars.
+
 ## Visual Asset Pipeline (durable planning + animation)
 
 - `src/AIStudio.Application/Rendering/Visuals/SceneVisualPlanner.cs` (v2), `SceneVisualPlan.cs`, `SceneVisualEngine.cs`, `SceneAnimationTemplate.cs`, `SceneAnimationParameters.cs`, `SceneVisualEngineSelector.cs` — deterministic storyboard-to-visual mapping and engine/template selection. v2 resolves display text only from the heading + quoted strings + concept vocabulary and never renders raw `visual` instruction prose.

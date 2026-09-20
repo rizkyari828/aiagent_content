@@ -95,6 +95,24 @@ public sealed class FfprobeMediaInspectorTests
         Assert.Equal(ProcessExecutionException.StartFailed, exception.ErrorCode);
     }
 
+    [Fact]
+    public async Task InspectAsync_ParsesAudioSampleRateAndChannels()
+    {
+        const string json = """
+            {"format":{"duration":"3"},"streams":[{"codec_type":"audio","sample_rate":"48000","channels":2}]}
+            """;
+        var inspector = CreateInspector(
+            new FakeProcessRunner(_ => new ProcessResult(0, json, string.Empty)));
+
+        var inspection = await inspector.InspectAsync(
+            "/tmp/audio.wav",
+            TestContext.Current.CancellationToken);
+
+        Assert.True(inspection.HasAudio);
+        Assert.Equal(48000, inspection.SampleRate);
+        Assert.Equal(2, inspection.Channels);
+    }
+
     private static FfprobeMediaInspector CreateInspector(IProcessRunner processRunner) =>
         new(Options.Create(new RenderingOptions()), processRunner);
 }

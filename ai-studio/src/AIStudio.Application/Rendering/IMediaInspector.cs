@@ -13,4 +13,6 @@ public sealed record MediaInspection(
     bool HasAudio,
     bool HasSubtitle,
     int Width,
-    int Height);
+    int Height,
+    int SampleRate = 0,
+    int Channels = 0);

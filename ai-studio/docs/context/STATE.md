@@ -4,9 +4,11 @@ Updated: 2026-09-20.
 
 ## Current milestone
 
-Video #1 is DONE, including the durable animated visual pipeline: SceneVisualPlanner v2, SVG + Manim engines, and narration-aware durable timing parity. Audio Mixing / Mastering v1 is DONE as a standalone CPU FFmpeg service (no durable job/endpoint).
+Video #1 is DONE, including the durable animated visual pipeline: SceneVisualPlanner v2, SVG + Manim engines, and narration-aware durable timing parity. Audio Mixing / Mastering v1 is DONE as a standalone CPU FFmpeg service (no durable job/endpoint). Audio Generation v1 is DONE: local VoxCPM2 speech and ACE-Step music provider boundaries, disabled by default, no job/endpoint wiring yet.
 
 ## Implemented
+
+- Audio Generation v1 (providers only, no schema/migration, both engines disabled by default): new application boundaries `ISpeechSynthesisProvider` (`Application.Rendering.AudioGeneration`) and `IMusicGenerationProvider`. `VoxCpmSpeechSynthesisProvider` maps a small curated voice set (Formal/Playful/Energetic/Documentary) to approved Indonesian control text and launches the repository-owned `Rendering/VoxCPM2/synthesize.py` with a trusted model path plus one constrained JSON request (text, voice, timesteps, cfg, normalize, output). `AceStepMusicGenerationProvider` launches `Rendering/ACE-Step/generate.py` with a trusted project root/model plus one constrained JSON request (caption, duration, bpm, instrumental, seed, steps). Both persist the generated WAV through `IAssetFileStore`, verify it with `IMediaInspector` (audio present, duration > 0, expected sample rate; 2 channels and duration match for music), acquire the shared `IGpuResourceGate` for the process only and release before the CPU-only persist/probe, and map stable `speech_*` / `music_*` errors. Callers cannot supply python code, executable/model/project paths, CLI flags, or shell fragments. Config: `SpeechSynthesis:VoxCPM2:*` and `MusicGeneration:AceStep:*`; no `/home/tama` paths in source.
 
 - Audio Mixing / Mastering v1 (no schema/migration): new standalone `IAudioMixer`/`FfmpegAudioMixer` (`Application.Rendering.AudioMixing` + `Infrastructure.Rendering.AudioMixing`). Narration + optional background music -> narration `loudnorm=I=-16:TP=-1.5:LRA=11`, music `loudnorm=I=-24:TP=-3:LRA=7`, sidechain ducking while narration is active, short music fade-in/out, `alimiter` at -1 dBFS, 48 kHz stereo `pcm_s16le` WAV bounded to the narration length (music looped when shorter, trimmed/faded when longer). Values centralized in `AudioMixingOptions`; no caller-supplied filter text. Inputs are approved asset references resolved through existing `IAssetFileStore`; output is a relative `.wav` under the approved root; execution reuses `IProcessRunner`/`IMediaInspector`. Structured `audio_*` errors. CPU-only: never acquires `IGpuResourceGate`; no shell; no arbitrary executable paths.
 
@@ -47,6 +49,10 @@ Video #1 is DONE, including the durable animated visual pipeline: SceneVisualPla
 
 ## Verification
 
+- PASS - Audio Generation v1 focused tests: 45 pass (VoxCPM2 speech provider, ACE-Step music provider, ffprobe sample-rate/channel parsing), 0 failed.
+- PASS - Audio Generation v1 full suite: 440 total, 439 pass, 1 skipped (real E2E gated by env vars), 0 failed.
+- PASS - Real local E2E through the providers (VoxCPM2 `.venv` + local model; ACE-Step `.venv` + `acestep-v15-turbo`): narration WAV 48 kHz mono 6.72s; music WAV 48 kHz stereo 12.0s; then `IAudioMixer` produced `final_mix.wav` 48 kHz stereo 6.72s, peak -4.15 dBFS, integrated -17.0 LUFS (no clipping, bounded to narration length).
+
 - PASS - Audio Mixing / Mastering v1: 24 focused tests pass (command plan, mixer, and a real-FFmpeg integration test); full suite 399/399 with `ConnectionStrings__DefaultConnection` set, 0 skipped.
 - PASS - Audio mix real FFmpeg smoke: synthesized 6s mono narration + 3s stereo music -> 48 kHz stereo `pcm_s16le` WAV, 6.0s, peak -12.2 dBFS, integrated -15.9 LUFS (no clipping); ducking measured ~10 dB music reduction under speech and full recovery in a 2s silent gap.
 
@@ -68,5 +74,5 @@ Video #1 is DONE, including the durable animated visual pipeline: SceneVisualPla
 - Durable subtitle re-timing applies only when the canonical SRT cue count equals the storyboard scene count (one cue per scene). Any other shape keeps the canonical timing as the deterministic fallback, so multi-cue SRTs are not re-timed yet.
 - The `SceneVisualPlanner` concept vocabulary is generic but finite; a scene whose `visual` has no quoted labels or recognized concepts falls back to a heading-only card.
 - `.demo/` is a local harness; generated runtime assets under `src/AIStudio.Api/assets/` stay gitignored and are preserved locally, not committed. AI image generation and 3D scene rendering now exist as optional engines (ComfyUI and Blender, both disabled by default). Heavy GPU workloads (ComfyUI, Blender CUDA, Ollama) are serialized by the process-local GPU gate; character animation, VRAM-aware scheduling, and cross-process coordination remain deferred.
-- Audio Mixing / Mastering v1 is implemented as a standalone service only: no durable job type, HTTP enqueue endpoint, or DB persistence yet, and VoxCPM2/ACE-Step/Stable Audio provider integration is not attempted. Deferred until a milestone authorizes the production narration/BGM selection flow.
+- Audio Generation v1 providers exist (VoxCPM2 speech, ACE-Step music) but are not wired into any durable job, workflow, or HTTP endpoint yet; generation/voice/music selection and persistence into the canonical narration/asset records remain the next step. Stable Audio 3 Medium remains an optional future provider. Audio Mixing / Mastering v1 remains a standalone service with no job/endpoint.
 - Next milestone: manual publishing.
