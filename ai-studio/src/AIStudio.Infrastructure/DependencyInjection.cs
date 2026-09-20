@@ -199,6 +199,38 @@ public static class DependencyInjection
                 options => options.TimeoutSeconds is >= 1 and <= 3600,
                 "Manim:TimeoutSeconds must be between 1 and 3600.")
             .ValidateOnStart();
+
+        services
+            .AddOptions<ComfyUiOptions>()
+            .Bind(configuration.GetSection(ComfyUiOptions.SectionName))
+            .Validate(
+                options => IsValidBaseUrl(options.BaseUrl),
+                "ComfyUi:BaseUrl must be an absolute HTTP or HTTPS URL.")
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.WorkflowPath),
+                "ComfyUi:WorkflowPath is required.")
+            .Validate(
+                options => options.TimeoutSeconds is >= 1 and <= 3600,
+                "ComfyUi:TimeoutSeconds must be between 1 and 3600.")
+            .Validate(
+                options => options.Width is >= 16 and <= 16384,
+                "ComfyUi:Width must be between 16 and 16384.")
+            .Validate(
+                options => options.Height is >= 16 and <= 16384,
+                "ComfyUi:Height must be between 16 and 16384.")
+            .ValidateOnStart();
+
+        services.AddHttpClient<IImageGenerationProvider, ComfyUiImageGenerationProvider>(
+            (serviceProvider, client) =>
+            {
+                var options = serviceProvider
+                    .GetRequiredService<IOptions<ComfyUiOptions>>()
+                    .Value;
+                client.BaseAddress = new Uri(
+                    $"{options.BaseUrl.TrimEnd('/')}/",
+                    UriKind.Absolute);
+                client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+            });
     }
 
     private static bool IsValidBaseUrl(string? value) =>

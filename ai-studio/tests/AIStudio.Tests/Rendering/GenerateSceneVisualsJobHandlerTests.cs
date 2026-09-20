@@ -141,6 +141,45 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task Handler_UsesAiImageEngineWhenEnabled()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateStoryboardTestData.ValidResult);
+        var assets = new RecordingAssetRepository();
+        var svg = new StubSceneVisualRenderer();
+        var aiImages = new StubImageGenerationProvider(isEnabled: true);
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            assets,
+            svg,
+            imageProvider: aiImages);
+
+        var json = await handler.ExecuteAsync(
+            GenerateSceneVisualsTestData.Job(projectId, storyboard.Id),
+            TestContext.Current.CancellationToken);
+
+        var result = GenerateSceneVisualsResult.Deserialize(json);
+        Assert.Equal(2, result.GeneratedCount);
+        Assert.All(result.Visuals, visual => Assert.Equal("AiImage", visual.Engine));
+        Assert.All(result.Visuals, visual => Assert.EndsWith(".png", visual.Path));
+        Assert.Equal(2, aiImages.Requests.Count);
+        Assert.All(aiImages.Requests, request =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(request.Prompt));
+            Assert.True(request.Seed >= 0);
+        });
+        Assert.Empty(svg.Briefs);
+        Assert.All(assets.Assets, asset =>
+        {
+            Assert.Equal(AssetType.Image, asset.Type);
+            Assert.Equal("AiImage", asset.Creator);
+        });
+    }
+
+    [Fact]
     public async Task Handler_UsesNarrationDerivedDurationForAnimatedClips()
     {
         var projectId = Guid.NewGuid();
@@ -266,6 +305,7 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
                 Options.Create(new AssetStorageOptions { RootPath = root })),
             new StubSceneVisualRenderer(),
             new StubManimSceneRenderer(isEnabled: false),
+            new StubImageGenerationProvider(isEnabled: false),
             FakeMediaInspector.Returning(new MediaInspection(0, false, false, false, 0, 0)),
             new AssetStubTimeProvider(AssetTestData.Now));
 
@@ -284,7 +324,8 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
         StubSceneVisualRenderer svg,
         StubManimSceneRenderer? manim = null,
         INarrationRepository? narrations = null,
-        IMediaInspector? mediaInspector = null) =>
+        IMediaInspector? mediaInspector = null,
+        StubImageGenerationProvider? imageProvider = null) =>
         new(
             new StubContentProjectReader(
                 new ContentProjectSnapshot(projectId, "Project", "Brief")),
@@ -295,6 +336,7 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
                 Options.Create(new AssetStorageOptions { RootPath = root })),
             svg,
             manim ?? new StubManimSceneRenderer(isEnabled: false),
+            imageProvider ?? new StubImageGenerationProvider(isEnabled: false),
             mediaInspector ?? FakeMediaInspector.Returning(
                 new MediaInspection(0, false, false, false, 0, 0)),
             new AssetStubTimeProvider(AssetTestData.Now));

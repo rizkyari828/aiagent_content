@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using AIStudio.Application.Assets;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs.GenerateStoryboard;
@@ -17,7 +19,8 @@ namespace AIStudio.Application.Jobs.GenerateSceneVisuals;
 /// re-run is idempotent and manually registered or canonical assets are preserved.
 /// Animated clips use the same derived <see cref="SceneTiming"/> duration the
 /// renderer later uses; when narration is unavailable the deterministic animation
-/// floor is kept.
+/// floor is kept. Still scenes use the deterministic SVG engine unless the optional
+/// local AI image provider is enabled.
 /// </summary>
 public sealed class GenerateSceneVisualsJobHandler(
     IContentProjectReader contentProjects,
@@ -27,6 +30,7 @@ public sealed class GenerateSceneVisualsJobHandler(
     IAssetFileStore fileStore,
     ISceneVisualRenderer svgRenderer,
     IManimSceneRenderer manimRenderer,
+    IImageGenerationProvider imageProvider,
     IMediaInspector mediaInspector,
     TimeProvider timeProvider) : IJobHandler
 {
@@ -69,7 +73,10 @@ public sealed class GenerateSceneVisualsJobHandler(
             payload.StoryboardJobId,
             cancellationToken);
 
-        var plans = SceneVisualPlanner.PlanAll(storyboard, manimRenderer.IsEnabled);
+        var plans = SceneVisualPlanner.PlanAll(
+            storyboard,
+            manimRenderer.IsEnabled,
+            imageProvider.IsEnabled);
         var animationDurations = await TryResolveAnimationDurationsAsync(
             job.ContentProjectId,
             payload.StoryboardJobId,
@@ -232,6 +239,7 @@ public sealed class GenerateSceneVisualsJobHandler(
         CancellationToken cancellationToken)
     {
         var animated = plan.Engine == SceneVisualEngine.ManimAnimation;
+        var aiImage = plan.Engine == SceneVisualEngine.AiImage;
         var extension = animated ? "mp4" : "png";
         var relativePath =
             $"visuals/{contentProjectId:N}/{storyboardJobId:N}/scene_{sceneIndex}.{extension}";
@@ -255,6 +263,14 @@ public sealed class GenerateSceneVisualsJobHandler(
                     animation,
                     cancellationToken);
             }
+            else if (aiImage)
+            {
+                bytes = await imageProvider.GenerateAsync(
+                    new ImageGenerationRequest(
+                        SceneImagePrompt.Build(plan.Brief),
+                        DeriveSeed(storyboardJobId, sceneIndex)),
+                    cancellationToken);
+            }
             else
             {
                 bytes = await svgRenderer.RenderPngAsync(plan.Brief, cancellationToken);
@@ -272,5 +288,18 @@ public sealed class GenerateSceneVisualsJobHandler(
                 exception.Message,
                 exception);
         }
+    }
+
+    /// <summary>
+    /// Stable per-scene seed so a re-run of the same storyboard reproduces the same
+    /// image. Derived from the storyboard job id and scene index, never randomized.
+    /// </summary>
+    private static long DeriveSeed(Guid storyboardJobId, int sceneIndex)
+    {
+        Span<byte> hash = stackalloc byte[32];
+        SHA256.HashData(
+            Encoding.UTF8.GetBytes($"{storyboardJobId:N}:{sceneIndex}"),
+            hash);
+        return (long)(BitConverter.ToUInt64(hash) & long.MaxValue);
     }
 }

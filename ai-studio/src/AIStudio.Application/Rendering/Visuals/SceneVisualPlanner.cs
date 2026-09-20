@@ -87,7 +87,8 @@ public static class SceneVisualPlanner
 
     public static IReadOnlyList<SceneVisualPlan> PlanAll(
         GenerateStoryboardResult storyboard,
-        bool enableAnimation)
+        bool enableAnimation,
+        bool enableAiImages = false)
     {
         ArgumentNullException.ThrowIfNull(storyboard);
         var plans = new List<SceneVisualPlan>(storyboard.Scenes.Count);
@@ -116,7 +117,7 @@ public static class SceneVisualPlanner
                 }
             }
 
-            var engine = SceneVisualEngineSelector.Select(template);
+            var engine = SceneVisualEngineSelector.Select(template, enableAiImages);
             var animation = engine == SceneVisualEngine.ManimAnimation
                 ? BuildAnimationParameters(brief, palette)
                 : null;

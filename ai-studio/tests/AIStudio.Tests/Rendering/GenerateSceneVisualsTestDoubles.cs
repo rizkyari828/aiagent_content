@@ -44,6 +44,26 @@ internal sealed class StubManimSceneRenderer(
     }
 }
 
+internal sealed class StubImageGenerationProvider(
+    bool isEnabled = true,
+    Func<ImageGenerationRequest, byte[]>? generate = null)
+    : IImageGenerationProvider
+{
+    public bool IsEnabled { get; } = isEnabled;
+
+    public List<ImageGenerationRequest> Requests { get; } = [];
+
+    public Task<byte[]> GenerateAsync(
+        ImageGenerationRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Requests.Add(request);
+        return Task.FromResult(
+            generate?.Invoke(request) ?? new byte[] { 137, 80, 78, 71 });
+    }
+}
+
 internal static class GenerateSceneVisualsTestData
 {
     private static readonly JsonSerializerOptions JsonOptions =

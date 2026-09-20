@@ -91,6 +91,37 @@ public sealed class SceneVisualPlannerTests
     }
 
     [Fact]
+    public void Select_PrefersAiImageForStillsWhenEnabled()
+    {
+        Assert.Equal(
+            SceneVisualEngine.AiImage,
+            SceneVisualEngineSelector.Select(SceneAnimationTemplate.None, enableAiImages: true));
+        // An animation template still wins over the still image engine.
+        Assert.Equal(
+            SceneVisualEngine.ManimAnimation,
+            SceneVisualEngineSelector.Select(SceneAnimationTemplate.ChatFlow, enableAiImages: true));
+    }
+
+    [Fact]
+    public void PlanAll_UsesAiImageForStillScenesWhenEnabled()
+    {
+        var storyboard = GenerateStoryboardResult.Deserialize(
+            GenerateSceneVisualsTestData.AnimatedStoryboard);
+
+        var plans = SceneVisualPlanner.PlanAll(
+            storyboard,
+            enableAnimation: false,
+            enableAiImages: true);
+
+        Assert.All(plans, plan =>
+        {
+            Assert.Equal(SceneVisualEngine.AiImage, plan.Engine);
+            Assert.Equal(SceneAnimationTemplate.None, plan.Template);
+            Assert.Null(plan.Animation);
+        });
+    }
+
+    [Fact]
     public void PlanAll_MapsVideoOneScenesToStructuredLayouts()
     {
         var storyboard = GenerateStoryboardResult.Deserialize(VideoOneStoryboard);

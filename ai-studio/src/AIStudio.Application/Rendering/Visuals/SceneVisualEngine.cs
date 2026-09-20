@@ -10,5 +10,8 @@ public enum SceneVisualEngine
     SvgStill = 0,
 
     /// <summary>Repository-owned Manim template rendered to a short clip.</summary>
-    ManimAnimation = 1
+    ManimAnimation = 1,
+
+    /// <summary>Local text-to-image model rendered to a still PNG.</summary>
+    AiImage = 2
 }
