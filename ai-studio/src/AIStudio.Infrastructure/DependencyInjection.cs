@@ -4,6 +4,7 @@ using AIStudio.Application.Assets;
 using AIStudio.Application.Capabilities;
 using AIStudio.Application.Concepts;
 using AIStudio.Application.Content;
+using AIStudio.Application.Creative;
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.FinalVideoQa;
 using AIStudio.Application.Jobs.GenerateAudio;
@@ -67,6 +68,7 @@ public static class DependencyInjection
         AddCapabilityRegistry(services);
         AddProductionRecipes(services);
         AddConceptRegistry(services);
+        AddCreativeDirection(services);
 
         return services;
     }
@@ -426,6 +428,15 @@ public static class DependencyInjection
         // recipe resolver; no provider or database is touched.
         services.AddSingleton<IConceptRegistry>(_ => new ConceptRegistry(SeedConcepts.All));
         services.AddSingleton<IConceptResolver, ConceptResolver>();
+    }
+
+    private static void AddCreativeDirection(IServiceCollection services)
+    {
+        // The Creative Director consumes approved ideas and returns a proposed
+        // direction. The planning context is a read-only projection of the trusted
+        // registries; the director itself only talks to the existing AI boundary.
+        services.AddSingleton<ICreativePlanningContextProvider, CreativePlanningContextProvider>();
+        services.AddScoped<ICreativeDirector, CreativeDirector>();
     }
 
     private static bool IsValidBaseUrl(string? value) =>

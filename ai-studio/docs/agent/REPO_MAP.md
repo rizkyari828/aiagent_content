@@ -110,6 +110,16 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `SeedConcepts.cs` — the small data catalog: `local-ai-tech-explainer` v1 and `local-ai-motion-comic` v1.
 - `tests/AIStudio.Tests/Concepts/` — id/version/token validation, structural validation, registry behavior, resolver statuses and delegation, missing-recipe vs capability-gap, latest resolution, JSON round-trip, new-format-without-new-C#, seed shape, and DI wiring.
 
+## Creative Director (planning above Concept Registry)
+
+- `src/AIStudio.Application/Creative/ApprovedIdea.cs`, `CreativeConstraints.cs`, `ApprovedIdeaValidator.cs` — the approved-idea boundary the director consumes, its optional user hints, and structural validation; `ApprovedIdea.FromGenerateIdeaResult(...)` maps the existing `GenerateIdeaResult` without duplicating idea generation.
+- `CreativeTreatment.cs`, `CreativeTreatmentValidator.cs` — HOW the idea feels and flows (story approach, hook, pacing, visual strategy, ending, optional tone/transition) as validated descriptive data; no script or storyboard.
+- `CreativeDirection.cs`, `CreativeDirectionParser.cs`, `CreativeDirectionException.cs` — the output (`ConceptManifest` + `CreativeTreatment`), strict untrusted-JSON parsing that reuses `ConceptValidator`, and stable error codes.
+- `CreativePlanningContext.cs`, `CreativePlanningContextProvider.cs` — the SAFE recipe/capability summary (recipe ids, capability ids, resolvable/fallback flags; no providers/paths) built from the trusted registries.
+- `CreativeDirectorPrompt.cs` — deterministic, token-efficient prompt builder with the approved idea, safe catalog, JSON contract, and creative boundaries.
+- `ICreativeDirector.cs`, `CreativeDirector.cs`, `CreativeDirectionOptions.cs`, `CreativeDirectionResult.cs` — orchestration over the existing `IAiTextGenerator`, structural validation, and the guardrail that preserves the approved audience/reference.
+- `tests/AIStudio.Tests/Creative/` — idea validation + mapping, prompt content/safety/determinism, parser accept/reject, planning-context safety, director orchestration/guardrails/resolution, critical Solution-Idea-preservation regression, and DI wiring.
+
 ## Narrative Sync + Scene Timing
 
 - `src/AIStudio.Application/Rendering/Narration/ReviewedNarrationScript.cs`, `NarrationText.cs`, `NarrativeTiming.cs` - parse the approved reviewed script, map it to storyboard scenes (positional/heading, else `audio_narration_source_unmapped`), strip quotes for TTS-safe text, and centralize lead/hold/transition constants.
