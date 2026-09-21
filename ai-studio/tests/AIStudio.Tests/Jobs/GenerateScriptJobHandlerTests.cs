@@ -2,6 +2,7 @@ using AIStudio.Application.AI;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.GenerateScript;
+using AIStudio.Tests.StoryContext;
 using Xunit;
 
 namespace AIStudio.Tests.Jobs;
@@ -59,7 +60,8 @@ public sealed class GenerateScriptJobHandlerTests
         var generator = new RecordingTextGenerator(GenerateScriptTestData.ValidResult);
         var handler = new GenerateScriptJobHandler(
             new StubContentProjectReader(null),
-            generator);
+            generator,
+            StoryContextTestSupport.Builder());
 
         var exception = await Assert.ThrowsAsync<JobExecutionException>(
             () => handler.ExecuteAsync(
@@ -98,5 +100,6 @@ public sealed class GenerateScriptJobHandlerTests
         new(
             new StubContentProjectReader(
                 new ContentProjectSnapshot(projectId, "Test project", "Test brief")),
-            generator);
+            generator,
+            StoryContextTestSupport.Builder());
 }

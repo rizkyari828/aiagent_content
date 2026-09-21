@@ -1,13 +1,20 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using AIStudio.Application.Bibles;
+using AIStudio.Application.Creative;
 using AIStudio.Application.Jobs.GenerateIdea;
+using AIStudio.Application.Stories;
 
 namespace AIStudio.Application.Jobs.GenerateScript;
 
 public sealed record GenerateScriptJobPayload(
     Guid ContentProjectId,
     GenerateIdeaResult SelectedIdea,
-    string? Language = null)
+    string? Language = null,
+    CreativeDirection? CreativeDirection = null,
+    StoryPlan? StoryPlan = null,
+    IReadOnlyList<CharacterState>? CharacterStates = null,
+    IReadOnlyList<WorldState>? WorldStates = null)
 {
     private const int MaxLanguageLength = 100;
 

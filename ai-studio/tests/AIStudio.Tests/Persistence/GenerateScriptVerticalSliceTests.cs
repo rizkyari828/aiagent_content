@@ -5,6 +5,7 @@ using AIStudio.Infrastructure.Content;
 using AIStudio.Infrastructure.Jobs;
 using AIStudio.Infrastructure.Persistence;
 using AIStudio.Tests.Jobs;
+using AIStudio.Tests.StoryContext;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -63,7 +64,8 @@ public sealed class GenerateScriptVerticalSliceTests
             var queue = new PostgreSqlJobQueue(factory);
             var handler = new GenerateScriptJobHandler(
                 new ContentProjectReader(factory),
-                new RecordingTextGenerator(GenerateScriptTestData.ValidResult));
+                new RecordingTextGenerator(GenerateScriptTestData.ValidResult),
+                StoryContextTestSupport.Builder());
             var processor = new JobProcessor(
                 queue,
                 [handler],
