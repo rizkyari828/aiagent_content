@@ -82,6 +82,14 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `src/AIStudio.Application/Jobs/RenderVideo/RenderVideoResult.cs`, `RenderVideoJobHandler.cs`, `RenderVideoWorkflow.cs` — prefer the validated mastered audio (`audioSource=mastered`, `masteredAudioPath`/`masteredAudioContentHash`), fall back to the legacy `narration_tracks` row; scene timing, transitions and subtitles unchanged.
 - `tests/AIStudio.Tests/Rendering/GenerateAudioJobHandlerTests.cs`, `GenerateAudioWorkflowTests.cs`, `GenerateAudioContractsTests.cs`, `GenerateAudioTestDoubles.cs` — staged generation, full/partial reuse, only-failed-stage retry, input-change invalidation, disabled providers, cancellation, no GPU-gate constructor, and master-consumption render tests.
 
+## Capability Registry
+
+- `src/AIStudio.Application/Capabilities/CapabilityId.cs`, `CapabilityIds.cs` — validated dotted capability value object plus the v1 identifier set (stable strings, not an enum).
+- `CapabilityDescriptor.cs`, `CapabilityProviderDescriptor.cs`, `CapabilityAvailability.cs` — capability metadata and trusted provider registration (id, capability, priority, enabled, runtime category; REGISTERED vs ENABLED, no executable/model paths).
+- `CapabilityRequirement.cs`, `CapabilityResolution.cs`, `CapabilityGap.cs`, `ICapabilityRegistry.cs` — requirement with ordered fallback capability chain, resolution result, explicit gap, and the application-facing registry boundary.
+- `CapabilityRegistry.cs`, `ProductionCapabilityCatalog.cs` — pure deterministic registry (fail-fast duplicate/unknown registration, priority ordering, fallback resolution) and the compile-time mapping of the current provider stack.
+- `tests/AIStudio.Tests/Capabilities/` — id validation/stability, registration and duplicate validation, deterministic resolution, disabled/missing capability gaps, fallback selection, catalog mapping, and DI enablement reflection.
+
 ## Narrative Sync + Scene Timing
 
 - `src/AIStudio.Application/Rendering/Narration/ReviewedNarrationScript.cs`, `NarrationText.cs`, `NarrativeTiming.cs` - parse the approved reviewed script, map it to storyboard scenes (positional/heading, else `audio_narration_source_unmapped`), strip quotes for TTS-safe text, and centralize lead/hold/transition constants.

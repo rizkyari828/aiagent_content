@@ -1,6 +1,7 @@
 using AIStudio.Application.Abstractions.Persistence;
 using AIStudio.Application.AI;
 using AIStudio.Application.Assets;
+using AIStudio.Application.Capabilities;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.FinalVideoQa;
@@ -61,6 +62,7 @@ public static class DependencyInjection
         AddRendering(services, configuration);
         AddAudioGeneration(services, configuration);
         AddAudioProduction(services);
+        AddCapabilityRegistry(services);
 
         return services;
     }
@@ -365,6 +367,42 @@ public static class DependencyInjection
         services.AddSingleton<IAudioNarrationAssembler, FfmpegNarrationAssembler>();
         services.AddScoped<IJobHandler, GenerateAudioJobHandler>();
         services.AddScoped<GenerateAudioWorkflow>();
+    }
+
+    private static void AddCapabilityRegistry(IServiceCollection services)
+    {
+        // Metadata/config only: the factory reads the existing enablement options
+        // and builds the trusted catalog. It never creates or contacts a provider,
+        // so capability discovery works even when no external runtime is installed.
+        services.AddSingleton<ICapabilityRegistry>(serviceProvider =>
+        {
+            var speech = serviceProvider
+                .GetRequiredService<IOptions<SpeechSynthesisOptions>>()
+                .Value;
+            var music = serviceProvider
+                .GetRequiredService<IOptions<MusicGenerationOptions>>()
+                .Value;
+            var manim = serviceProvider
+                .GetRequiredService<IOptions<ManimOptions>>()
+                .Value;
+            var images = serviceProvider
+                .GetRequiredService<IOptions<ComfyUiOptions>>()
+                .Value;
+            var threeD = serviceProvider
+                .GetRequiredService<IOptions<BlenderOptions>>()
+                .Value;
+
+            var providers = ProductionCapabilityCatalog.CreateProviders(
+                speechEnabled: speech.Enabled,
+                musicEnabled: music.Enabled,
+                manimEnabled: manim.Enabled,
+                imageEnabled: images.Enabled,
+                threeDEnabled: threeD.Enabled);
+
+            return new CapabilityRegistry(
+                ProductionCapabilityCatalog.Capabilities,
+                providers);
+        });
     }
 
     private static bool IsValidBaseUrl(string? value) =>
