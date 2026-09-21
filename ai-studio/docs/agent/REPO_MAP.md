@@ -90,6 +90,16 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `CapabilityRegistry.cs`, `ProductionCapabilityCatalog.cs` — pure deterministic registry (fail-fast duplicate/unknown registration, priority ordering, fallback resolution) and the compile-time mapping of the current provider stack.
 - `tests/AIStudio.Tests/Capabilities/` — id validation/stability, registration and duplicate validation, deterministic resolution, disabled/missing capability gaps, fallback selection, catalog mapping, and DI enablement reflection.
 
+## Production Recipes
+
+- `src/AIStudio.Application/ProductionRecipes/ProductionRecipeId.cs`, `ProductionRecipeVersion.cs` — validated data identity (stable id + positive version), so a new content format needs no new type or enum.
+- `ProductionRecipe.cs`, `ProductionRecipeRequirement.cs` — declarative recipe (id + version + requirements) and a required/optional wrapper around the capability-registry `CapabilityRequirement`; data only, no provider/path/script fields.
+- `ProductionRecipeIssue.cs`, `ProductionRecipeValidator.cs` — deterministic structural validation and stable issue codes (invalid id/version, empty or required-less requirements, duplicate primary, fallback hygiene); never consults the capability registry.
+- `IProductionRecipeRegistry.cs`, `ProductionRecipeRegistry.cs` — in-memory catalog keyed by id + version with fail-fast duplicate/invalid rejection and `Get`/`GetLatest`.
+- `IProductionRecipeResolver.cs`, `ProductionRecipeResolver.cs`, `ProductionRecipeResolution.cs` — execution-free resolution delegating each requirement to `ICapabilityRegistry.Resolve`; exposes `FullySupported` / `SupportedWithFallbacks` / `Unsupported`, selected providers, fallbacks, and gaps.
+- `SeedProductionRecipes.cs` — the small data catalog: `tech-explainer` v1 and `motion-comic` v1.
+- `tests/AIStudio.Tests/ProductionRecipes/` — id/version validation, structural validation, registry registration/duplicate/list/get/latest, deterministic resolution and statuses, required-vs-optional, provider-disabled and missing-capability gaps, future-capability-as-data, delegation/inheritance from the capability registry, JSON round-trip, seed shape, and DI wiring.
+
 ## Narrative Sync + Scene Timing
 
 - `src/AIStudio.Application/Rendering/Narration/ReviewedNarrationScript.cs`, `NarrationText.cs`, `NarrativeTiming.cs` - parse the approved reviewed script, map it to storyboard scenes (positional/heading, else `audio_narration_source_unmapped`), strip quotes for TTS-safe text, and centralize lead/hold/transition constants.

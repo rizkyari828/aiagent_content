@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json.Serialization;
 
 namespace AIStudio.Application.Capabilities;
 
@@ -14,6 +15,7 @@ public readonly record struct CapabilityId
 {
     private readonly string? _value;
 
+    [JsonConstructor]
     public CapabilityId(string value)
     {
         if (!IsValid(value))

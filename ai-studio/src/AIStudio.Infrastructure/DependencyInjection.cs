@@ -11,6 +11,7 @@ using AIStudio.Application.Jobs.GenerateScript;
 using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Application.Jobs.RenderVideo;
 using AIStudio.Application.Narration;
+using AIStudio.Application.ProductionRecipes;
 using AIStudio.Application.Rendering;
 using AIStudio.Application.Rendering.AudioGeneration;
 using AIStudio.Application.Rendering.AudioMixing;
@@ -63,6 +64,7 @@ public static class DependencyInjection
         AddAudioGeneration(services, configuration);
         AddAudioProduction(services);
         AddCapabilityRegistry(services);
+        AddProductionRecipes(services);
 
         return services;
     }
@@ -403,6 +405,16 @@ public static class DependencyInjection
                 ProductionCapabilityCatalog.Capabilities,
                 providers);
         });
+    }
+
+    private static void AddProductionRecipes(IServiceCollection services)
+    {
+        // Recipes are declarative data. The registry is seeded from the small
+        // trusted catalog and resolution delegates to the capability registry;
+        // neither touches a provider or the database.
+        services.AddSingleton<IProductionRecipeRegistry>(
+            _ => new ProductionRecipeRegistry(SeedProductionRecipes.All));
+        services.AddSingleton<IProductionRecipeResolver, ProductionRecipeResolver>();
     }
 
     private static bool IsValidBaseUrl(string? value) =>
