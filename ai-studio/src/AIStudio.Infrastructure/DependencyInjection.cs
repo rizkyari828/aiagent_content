@@ -72,7 +72,7 @@ public static class DependencyInjection
         AddProductionRecipes(services);
         AddConceptRegistry(services);
         AddCreativeDirection(services);
-        AddStoryDirector(services);
+        AddStoryDirector(services, configuration);
         AddBibles(services);
         AddStoryContext(services);
 
@@ -445,15 +445,48 @@ public static class DependencyInjection
         services.AddScoped<ICreativeDirector, CreativeDirector>();
     }
 
-    private static void AddStoryDirector(IServiceCollection services)
+    private static void AddStoryDirector(
+        IServiceCollection services,
+        IConfiguration configuration)
     {
         // Narrative patterns are declarative data seeded from the small trusted
-        // catalog. The v1 director is deterministic and calls no model; a future
-        // Qwen-backed director returns the same StoryPlan shape and can replace
-        // this registration without changing the pattern registry.
+        // catalog. The deterministic director stays the default so production
+        // behavior is unchanged; the Qwen-backed director is an explicit opt-in via
+        // StoryDirector:Mode=qwen. Neither mode falls back to the other.
+        services
+            .AddOptions<StoryDirectorOptions>()
+            .Bind(configuration.GetSection(StoryDirectorOptions.SectionName))
+            .Validate(
+                options => StoryDirectorOptions.IsKnownMode(options.Mode),
+                $"StoryDirector:Mode must be '{StoryDirectorOptions.DeterministicMode}' or '{StoryDirectorOptions.QwenMode}'.")
+            .ValidateOnStart();
+
         services.AddSingleton<INarrativePatternRegistry>(
             _ => new NarrativePatternRegistry(SeedNarrativePatterns.All));
-        services.AddSingleton<IStoryDirector, StoryDirector>();
+
+        services.AddSingleton<IStoryDirector>(serviceProvider =>
+        {
+            var mode = serviceProvider
+                .GetRequiredService<IOptions<StoryDirectorOptions>>()
+                .Value
+                .Mode;
+
+            if (string.Equals(mode, StoryDirectorOptions.DeterministicMode, StringComparison.OrdinalIgnoreCase))
+            {
+                return new StoryDirector(
+                    serviceProvider.GetRequiredService<INarrativePatternRegistry>());
+            }
+
+            if (string.Equals(mode, StoryDirectorOptions.QwenMode, StringComparison.OrdinalIgnoreCase))
+            {
+                return new QwenStoryDirector(
+                    serviceProvider.GetRequiredService<IAiTextGenerator>(),
+                    serviceProvider.GetRequiredService<INarrativePatternRegistry>());
+            }
+
+            throw new InvalidOperationException(
+                $"StoryDirector:Mode '{mode}' is invalid. Use '{StoryDirectorOptions.DeterministicMode}' or '{StoryDirectorOptions.QwenMode}'.");
+        });
     }
 
     private static void AddBibles(IServiceCollection services)
