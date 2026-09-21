@@ -304,6 +304,113 @@ public sealed class QwenStoryBiblePlannerTests
         Assert.Contains("markdown fences", prompt);
     }
 
+    [Fact]
+    public void RelationshipAsBareCharacterIdIsRejected()
+    {
+        // Real anime run evidence: the model emitted relationships as ["student-01"].
+        var json = AnimeResponse().Replace(
+            "\"relationships\":[]",
+            "\"relationships\":[\"student-01\"]",
+            StringComparison.Ordinal);
+
+        var exception = Assert.Throws<StoryBiblePlanningException>(
+            () => StoryBiblePlanParser.Parse(json, AnimePlan()));
+
+        Assert.Equal(StoryBiblePlanningErrorCodes.InvalidJson, exception.Code);
+    }
+
+    [Fact]
+    public void RelationshipObjectShapeParses()
+    {
+        var json = Response(
+            [
+                BibleTestSupport.Character(
+                    "student-01",
+                    role: "protagonist",
+                    relationships: [BibleTestSupport.Relationship("classmate-01", "classmate")]),
+                BibleTestSupport.Character("classmate-01", role: "supporting")
+            ],
+            [AnimeWorld()],
+            Groundings());
+
+        var proposal = StoryBiblePlanParser.Parse(json, AnimePlan());
+
+        Assert.Equal(2, proposal.CharacterBibles.Count);
+        Assert.Equal("classmate-01", proposal.CharacterBibles[0].Relationships[0].Target.Value);
+    }
+
+    [Fact]
+    public void CapitalizedRoleTokenIsRejectedByValidator()
+    {
+        // Real preschool run evidence: the model emitted role "Protagonist".
+        var issues = CharacterBibleValidator.Validate(
+            BibleTestSupport.Character("child-01", role: "Protagonist"));
+
+        Assert.Contains(issues, issue => issue.Code == BibleIssueCodes.CharacterRoleInvalid);
+    }
+
+    [Fact]
+    public void NormalizedRoleTokenIsAcceptedByValidator()
+    {
+        var issues = CharacterBibleValidator.Validate(
+            BibleTestSupport.Character("child-01", role: "protagonist"));
+
+        Assert.DoesNotContain(issues, issue => issue.Code == BibleIssueCodes.CharacterRoleInvalid);
+    }
+
+    [Fact]
+    public void OutputContractExampleParsesUnderStrictContracts()
+    {
+        var plan = StoryTestSupport.Plan(
+            [
+                StoryTestSupport.Beat("beat-01", 1, role: "hook", duration: 5, purpose: "setup"),
+                StoryTestSupport.Beat("beat-02", 2, role: "payoff", duration: 5, purpose: "resolution", continuityFrom: ["beat-01"])
+            ],
+            sourceConceptId: "example-concept",
+            targetDuration: 10);
+
+        var proposal = StoryBiblePlanParser.Parse(QwenStoryBiblePlannerPrompt.OutputContract, plan);
+
+        Assert.Equal(2, proposal.CharacterBibles.Count);
+        Assert.Single(proposal.WorldBibles);
+        Assert.Equal(2, proposal.BeatGroundings.Count);
+    }
+
+    [Fact]
+    public async Task PromptExplainsTokenVersusProseFields()
+    {
+        var prompt = await PromptAsync();
+
+        Assert.Contains("TOKEN fields", prompt);
+        Assert.Contains("PROSE fields", prompt);
+        Assert.Contains("identity.role", prompt);
+        Assert.Contains("identity.visualDescription", prompt);
+        Assert.Contains("lists of objects, never lists of bare strings", prompt);
+    }
+
+    [Fact]
+    public async Task PromptShowsNormalizedTokenExamplesForRoleAndEnvironment()
+    {
+        var prompt = await PromptAsync();
+
+        Assert.Contains("role \"protagonist\"", prompt);
+        Assert.Contains("never \"Main Protagonist of the mystery\"", prompt);
+        Assert.Contains("environmentType \"bedroom\"", prompt);
+        Assert.Contains("never \"small dim bedroom where the student studies\"", prompt);
+    }
+
+    [Fact]
+    public async Task PromptKeepsStableIdReuseAndLeakageGuards()
+    {
+        var prompt = await PromptAsync();
+
+        Assert.Contains("reuse that exact same id token", prompt);
+        Assert.Contains("Never create several ids", prompt);
+        Assert.Contains("empty array", prompt);
+        Assert.Contains("provider, model, engine, filesystem path, URL, or command", prompt);
+        Assert.Contains("do not add extra properties", prompt);
+    }
+
     private static async Task<string> PromptAsync()
     {
         var generator = new StubAiTextGenerator(AnimeResponse());
