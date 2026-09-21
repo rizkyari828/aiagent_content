@@ -100,6 +100,16 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `SeedProductionRecipes.cs` — the small data catalog: `tech-explainer` v1 and `motion-comic` v1.
 - `tests/AIStudio.Tests/ProductionRecipes/` — id/version validation, structural validation, registry registration/duplicate/list/get/latest, deterministic resolution and statuses, required-vs-optional, provider-disabled and missing-capability gaps, future-capability-as-data, delegation/inheritance from the capability registry, JSON round-trip, seed shape, and DI wiring.
 
+## Concepts
+
+- `src/AIStudio.Application/Concepts/ConceptId.cs`, `ConceptVersion.cs`, `ConceptIdentifier.cs` — validated data identity for a concept and the lowercase token rule for format/style/tag values (data, not enums).
+- `ConceptManifest.cs`, `ConceptValidationIssue.cs`, `ConceptValidator.cs` — WHAT to make (descriptive metadata + a trusted recipe reference) and narrow structural validation that never scores quality or consults the registries.
+- `IConceptRegistry.cs`, `ConceptRegistry.cs` — trusted in-memory boundary: validate-on-register, fail-fast duplicate id+version, deterministic id-then-version order, `Get`/`GetLatest`.
+- `IConceptResolver.cs`, `ConceptResolver.cs`, `ConceptResolution.cs` — execution-free resolution mapping the concept to a recipe version (exact or latest) and delegating to `IProductionRecipeResolver`; `Ready` / `ReadyWithFallbacks` / `Unsupported`, with `recipe_not_found` kept distinct from `recipe_unsupported`.
+- `ConceptJsonConverters.cs` — clean scalar JSON for `ConceptId`/`ConceptVersion`; recipe id/version converters live in `ProductionRecipes/ProductionRecipeJsonConverters.cs`.
+- `SeedConcepts.cs` — the small data catalog: `local-ai-tech-explainer` v1 and `local-ai-motion-comic` v1.
+- `tests/AIStudio.Tests/Concepts/` — id/version/token validation, structural validation, registry behavior, resolver statuses and delegation, missing-recipe vs capability-gap, latest resolution, JSON round-trip, new-format-without-new-C#, seed shape, and DI wiring.
+
 ## Narrative Sync + Scene Timing
 
 - `src/AIStudio.Application/Rendering/Narration/ReviewedNarrationScript.cs`, `NarrationText.cs`, `NarrativeTiming.cs` - parse the approved reviewed script, map it to storyboard scenes (positional/heading, else `audio_narration_source_unmapped`), strip quotes for TTS-safe text, and centralize lead/hold/transition constants.

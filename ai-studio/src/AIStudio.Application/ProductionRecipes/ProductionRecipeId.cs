@@ -10,13 +10,13 @@ namespace AIStudio.Application.ProductionRecipes;
 /// content format as data without recompiling the application for every format.
 /// A recipe id describes a content format; it never names a provider class.
 /// </summary>
+[JsonConverter(typeof(ProductionRecipeIdJsonConverter))]
 public readonly record struct ProductionRecipeId
 {
     private const int MaximumLength = 64;
 
     private readonly string? _value;
 
-    [JsonConstructor]
     public ProductionRecipeId(string value)
     {
         if (!IsValid(value))

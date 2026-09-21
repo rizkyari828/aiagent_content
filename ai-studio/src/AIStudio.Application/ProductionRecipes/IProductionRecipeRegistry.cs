@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace AIStudio.Application.ProductionRecipes;
 
 /// <summary>
@@ -18,4 +20,13 @@ public interface IProductionRecipeRegistry
 
     /// <summary>The highest registered version for an id; throws when none is registered.</summary>
     ProductionRecipe GetLatest(ProductionRecipeId id);
+
+    /// <summary>Non-throwing exact lookup, used by higher layers such as concepts.</summary>
+    bool TryGet(
+        ProductionRecipeId id,
+        ProductionRecipeVersion version,
+        [NotNullWhen(true)] out ProductionRecipe? recipe);
+
+    /// <summary>Non-throwing latest lookup, used by higher layers such as concepts.</summary>
+    bool TryGetLatest(ProductionRecipeId id, [NotNullWhen(true)] out ProductionRecipe? recipe);
 }

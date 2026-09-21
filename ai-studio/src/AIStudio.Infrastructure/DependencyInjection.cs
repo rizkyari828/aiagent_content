@@ -2,6 +2,7 @@ using AIStudio.Application.Abstractions.Persistence;
 using AIStudio.Application.AI;
 using AIStudio.Application.Assets;
 using AIStudio.Application.Capabilities;
+using AIStudio.Application.Concepts;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.FinalVideoQa;
@@ -65,6 +66,7 @@ public static class DependencyInjection
         AddAudioProduction(services);
         AddCapabilityRegistry(services);
         AddProductionRecipes(services);
+        AddConceptRegistry(services);
 
         return services;
     }
@@ -415,6 +417,15 @@ public static class DependencyInjection
         services.AddSingleton<IProductionRecipeRegistry>(
             _ => new ProductionRecipeRegistry(SeedProductionRecipes.All));
         services.AddSingleton<IProductionRecipeResolver, ProductionRecipeResolver>();
+    }
+
+    private static void AddConceptRegistry(IServiceCollection services)
+    {
+        // Concepts are declarative data referencing trusted recipes. The registry
+        // is seeded from the small trusted catalog and resolution delegates to the
+        // recipe resolver; no provider or database is touched.
+        services.AddSingleton<IConceptRegistry>(_ => new ConceptRegistry(SeedConcepts.All));
+        services.AddSingleton<IConceptResolver, ConceptResolver>();
     }
 
     private static bool IsValidBaseUrl(string? value) =>

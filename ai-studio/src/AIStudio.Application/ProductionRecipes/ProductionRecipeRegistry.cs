@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace AIStudio.Application.ProductionRecipes;
 
 /// <summary>
@@ -54,13 +56,42 @@ public sealed class ProductionRecipeRegistry : IProductionRecipeRegistry
         _byVersion.ContainsKey((id, version));
 
     public ProductionRecipe Get(ProductionRecipeId id, ProductionRecipeVersion version) =>
-        _byVersion.TryGetValue((id, version), out var recipe)
+        TryGet(id, version, out var recipe)
             ? recipe
             : throw new KeyNotFoundException(
                 $"Production recipe '{id}' v{version.Value} is not registered.");
 
     public ProductionRecipe GetLatest(ProductionRecipeId id) =>
-        _latest.TryGetValue(id, out var recipe)
+        TryGetLatest(id, out var recipe)
             ? recipe
             : throw new KeyNotFoundException($"Production recipe '{id}' is not registered.");
+
+    public bool TryGet(
+        ProductionRecipeId id,
+        ProductionRecipeVersion version,
+        [NotNullWhen(true)] out ProductionRecipe? recipe)
+    {
+        if (_byVersion.TryGetValue((id, version), out var found))
+        {
+            recipe = found;
+            return true;
+        }
+
+        recipe = null;
+        return false;
+    }
+
+    public bool TryGetLatest(
+        ProductionRecipeId id,
+        [NotNullWhen(true)] out ProductionRecipe? recipe)
+    {
+        if (_latest.TryGetValue(id, out var found))
+        {
+            recipe = found;
+            return true;
+        }
+
+        recipe = null;
+        return false;
+    }
 }

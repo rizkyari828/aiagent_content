@@ -8,11 +8,11 @@ namespace AIStudio.Application.ProductionRecipes;
 /// so a validated data loader can later publish a new revision without a code
 /// change. <c>default(ProductionRecipeVersion)</c> is invalid on purpose.
 /// </summary>
+[JsonConverter(typeof(ProductionRecipeVersionJsonConverter))]
 public readonly record struct ProductionRecipeVersion
 {
     public const int Minimum = 1;
 
-    [JsonConstructor]
     public ProductionRecipeVersion(int value)
     {
         if (value < Minimum)
