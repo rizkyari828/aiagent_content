@@ -9,6 +9,7 @@ using AIStudio.Application.Creative;
 using AIStudio.Application.Scripts;
 using AIStudio.Application.Stories;
 using AIStudio.Application.StoryContext;
+using AIStudio.BibleSemanticValidation;
 using AIStudio.Domain.Scripts;
 using StoryContextModel = AIStudio.Application.StoryContext.StoryContext;
 
@@ -489,80 +490,11 @@ public static class GroundingSignalScanner
     }
 
     /// <summary>
-    /// Generic, REVIEW-only coherence signal for proposed world bibles. It flags a
-    /// likely internal contradiction when the environment type and the identity label
-    /// (id/displayName) name two different compound environment nouns that share the
-    /// same head (real evidence: id "playroom-01"/displayName "Playroom" classified as
-    /// environmentType "bedroom"). It never edits data, never fails, and never infers a
-    /// corrected environment type; human judgment stays authoritative.
-    /// ponytail: lexical shared-head heuristic by design — no environment ontology and no
-    /// semantic model. Its ceiling is compound heads only; upgrade only if real evidence
-    /// shows it is too blunt.
+    /// Shared REVIEW-only coherence signal for proposed world bibles; the logic lives in
+    /// <see cref="BibleSemanticSignals"/> so the story-bible runner can report it too.
     /// </summary>
-    public static SignalStatus WorldIdentityCoherence(IReadOnlyList<WorldBible> worlds)
-    {
-        if (worlds.Count == 0)
-        {
-            return new SignalStatus { Status = "unavailable" };
-        }
-
-        var details = new List<string>();
-
-        foreach (var world in worlds)
-        {
-            var identity = world.Identity ?? new WorldIdentity();
-            var environmentTokens = Tokens(identity.EnvironmentType).Distinct(StringComparer.Ordinal).ToList();
-            var labelTokens = Tokens(world.Id.Value)
-                .Concat(Tokens(world.DisplayName))
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
-
-            foreach (var environment in environmentTokens)
-            {
-                foreach (var label in labelTokens)
-                {
-                    if (!string.Equals(environment, label, StringComparison.Ordinal)
-                        && SharesSpecificEnvironmentHead(environment, label))
-                    {
-                        details.Add($"{world.Id.Value}: environmentType '{identity.EnvironmentType}' vs identity '{label}'");
-                    }
-                }
-            }
-        }
-
-        details = details.Distinct(StringComparer.Ordinal).ToList();
-
-        return details.Count == 0
-            ? new SignalStatus { Status = "PASS" }
-            : new SignalStatus { Status = "REVIEW", Details = details };
-    }
-
-    /// <summary>
-    /// True when both tokens are compound nouns with a non-empty modifier sharing the
-    /// same trailing head of at least four letters (for example "playroom"/"bedroom").
-    /// A generic token with an empty modifier such as "room" is compatible with any
-    /// "*-room" label, so it is never treated as a conflict.
-    /// </summary>
-    private static bool SharesSpecificEnvironmentHead(string first, string second)
-    {
-        var head = CommonSuffix(first, second);
-        return head.Length >= 4
-            && first.Length > head.Length
-            && second.Length > head.Length;
-    }
-
-    private static string CommonSuffix(string first, string second)
-    {
-        var length = 0;
-        while (length < first.Length
-            && length < second.Length
-            && first[^(length + 1)] == second[^(length + 1)])
-        {
-            length++;
-        }
-
-        return first[^length..];
-    }
+    public static SignalStatus WorldIdentityCoherence(IReadOnlyList<WorldBible> worlds) =>
+        ToStatus(BibleSemanticSignals.WorldIdentityCoherence(worlds));
 
     public static SignalStatus IdentityPreservation(SignalStatus character, SignalStatus world)
     {
@@ -615,6 +547,9 @@ public static class GroundingSignalScanner
 
     private static bool ContainsWord(string text, string term) =>
         Regex.IsMatch(text, $@"\b{Regex.Escape(term)}\b", RegexOptions.IgnoreCase);
+
+    private static SignalStatus ToStatus(BibleSignal signal) =>
+        new() { Status = signal.Status, Details = signal.Details };
 }
 
 /// <summary>Deterministic RESULT policy for one combined case. Identity concerns are REVIEW.</summary>

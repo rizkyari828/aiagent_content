@@ -5,6 +5,7 @@ using AIStudio.Application.AI;
 using AIStudio.Application.Bibles;
 using AIStudio.Application.Concepts;
 using AIStudio.Application.Stories;
+using AIStudio.BibleSemanticValidation;
 
 namespace AIStudio.StoryBibleValidation;
 
@@ -553,6 +554,12 @@ public sealed record CaseReport
 
     public SignalStatus WorldIdentityQuality { get; init; } = new();
 
+    /// <summary>Human-review signal for likely internal WorldBible field contradictions.</summary>
+    public SignalStatus WorldIdentityCoherence { get; init; } = new();
+
+    /// <summary>Human-review signal for a prop duplicated as a character bible.</summary>
+    public SignalStatus EntityRoleCoherence { get; init; } = new();
+
     public SignalStatus AssetReferences { get; init; } = new();
 
     public IReadOnlyList<string> ImplementationLeaks { get; init; } = [];
@@ -646,6 +653,9 @@ public static class ValidationOutput
 
     public static string StatusOf(bool value) => value ? "PASS" : "FAIL";
 
+    public static SignalStatus ToStatus(BibleSignal signal) =>
+        new() { Status = signal.Status, Details = signal.Details };
+
     public static string SignalText(SignalStatus signal) =>
         signal.Details.Count == 0
             ? signal.Status
@@ -668,6 +678,8 @@ public static class ValidationOutput
         Console.WriteLine($"  IdentityFragmentation   {SignalText(report.IdentityFragmentation)}");
         Console.WriteLine($"  IdentityQuality         {SignalText(report.IdentityQuality)}");
         Console.WriteLine($"  WorldIdentityQuality    {SignalText(report.WorldIdentityQuality)}");
+        Console.WriteLine($"  WorldIdentityCoherence  {SignalText(report.WorldIdentityCoherence)}");
+        Console.WriteLine($"  EntityRoleCoherence     {SignalText(report.EntityRoleCoherence)}");
         Console.WriteLine(
             $"  ImplLeak                {(report.ImplementationLeaks.Count == 0
                 ? "none"
@@ -870,6 +882,45 @@ public static class SelfCheck
                 var after = JsonSerializer.Serialize(bible, ValidationArtifacts.Json);
                 return quality.Count > 0 && before == after;
             }),
+            ("coherent world identity passes coherence review", () =>
+                BibleSemanticSignals.WorldIdentityCoherence([World("study-room-01", "Study Room", "room")]).Status == "PASS"),
+            ("unsupported world classification surfaces REVIEW while staying structurally valid", () =>
+            {
+                var world = World("playroom-01", "The Playroom", "bedroom");
+                return BibleSemanticSignals.WorldIdentityCoherence([world]).Status == "REVIEW"
+                    && WorldBibleValidator.Validate(world).Count == 0;
+            }),
+            ("passive prop duplicated as a character surfaces REVIEW", () =>
+            {
+                var character = Character("plushie-01", "supporting", "toy", "The Plushie");
+                var world = World("playroom-01", "The Playroom", "playroom", ["red-block", "plushie", "ball"]);
+                return BibleSemanticSignals.EntityRoleCoherence([character], [world]).Status == "REVIEW";
+            }),
+            ("autonomous non-human character is not rejected for environment association", () =>
+            {
+                var character = Character("ai-interface-01", "antagonist", "ai", "AI Interface");
+                var world = World("digital-space-01", "Digital Space", "void", ["ai-interface"]);
+                return BibleSemanticSignals.EntityRoleCoherence([character], [world]).Status == "PASS";
+            }),
+            ("coherence signals never change bible data", () =>
+            {
+                var character = Character("plushie-01", "supporting", "toy", "The Plushie");
+                var world = World("playroom-01", "The Playroom", "bedroom", ["red-block", "plushie", "ball"]);
+                var characterBefore = JsonSerializer.Serialize(character, ValidationArtifacts.Json);
+                var worldBefore = JsonSerializer.Serialize(world, ValidationArtifacts.Json);
+                BibleSemanticSignals.WorldIdentityCoherence([world]);
+                BibleSemanticSignals.EntityRoleCoherence([character], [world]);
+                return characterBefore == JsonSerializer.Serialize(character, ValidationArtifacts.Json)
+                    && worldBefore == JsonSerializer.Serialize(world, ValidationArtifacts.Json);
+            }),
+            ("parser and domain validators remain unchanged", () =>
+            {
+                var world = World("playroom-01", "The Playroom", "bedroom", ["red-block", "plushie", "ball"]);
+                var character = Character("plushie-01", "supporting", "toy", "The Plushie");
+                return WorldBibleValidator.Validate(world).Count == 0
+                    && CharacterBibleValidator.Validate(character).Count == 0
+                    && StoryBiblePlanParser.Parse(ValidProposal, AnimePlan()).CharacterBibles.Count == 1;
+            }),
             ("maps PASS, REVIEW, and FAIL", () =>
                 ResultPolicy.Compute(true, false) == "PASS"
                 && ResultPolicy.Compute(true, true) == "REVIEW"
@@ -927,6 +978,38 @@ public static class SelfCheck
             return false;
         }
     }
+
+    private static WorldBible World(
+        string id,
+        string displayName,
+        string environmentType,
+        IReadOnlyList<string>? recurringProps = null) =>
+        new()
+        {
+            Id = new WorldBibleId(id),
+            Version = new WorldBibleVersion(1),
+            DisplayName = displayName,
+            Identity = new WorldIdentity
+            {
+                EnvironmentType = environmentType,
+                VisualDescription = "A place."
+            },
+            RecurringProps = recurringProps ?? []
+        };
+
+    private static CharacterBible Character(string id, string role, string species, string displayName) =>
+        new()
+        {
+            Id = new CharacterBibleId(id),
+            Version = new CharacterBibleVersion(1),
+            DisplayName = displayName,
+            Identity = new CharacterIdentity
+            {
+                Role = role,
+                Species = species,
+                VisualDescription = "A character."
+            }
+        };
 
     /// <summary>Minimal two-beat plan used only by the deterministic self-check.</summary>
     private static StoryPlan AnimePlan() => new()

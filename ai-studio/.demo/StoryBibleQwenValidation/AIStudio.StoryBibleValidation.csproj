@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\AIStudio.Infrastructure\AIStudio.Infrastructure.csproj" />
+    <Compile Include="..\Shared\BibleSemanticSignals.cs" Link="BibleSemanticSignals.cs" />
   </ItemGroup>
 
 </Project>

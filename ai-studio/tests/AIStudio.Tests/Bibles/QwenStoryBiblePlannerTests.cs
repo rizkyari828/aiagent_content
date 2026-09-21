@@ -421,6 +421,27 @@ public sealed class QwenStoryBiblePlannerTests
         Assert.Contains("environment type", prompt);
     }
 
+    [Fact]
+    public async Task PromptDistinguishesCharactersFromProps()
+    {
+        var prompt = await PromptAsync();
+
+        Assert.Contains("persistent narrative character or agent", prompt);
+        Assert.Contains("must not become characterBibles", prompt);
+        Assert.Contains("worldBibles.recurringProps", prompt);
+        Assert.Contains("agency, not species, decides", prompt);
+    }
+
+    [Fact]
+    public async Task PromptForbidsInventingUnsupportedWorldClassification()
+    {
+        var prompt = await PromptAsync();
+
+        Assert.Contains("Never invent a more specific environment classification", prompt);
+        Assert.Contains("closest supported neutral environment type", prompt);
+        Assert.Contains("reuse that exact same id token", prompt);
+    }
+
     private static async Task<string> PromptAsync()
     {
         var generator = new StubAiTextGenerator(AnimeResponse());

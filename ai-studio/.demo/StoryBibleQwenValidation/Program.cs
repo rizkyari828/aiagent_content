@@ -6,6 +6,7 @@ using AIStudio.Application.Bibles;
 using AIStudio.Application.Creative;
 using AIStudio.Application.StoryContext;
 using AIStudio.Application.Stories;
+using AIStudio.BibleSemanticValidation;
 using AIStudio.Infrastructure.AI;
 using AIStudio.Infrastructure.Gpu;
 using AIStudio.StoryBibleValidation;
@@ -309,6 +310,12 @@ async Task<CaseReport> RunCaseAsync(
 
     var assetReferences = AssetReferencePolicy.Evaluate(proposal, leaks);
 
+    // Bible semantic quality (REVIEW-only): shared with the grounded-content harness.
+    var worldCoherence = ValidationOutput.ToStatus(
+        BibleSemanticSignals.WorldIdentityCoherence(proposal.WorldBibles));
+    var entityRoleCoherence = ValidationOutput.ToStatus(
+        BibleSemanticSignals.EntityRoleCoherence(proposal.CharacterBibles, proposal.WorldBibles));
+
     // Phase 2 — explicit materialization: fresh in-memory registries, explicit
     // registration, then the existing deterministic StoryPlanGrounder. Nothing is
     // persisted and the original StoryPlan is never edited.
@@ -433,6 +440,8 @@ async Task<CaseReport> RunCaseAsync(
         || fragmentation.Count > 0
         || identityQuality.Count > 0
         || worldIdentityQuality.Count > 0
+        || worldCoherence.Status == "REVIEW"
+        || entityRoleCoherence.Status == "REVIEW"
         || assetReferences.Status == "REVIEW";
 
     var report = new CaseReport
@@ -462,6 +471,8 @@ async Task<CaseReport> RunCaseAsync(
         WorldIdentityQuality = worldIdentityQuality.Count == 0
             ? new SignalStatus { Status = "PASS" }
             : new SignalStatus { Status = "REVIEW", Details = worldIdentityQuality },
+        WorldIdentityCoherence = worldCoherence,
+        EntityRoleCoherence = entityRoleCoherence,
         AssetReferences = assetReferences,
         ImplementationLeaks = leaks,
         GroundApply = groundApply,
