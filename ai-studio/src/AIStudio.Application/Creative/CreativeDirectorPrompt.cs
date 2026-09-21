@@ -79,9 +79,9 @@ public static class CreativeDirectorPrompt
         {
             foreach (var recipe in context.Recipes)
             {
-                prompt.Append("- ")
+                prompt.Append("- recipeId=")
                     .Append(recipe.Id.Value)
-                    .Append(" v").Append(recipe.Version.Value)
+                    .Append(" recipeVersion=").Append(recipe.Version.Value)
                     .Append(" (").Append(recipe.DisplayName).Append("): requires ")
                     .Append(recipe.Capabilities.Count == 0 ? "none" : string.Join(", ", recipe.Capabilities))
                     .Append("; resolvable=").Append(recipe.Resolvable ? "true" : "false")
@@ -114,6 +114,9 @@ public static class CreativeDirectorPrompt
             .AppendLine("- concept.id must be a lowercase hyphenated identifier; version is 1; duration is seconds.")
             .AppendLine("- Preserve the approved audience in concept.audience.")
             .AppendLine("- Keep the approved idea reference in ideaReference.")
+            .AppendLine("- concept.recipeId must be copied exactly from a recipeId above, with no version suffix and no spaces (for example tech-explainer, never \"tech-explainer v1\"); put the number only in concept.recipeVersion.")
+            .AppendLine("- Return only the properties shown in the contract above; do not add extra properties.")
+            .AppendLine("- Do not wrap the object in another object or array, do not use markdown fences, and do not add commentary.")
             .AppendLine("- Do not emit code, shell commands, file paths, URLs, model names, or provider details.")
             .Append("- Do not claim an unavailable capability is implemented");
 

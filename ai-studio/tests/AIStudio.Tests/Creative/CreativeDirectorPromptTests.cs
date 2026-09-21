@@ -39,6 +39,29 @@ public sealed class CreativeDirectorPromptTests
     }
 
     [Fact]
+    public void PromptNamesTheRecipeIdTokenSeparatelyFromItsVersion()
+    {
+        // Real Qwen copied the catalog line "tech-explainer v1" into concept.recipeId.
+        // The catalog must expose the exact id token and its version as separate fields.
+        var prompt = Build();
+
+        Assert.Contains("recipeId=tech-explainer", prompt);
+        Assert.Contains("recipeId=motion-comic", prompt);
+        Assert.Contains("recipeVersion=1", prompt);
+    }
+
+    [Fact]
+    public void PromptRequiresAnExactRecipeIdTokenAndForbidsExtraJson()
+    {
+        var prompt = Build();
+
+        Assert.Contains("copied exactly from a recipeId above", prompt);
+        Assert.Contains("no version suffix and no spaces", prompt);
+        Assert.Contains("do not add extra properties", prompt);
+        Assert.Contains("do not use markdown fences", prompt);
+    }
+
+    [Fact]
     public void PromptExcludesProviderImplementationDetails()
     {
         var prompt = Build();

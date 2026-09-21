@@ -92,4 +92,26 @@ public sealed class CreativeDirectionParserTests
         Assert.Equal("future-anime-video", direction.Concept.RecipeId.Value);
         Assert.Equal("anime-cinematic", direction.Concept.Style);
     }
+
+    [Fact]
+    public void RejectsRecipeIdWithVersionSuffix()
+    {
+        // The exact real-Qwen failure: syntactically valid JSON with a recipe id that
+        // carries a version suffix ("tech-explainer v1") instead of the exact id token.
+        // Strict parsing rejects it rather than silently repairing it.
+        var json = """{"concept":{"id":"c","version":1,"title":"t","format":"youtube-short","style":"clean-tech","recipeId":"tech-explainer v1","recipeVersion":1,"duration":45},"treatment":{"storyApproach":"a","hookTreatment":"b","pacing":"c","visualStrategy":"d","endingTreatment":"e"}}""";
+
+        Assert.Throws<CreativeDirectionException>(() => CreativeDirectionParser.Parse(json));
+    }
+
+    [Fact]
+    public void RejectsAdditionalProperties()
+    {
+        var json = """{"surprise":true,"concept":{"id":"c","version":1,"title":"t","format":"youtube-short","style":"clean-tech","recipeId":"tech-explainer","duration":45},"treatment":{"storyApproach":"a","hookTreatment":"b","pacing":"c","visualStrategy":"d","endingTreatment":"e"}}""";
+
+        var exception = Assert.Throws<CreativeDirectionException>(
+            () => CreativeDirectionParser.Parse(json));
+
+        Assert.Equal(CreativeIssueCodes.DirectionInvalidJson, exception.Code);
+    }
 }
