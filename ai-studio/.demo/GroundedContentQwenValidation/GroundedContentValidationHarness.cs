@@ -384,8 +384,11 @@ public static class GroundingSignalScanner
     private static readonly string[] MachineTerms =
         ["robot", "android", "cyborg", "droid", "mecha"];
 
+    // Deliberately no bare "aged": `\baged\b` also matches the hyphenated modifier in
+    // "preschool-aged child", which is a real false positive. The remaining terms still
+    // catch genuine age contradictions such as "elderly man" or "old woman".
     private static readonly string[] ElderlyTerms =
-        ["elderly", "old man", "old woman", "senior", "aged", "grey-haired", "gray-haired"];
+        ["elderly", "old man", "old woman", "senior", "grey-haired", "gray-haired"];
 
     private static readonly HashSet<string> YoungAgeTokens = new(StringComparer.Ordinal)
     {
@@ -483,6 +486,82 @@ public static class GroundingSignalScanner
         return visible
             ? new SignalStatus { Status = "PASS" }
             : new SignalStatus { Status = "REVIEW", Details = ["no stable world identity token visible in output"] };
+    }
+
+    /// <summary>
+    /// Generic, REVIEW-only coherence signal for proposed world bibles. It flags a
+    /// likely internal contradiction when the environment type and the identity label
+    /// (id/displayName) name two different compound environment nouns that share the
+    /// same head (real evidence: id "playroom-01"/displayName "Playroom" classified as
+    /// environmentType "bedroom"). It never edits data, never fails, and never infers a
+    /// corrected environment type; human judgment stays authoritative.
+    /// ponytail: lexical shared-head heuristic by design — no environment ontology and no
+    /// semantic model. Its ceiling is compound heads only; upgrade only if real evidence
+    /// shows it is too blunt.
+    /// </summary>
+    public static SignalStatus WorldIdentityCoherence(IReadOnlyList<WorldBible> worlds)
+    {
+        if (worlds.Count == 0)
+        {
+            return new SignalStatus { Status = "unavailable" };
+        }
+
+        var details = new List<string>();
+
+        foreach (var world in worlds)
+        {
+            var identity = world.Identity ?? new WorldIdentity();
+            var environmentTokens = Tokens(identity.EnvironmentType).Distinct(StringComparer.Ordinal).ToList();
+            var labelTokens = Tokens(world.Id.Value)
+                .Concat(Tokens(world.DisplayName))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            foreach (var environment in environmentTokens)
+            {
+                foreach (var label in labelTokens)
+                {
+                    if (!string.Equals(environment, label, StringComparison.Ordinal)
+                        && SharesSpecificEnvironmentHead(environment, label))
+                    {
+                        details.Add($"{world.Id.Value}: environmentType '{identity.EnvironmentType}' vs identity '{label}'");
+                    }
+                }
+            }
+        }
+
+        details = details.Distinct(StringComparer.Ordinal).ToList();
+
+        return details.Count == 0
+            ? new SignalStatus { Status = "PASS" }
+            : new SignalStatus { Status = "REVIEW", Details = details };
+    }
+
+    /// <summary>
+    /// True when both tokens are compound nouns with a non-empty modifier sharing the
+    /// same trailing head of at least four letters (for example "playroom"/"bedroom").
+    /// A generic token with an empty modifier such as "room" is compatible with any
+    /// "*-room" label, so it is never treated as a conflict.
+    /// </summary>
+    private static bool SharesSpecificEnvironmentHead(string first, string second)
+    {
+        var head = CommonSuffix(first, second);
+        return head.Length >= 4
+            && first.Length > head.Length
+            && second.Length > head.Length;
+    }
+
+    private static string CommonSuffix(string first, string second)
+    {
+        var length = 0;
+        while (length < first.Length
+            && length < second.Length
+            && first[^(length + 1)] == second[^(length + 1)])
+        {
+            length++;
+        }
+
+        return first[^length..];
     }
 
     public static SignalStatus IdentityPreservation(SignalStatus character, SignalStatus world)
@@ -743,6 +822,9 @@ public sealed record CaseReport
 
     public SignalStatus Immutability { get; init; } = new();
 
+    /// <summary>Human-review signal for likely internal WorldBible field contradictions.</summary>
+    public SignalStatus WorldIdentityCoherence { get; init; } = new();
+
     public IReadOnlyList<CharacterPreview> Characters { get; init; } = [];
 
     public IReadOnlyList<WorldPreview> Worlds { get; init; } = [];
@@ -834,6 +916,7 @@ public static class ValidationOutput
         Console.WriteLine($"Bible:");
         Console.WriteLine($"  Characters  {report.BibleCharacterCount}");
         Console.WriteLine($"  Worlds      {report.BibleWorldCount}");
+        Console.WriteLine($"  IdentityCoherence  {SignalText(report.WorldIdentityCoherence)}");
         Console.WriteLine();
         Console.WriteLine($"Grounding:");
         Console.WriteLine($"  Proposal    {StatusOf(report.ProposalParsed)}");
@@ -927,6 +1010,7 @@ public static class ValidationOutput
             foreach (var world in report.Worlds)
             {
                 Console.WriteLine($"  {world.Id}");
+                Console.WriteLine($"    displayName: {world.DisplayName}");
                 Console.WriteLine($"    environment: {world.EnvironmentType}");
                 Console.WriteLine(
                     $"    spatialTraits: {(world.SpatialTraits.Count == 0 ? "-" : string.Join(", ", world.SpatialTraits))}");
@@ -1098,6 +1182,52 @@ public static class SelfCheck
                     && signal.Details.Any(detail => detail.Contains("robot", StringComparison.Ordinal))
                     && signal.Details.Any(detail => detail.Contains("elderly", StringComparison.Ordinal));
             }),
+            ("preschool-aged wording is not an age contradiction", () =>
+            {
+                var bible = Bible("child-01", species: "human", age: "preschooler", displayName: "The Child");
+                var signal = GroundingSignalScanner.CharacterGrounding(
+                    [bible],
+                    "A cheerful preschool-aged child plays with soft toys.");
+                return signal.Status == "PASS";
+            }),
+            ("genuine age contradiction still surfaces REVIEW", () =>
+            {
+                var bible = Bible("child-01", species: "human", age: "preschooler", displayName: "The Child");
+                var signal = GroundingSignalScanner.CharacterGrounding(
+                    [bible],
+                    "An elderly woman watches the child.");
+                return signal.Status == "REVIEW"
+                    && signal.Details.Any(detail => detail.Contains("elderly", StringComparison.Ordinal));
+            }),
+            ("existing anime identity check still passes", () =>
+            {
+                var bible = Bible("student-01", species: "human", age: "young-adult");
+                var signal = GroundingSignalScanner.CharacterGrounding(
+                    [bible],
+                    "The student stares at the glowing screen.");
+                return signal.Status == "PASS";
+            }),
+            ("world bible coherence surfaces REVIEW without mutation", () =>
+            {
+                var world = World("playroom-01", "Playroom", "bedroom");
+                var before = JsonSerializer.Serialize(world, ValidationArtifacts.Json);
+                var signal = GroundingSignalScanner.WorldIdentityCoherence([world]);
+                var after = JsonSerializer.Serialize(world, ValidationArtifacts.Json);
+                return signal.Status == "REVIEW" && before == after;
+            }),
+            ("coherent world identity passes", () =>
+            {
+                var world = World("study-room", "Study Room", "room");
+                return GroundingSignalScanner.WorldIdentityCoherence([world]).Status == "PASS";
+            }),
+            ("coherence signal never changes bible data", () =>
+            {
+                var world = World("kitchen-01", "Kitchen", "kitchen");
+                var before = JsonSerializer.Serialize(world, ValidationArtifacts.Json);
+                GroundingSignalScanner.WorldIdentityCoherence([world]);
+                var after = JsonSerializer.Serialize(world, ValidationArtifacts.Json);
+                return before == after;
+            }),
             ("implementation leak is detected", () =>
                 ImplementationLeakScanner.Scan("Render with ComfyUI and save to /home/tama/scene.py").Count > 0),
             ("artifact shapes serialize", SerializationWorks),
@@ -1135,18 +1265,31 @@ public static class SelfCheck
             .Build(new StoryContextRequest { StoryPlan = planning.GroundedStoryPlan })
             .Context;
 
-    private static CharacterBible Bible(string id, string species, string age) =>
+    private static CharacterBible Bible(string id, string species, string age, string displayName = "The Student") =>
         new()
         {
             Id = new CharacterBibleId(id),
             Version = new CharacterBibleVersion(1),
-            DisplayName = "The Student",
+            DisplayName = displayName,
             Identity = new CharacterIdentity
             {
                 Role = "protagonist",
                 Species = species,
                 AgePresentation = age,
-                VisualDescription = "A calm student."
+                VisualDescription = "A calm character."
+            }
+        };
+
+    private static WorldBible World(string id, string displayName, string environmentType) =>
+        new()
+        {
+            Id = new WorldBibleId(id),
+            Version = new WorldBibleVersion(1),
+            DisplayName = displayName,
+            Identity = new WorldIdentity
+            {
+                EnvironmentType = environmentType,
+                VisualDescription = "A place."
             }
         };
 

@@ -291,6 +291,10 @@ async Task<CaseReport> RunCaseAsync(
         ? new SignalStatus { Status = "PASS", Details = ["only beat refs differ"] }
         : new SignalStatus { Status = "FAIL", Details = planDifferences };
 
+    // Proposal-quality signal: a proposed WorldBible can be structurally valid yet
+    // internally inconsistent. This is surfaced for human review, never auto-repaired.
+    var worldCoherence = GroundingSignalScanner.WorldIdentityCoherence(proposal.WorldBibles);
+
     var projectId = Guid.NewGuid();
     var idea = new GenerateIdeaResult(
         direction.Concept.Title,
@@ -482,7 +486,8 @@ async Task<CaseReport> RunCaseAsync(
 
     var reviewSignals = scriptValidation.Result == "REVIEW"
         || storyboardValidation?.Result == "REVIEW"
-        || sameIdentity.Status != "PASS";
+        || sameIdentity.Status != "PASS"
+        || worldCoherence.Status == "REVIEW";
 
     var report = new CaseReport
     {
@@ -496,6 +501,7 @@ async Task<CaseReport> RunCaseAsync(
         ContextResolution = grounded.ContextResolution,
         SameIdentityContext = sameIdentity,
         Immutability = immutability,
+        WorldIdentityCoherence = worldCoherence,
         Characters = proposal.CharacterBibles.Select(ToCharacterPreview).ToList(),
         Worlds = proposal.WorldBibles.Select(ToWorldPreview).ToList(),
         Groundings = proposal.BeatGroundings

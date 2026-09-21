@@ -411,6 +411,16 @@ public sealed class QwenStoryBiblePlannerTests
         Assert.Contains("do not add extra properties", prompt);
     }
 
+    [Fact]
+    public async Task PromptRequiresMutuallyConsistentIdentityFields()
+    {
+        var prompt = await PromptAsync();
+
+        Assert.Contains("must describe the SAME identity", prompt);
+        Assert.Contains("must not contradict each other", prompt);
+        Assert.Contains("environment type", prompt);
+    }
+
     private static async Task<string> PromptAsync()
     {
         var generator = new StubAiTextGenerator(AnimeResponse());

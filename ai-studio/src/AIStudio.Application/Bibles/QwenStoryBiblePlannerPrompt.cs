@@ -122,6 +122,7 @@ public static class QwenStoryBiblePlannerPrompt
             .AppendLine()
             .AppendLine("Rules:")
             .AppendLine("- Identify only the stable characters and stable worlds/locations the story needs. Include a character or world only when it is genuinely relevant.")
+            .AppendLine("- All stable identity fields of one proposed character or world must describe the SAME identity and must not contradict each other: the id, displayName, environment type, visual description, spatial traits, and recurring props form one coherent story world. If a world's name or recurring props identify one kind of place, do not classify it as an unrelated environment type.")
             .AppendLine("- Character and world ids are lowercase tokens of a-z, 0-9, '.', '_' or '-' only, starting with a letter or digit, for example student-01 or student-bedroom. Copy the exact id token: never include a version suffix, label, or space (write \"student-01\" with version 1, never \"student-01 v1\").")
             .AppendLine("- version is a separate positive integer; baselineVariant defaults to \"default\".")
             .AppendLine("- Field kinds: some properties are TOKEN fields that must hold exactly one normalized token; others are PROSE fields that hold human-readable text. Never put a label, title, sentence, capital letter, comma, or space in a token field.")
