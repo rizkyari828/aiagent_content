@@ -120,6 +120,18 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `ICreativeDirector.cs`, `CreativeDirector.cs`, `CreativeDirectionOptions.cs`, `CreativeDirectionResult.cs` — orchestration over the existing `IAiTextGenerator`, structural validation, and the guardrail that preserves the approved audience/reference.
 - `tests/AIStudio.Tests/Creative/` — idea validation + mapping, prompt content/safety/determinism, parser accept/reject, planning-context safety, director orchestration/guardrails/resolution, critical Solution-Idea-preservation regression, and DI wiring.
 
+## Stories (Story Director, narrative planning above Creative Direction)
+
+- `src/AIStudio.Application/Stories/StoryPlanId.cs`, `NarrativePatternId.cs`, `StoryBeatId.cs` — validated data identity (`StoryPlanId`/`StoryPlanVersion`, `NarrativePatternId`/`NarrativePatternVersion`, `StoryBeatId`/`StoryBeatRole`) plus the shared `StoryIdentifier` rule, so a new story format or beat role is data, not an enum.
+- `StoryBeat.cs`, `NarrativePattern.cs` — the generic beat (order, data-driven role, purpose, importance, duration, identifier-only character/world/continuity refs) and the reusable pattern with beat slots (role, guidance, duration weight, required). Data only; no script, camera, engine, or provider detail.
+- `NarrativePatternIssue.cs`, `NarrativePatternValidator.cs` — structural pattern validation and stable codes; never scores a story.
+- `INarrativePatternRegistry.cs`, `NarrativePatternRegistry.cs`, `SeedNarrativePatterns.cs` — trusted in-memory catalog (validate on register, fail-fast duplicate/invalid id+version, deterministic id-then-version order, `Get`/`GetLatest`, `TryGet`/`TryGetLatest`) seeded with only `problem-solution-short` and `explanatory-flow`.
+- `StoryPlan.cs`, `StoryPlanIssue.cs`, `StoryPlanValidator.cs` — declarative plan plus pure structural validation: plan id/version, source concept and pattern references, non-empty ordered beats, unique beat ids/orders, positive durations, duration-sum tolerance, reference tokens, continuity unknown/self/cycle, and required pattern slots.
+- `StoryDirectorRequest.cs`, `IStoryDirector.cs`, `StoryDirector.cs`, `StoryDirectorException.cs` — request consuming the existing `CreativeDirection` (no duplicated `ConceptManifest`), a deterministic v1 slot-to-beat scaffold that shares duration by slot weight, and stable `story_*` errors. No AI or process dependency.
+- `StoryPlanParser.cs` — strict parser for future structured Qwen output (unknown members rejected) that maps JSON to `StoryPlan` and invokes the validator; no speculative repair.
+- `StoryJsonConverters.cs` — plain-scalar JSON for the story value objects.
+- `tests/AIStudio.Tests/Stories/` — value-object validation, registry behavior, structural plan/pattern validation, JSON round-trip, strict parser accept/reject, deterministic director, anime-horror and kids-song patterns as data without new C#, boundary/security regressions, and DI wiring.
+
 ## Narrative Sync + Scene Timing
 
 - `src/AIStudio.Application/Rendering/Narration/ReviewedNarrationScript.cs`, `NarrationText.cs`, `NarrativeTiming.cs` - parse the approved reviewed script, map it to storyboard scenes (positional/heading, else `audio_narration_source_unmapped`), strip quotes for TTS-safe text, and centralize lead/hold/transition constants.

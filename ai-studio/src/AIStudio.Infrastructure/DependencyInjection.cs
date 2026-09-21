@@ -21,6 +21,7 @@ using AIStudio.Application.Rendering.AudioProduction;
 using AIStudio.Application.Jobs.GenerateSceneVisuals;
 using AIStudio.Application.Rendering.Visuals;
 using AIStudio.Application.Scripts;
+using AIStudio.Application.Stories;
 using AIStudio.Application.Subtitles;
 using AIStudio.Infrastructure.AI;
 using AIStudio.Infrastructure.Assets;
@@ -69,6 +70,7 @@ public static class DependencyInjection
         AddProductionRecipes(services);
         AddConceptRegistry(services);
         AddCreativeDirection(services);
+        AddStoryDirector(services);
 
         return services;
     }
@@ -437,6 +439,17 @@ public static class DependencyInjection
         // registries; the director itself only talks to the existing AI boundary.
         services.AddSingleton<ICreativePlanningContextProvider, CreativePlanningContextProvider>();
         services.AddScoped<ICreativeDirector, CreativeDirector>();
+    }
+
+    private static void AddStoryDirector(IServiceCollection services)
+    {
+        // Narrative patterns are declarative data seeded from the small trusted
+        // catalog. The v1 director is deterministic and calls no model; a future
+        // Qwen-backed director returns the same StoryPlan shape and can replace
+        // this registration without changing the pattern registry.
+        services.AddSingleton<INarrativePatternRegistry>(
+            _ => new NarrativePatternRegistry(SeedNarrativePatterns.All));
+        services.AddSingleton<IStoryDirector, StoryDirector>();
     }
 
     private static bool IsValidBaseUrl(string? value) =>
