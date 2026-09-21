@@ -102,6 +102,43 @@ public sealed class QwenStoryDirectorPromptTests
         Assert.Equal(Build(), Build());
     }
 
+    [Fact]
+    public void TreatsCreativeDirectionVisualsAsContextNotOutput()
+    {
+        var prompt = Build();
+
+        Assert.Contains("creative intent context", prompt);
+        Assert.Contains("CONTEXT, not output instructions", prompt);
+        Assert.Contains("never copy their shot, camera, or editing instructions", prompt);
+    }
+
+    [Fact]
+    public void ForbidsCinematographyExecutionLanguage()
+    {
+        var prompt = Build();
+
+        foreach (var term in new[]
+        {
+            "close-up", "medium shot", "wide shot", "camera", "camera angle",
+            "lens", "mm", "pan", "tilt", "dolly", "rack focus", "cut to",
+            "hard cut", "cross-dissolve", "zoom", "frame number", "shot number",
+            "camera coordinates"
+        })
+        {
+            Assert.Contains(term, prompt);
+        }
+    }
+
+    [Fact]
+    public void AllowsNarrativeVisualState()
+    {
+        var prompt = Build();
+
+        Assert.Contains("Narrative visual state is allowed", prompt);
+        Assert.Contains("the room becomes dark", prompt);
+        Assert.Contains("the cat approaches the bowl", prompt);
+    }
+
     private static string Build() =>
         QwenStoryDirectorPrompt.Build(
             StoryTestSupport.Direction(),

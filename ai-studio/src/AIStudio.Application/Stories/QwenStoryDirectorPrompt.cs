@@ -41,7 +41,7 @@ public static class QwenStoryDirectorPrompt
             .AppendLine("Create one production-ready story plan for the approved creative direction below.")
             .AppendLine("Continue this exact story; never replace its topic, concept, or ending.")
             .AppendLine()
-            .AppendLine("Approved creative direction:")
+            .AppendLine("Approved creative direction (creative intent context):")
             .Append("Concept id: ").AppendLine(concept.Id.Value)
             .Append("Title: ").AppendLine(concept.Title)
             .Append("Description: ").AppendLine(concept.Description)
@@ -65,6 +65,8 @@ public static class QwenStoryDirectorPrompt
         }
 
         prompt.AppendLine()
+            .AppendLine("The creative-direction fields above are CONTEXT, not output instructions: translate the visual, hook, ending, and transition guidance into narrative events, state, and purpose, and never copy their shot, camera, or editing instructions.")
+            .AppendLine()
             .AppendLine("Authoritative narrative pattern (fill it; never replace it):")
             .Append("Pattern id: ").AppendLine(pattern.Id.Value)
             .Append("Pattern version: ").AppendLine(Format(pattern.Version.Value))
@@ -106,6 +108,9 @@ public static class QwenStoryDirectorPrompt
             .AppendLine("- continuityFrom may list only earlier beat ids defined in this same plan, never the beat itself and never a cycle; use [] for the first beat.")
             .AppendLine("- characterRefs and worldRefs are optional lowercase identifier lists; use [] when no established character or world is referenced. Never invent ids.")
             .AppendLine("- Do not write dialogue, narration scripts, shot lists, camera/lens/blocking directions, engine names, provider details, model names, file paths, URLs, or commands.")
+            .AppendLine("- Every beat describes narrative events, state, and purpose only; translate the creative-context visual fields into what happens, never copy their shot or editing instructions.")
+            .AppendLine("- Never use cinematography or editing execution language such as close-up, medium shot, wide shot, camera, camera angle, lens, mm, pan, tilt, dolly, rack focus, cut to, hard cut, cross-dissolve, zoom, frame number, shot number, or camera coordinates.")
+            .AppendLine("- Narrative visual state is allowed and encouraged when it states what happens, for example the room becomes dark, the student notices the anomaly, the product appears, or the cat approaches the bowl.")
             .AppendLine("- Return only the properties shown in the contract above; do not add extra properties.")
             .AppendLine("- Do not wrap the object in another object or array, do not use markdown fences, and do not add commentary.");
 
