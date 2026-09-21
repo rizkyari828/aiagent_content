@@ -316,6 +316,9 @@ async Task<(CaseReport Report, bool GroundingExercised)> RunCaseAsync(
     var scriptText = script is null
         ? string.Empty
         : BuildScriptText(script);
+    var spokenText = script is null
+        ? string.Empty
+        : BuildSpokenText(script);
 
     var conceptCoverage = script is null
         ? 0d
@@ -328,21 +331,24 @@ async Task<(CaseReport Report, bool GroundingExercised)> RunCaseAsync(
         ? 0d
         : Math.Round(TextOverlap.Coverage(direction.Concept.Audience, scriptText), 3);
 
-    var conceptPreserved = conceptCoverage >= ResultPolicy.MinimumConceptCoverage;
-    var audiencePreserved = audienceCoverage > 0;
+    // Lexical overlap is a signal, not proof of semantic preservation: low overlap
+    // is surfaced as REVIEW, never as an automatic hard failure.
+    var conceptLowOverlap = conceptCoverage < ResultPolicy.MinimumConceptCoverage;
+    var audienceLowOverlap = audienceCoverage <= 0;
 
     var beatCount = plan.Beats.Count;
     var sectionCount = script?.Sections.Count ?? 0;
     var sectionCountMatches = schemaValid && sectionCount == beatCount;
 
-    IReadOnlyList<string> scriptBoundaryHits = script is null ? [] : ScriptBoundaryScanner.Scan(scriptText);
-    IReadOnlyList<string> storyboardHits = script is null ? [] : StoryboardBoundaryScanner.Scan(scriptText);
+    IReadOnlyList<string> scriptBoundaryHits = script is null ? [] : ScriptBoundaryScanner.Scan(spokenText);
+    IReadOnlyList<string> storyboardHits = script is null ? [] : StoryboardBoundaryScanner.Scan(spokenText);
     IReadOnlyList<string> leaks = script is null ? [] : ImplementationLeakScanner.Scan(rawResponse);
 
     var hookValid = script is not null
         && !string.IsNullOrWhiteSpace(script.OpeningHook)
         && ImplementationLeakScanner.Scan(script.OpeningHook).Count == 0
-        && StoryboardBoundaryScanner.Scan(script.OpeningHook).Count == 0;
+        && StoryboardBoundaryScanner.Scan(script.OpeningHook).Count == 0
+        && ScriptBoundaryScanner.Scan(script.OpeningHook).Count == 0;
     var closingValid = script is not null && !string.IsNullOrWhiteSpace(script.Closing);
 
     var orderedBeats = plan.Beats.OrderBy(beat => beat.Order).ToList();
@@ -372,10 +378,10 @@ async Task<(CaseReport Report, bool GroundingExercised)> RunCaseAsync(
         JsonValid = jsonValid,
         SchemaValid = schemaValid,
         ExpectedConceptId = direction.Concept.Id.Value,
-        ConceptPreserved = conceptPreserved,
+        ConceptLexicalMatch = !conceptLowOverlap,
         ConceptCoverage = conceptCoverage,
         ExpectedAudience = direction.Concept.Audience,
-        AudiencePreserved = audiencePreserved,
+        AudienceLexicalMatch = !audienceLowOverlap,
         AudienceCoverage = audienceCoverage,
         BeatCount = beatCount,
         SectionCount = sectionCount,
@@ -395,11 +401,11 @@ async Task<(CaseReport Report, bool GroundingExercised)> RunCaseAsync(
             jsonValid,
             schemaValid,
             sectionCountMatches,
-            conceptPreserved,
+            conceptLowOverlap,
+            audienceLowOverlap,
             leaks.Count > 0,
-            scriptBoundaryHits.Count > 0,
-            storyboardHits.Count,
-            audiencePreserved),
+            scriptBoundaryHits.Count,
+            storyboardHits.Count),
         ErrorCode = error switch
         {
             JobExecutionException job => job.ErrorCode,
@@ -427,6 +433,14 @@ static string BuildScriptText(GenerateScriptResult script) =>
         script.Title,
         script.OpeningHook,
         string.Join(' ', script.Sections.Select(section => $"{section.Heading} {section.Narration}")),
+        script.Closing);
+
+// Boundary checks examine only the spoken fields; section headings are metadata.
+static string BuildSpokenText(GenerateScriptResult script) =>
+    string.Join(
+        ' ',
+        script.OpeningHook,
+        string.Join(' ', script.Sections.Select(section => section.Narration)),
         script.Closing);
 
 static async Task WriteJsonAsync<T>(string path, T value)

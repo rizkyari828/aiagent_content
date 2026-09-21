@@ -55,13 +55,13 @@ public sealed record CaseReport
 
     public string ExpectedConceptId { get; init; } = string.Empty;
 
-    public bool ConceptPreserved { get; init; }
+    public bool ConceptLexicalMatch { get; init; }
 
     public double ConceptCoverage { get; init; }
 
     public string ExpectedAudience { get; init; } = string.Empty;
 
-    public bool AudiencePreserved { get; init; }
+    public bool AudienceLexicalMatch { get; init; }
 
     public double AudienceCoverage { get; init; }
 
@@ -233,7 +233,9 @@ public static class ScriptBoundaryScanner
         ("b-roll", new Regex(@"\bb[- ]roll\b", RegexOptions.IgnoreCase | RegexOptions.Compiled)),
         ("image-prompt", new Regex(@"\b(image|visual) prompt\b", RegexOptions.IgnoreCase | RegexOptions.Compiled)),
         ("generate-image", new Regex(@"\bgenerate (an? )?image\b", RegexOptions.IgnoreCase | RegexOptions.Compiled)),
-        ("render", new Regex(@"\brender (this|the) (scene|clip|shot)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+        ("render", new Regex(@"\brender (this|the) (scene|clip|shot)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled)),
+        ("effect-direction", new Regex(@"\b(sound|audio|visual|sparkle|lighting) effects?\b", RegexOptions.IgnoreCase | RegexOptions.Compiled)),
+        ("sound-cue", new Regex(@"\b(sound|audio) cue\b|\bding sound\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
     ];
 
     public static IReadOnlyList<string> Scan(string text) => ScannerSupport.ScanRules(text, Rules);
@@ -322,25 +324,37 @@ public static class TextOverlap
 /// <summary>Deterministic RESULT policy for Script validation.</summary>
 public static class ResultPolicy
 {
+    /// <summary>Coverage at or above this is a positive concept lexical signal; below is REVIEW.</summary>
     public const double MinimumConceptCoverage = 0.34;
 
+    /// <summary>
+    /// Concept/audience lexical overlap is a SIGNAL, not proof of replacement: low
+    /// overlap yields REVIEW, never FAIL, because token overlap cannot reliably prove
+    /// semantic replacement. Only objective contract failures or pervasive non-spoken
+    /// production direction hard-fail.
+    /// </summary>
     public static string Compute(
         bool jsonValid,
         bool schemaValid,
         bool sectionCountMatches,
-        bool conceptPreserved,
+        bool conceptLowOverlap,
+        bool audienceLowOverlap,
         bool implementationLeak,
-        bool scriptBoundary,
-        int storyboardBoundaryHits,
-        bool audiencePreserved)
+        int scriptBoundaryHits,
+        int storyboardBoundaryHits)
     {
-        if (!jsonValid || !schemaValid || !sectionCountMatches || !conceptPreserved
-            || implementationLeak || scriptBoundary || storyboardBoundaryHits >= 3)
+        if (!jsonValid || !schemaValid || !sectionCountMatches || implementationLeak)
         {
             return "FAIL";
         }
 
-        return storyboardBoundaryHits > 0 || !audiencePreserved ? "REVIEW" : "PASS";
+        var boundaryHits = scriptBoundaryHits + storyboardBoundaryHits;
+        if (boundaryHits >= 3)
+        {
+            return "FAIL";
+        }
+
+        return conceptLowOverlap || audienceLowOverlap || boundaryHits > 0 ? "REVIEW" : "PASS";
     }
 }
 
@@ -390,18 +404,18 @@ public static class ValidationOutput
     {
         Console.WriteLine($"  JSON          {(report.JsonValid ? "PASS" : "FAIL")}");
         Console.WriteLine($"  Schema        {(report.SchemaValid ? "PASS" : "FAIL")}");
-        Console.WriteLine($"  Concept       {FlagOrUnavailable(report.ConceptPreserved, report.SchemaValid)} ({report.ConceptCoverage:P0} coverage)");
+        Console.WriteLine($"  Concept       {SignalText(report.ConceptLexicalMatch, report.ConceptCoverage, report.SchemaValid)}");
         Console.WriteLine(
-            $"  Audience      {FlagOrUnavailable(report.AudiencePreserved, report.SchemaValid)} "
-            + $"[{report.ExpectedAudience}] ({report.AudienceCoverage:P0} coverage)");
+            $"  Audience      {SignalText(report.AudienceLexicalMatch, report.AudienceCoverage, report.SchemaValid)} "
+            + $"[{report.ExpectedAudience}]");
         Console.WriteLine(
             $"  Sections      {(report.SchemaValid
                 ? $"{report.SectionCount} / {report.BeatCount} {(report.SectionCountMatches ? "PASS" : "FAIL")}"
                 : "unavailable")}");
-        Console.WriteLine($"  Hook          {FlagOrUnavailable(report.OpeningHookValid, report.SchemaValid)}");
-        Console.WriteLine($"  Closing       {FlagOrUnavailable(report.ClosingValid, report.SchemaValid)}");
-        Console.WriteLine($"  Script        {BoundaryText(report.ScriptBoundaryHits, "FAIL")}");
-        Console.WriteLine($"  Storyboard    {BoundaryText(report.StoryboardBoundaryHits, "REVIEW")}");
+        Console.WriteLine($"  Hook          {ReviewText(report.OpeningHookValid, report.SchemaValid)}");
+        Console.WriteLine($"  Closing       {ReviewText(report.ClosingValid, report.SchemaValid)}");
+        Console.WriteLine($"  Script        {BoundaryText(report.ScriptBoundaryHits)}");
+        Console.WriteLine($"  Storyboard    {BoundaryText(report.StoryboardBoundaryHits)}");
         Console.WriteLine(
             $"  ImplLeak      {(report.ImplementationLeaks.Count == 0
                 ? "none"
@@ -441,11 +455,16 @@ public static class ValidationOutput
         }
     }
 
-    private static string FlagOrUnavailable(bool value, bool schemaValid) =>
-        schemaValid ? (value ? "PASS" : "FAIL") : "unavailable";
+    private static string SignalText(bool lexicalMatch, double coverage, bool schemaValid) =>
+        schemaValid
+            ? $"{(lexicalMatch ? "PASS" : "REVIEW")} ({coverage:P0} lexical coverage)"
+            : "unavailable";
 
-    private static string BoundaryText(IReadOnlyList<string> hits, string verdict) =>
-        hits.Count == 0 ? "none" : $"{verdict} ({string.Join(", ", hits)})";
+    private static string ReviewText(bool value, bool schemaValid) =>
+        schemaValid ? (value ? "PASS" : "REVIEW") : "unavailable";
+
+    private static string BoundaryText(IReadOnlyList<string> hits) =>
+        hits.Count == 0 ? "none" : $"REVIEW ({string.Join(", ", hits)})";
 }
 
 internal static class ScannerSupport
@@ -504,8 +523,11 @@ public static class SelfCheck
                 ImplementationLeakScanner.Scan("Render this with Blender at /home/tama/scene.py").Count > 0),
             ("detects non-spoken production instructions", () =>
                 ScriptBoundaryScanner.Scan("Storyboard: open on a b-roll montage.").Count > 0),
+            ("detects sound/visual effect direction", () =>
+                ScriptBoundaryScanner.Scan("A final ding sound and a sparkle effect reinforce the outcome.").Count > 0),
             ("allows ordinary spoken narration", () =>
                 StoryboardBoundaryScanner.Scan("You can run useful AI on the machine you already own.").Count == 0
+                && ScriptBoundaryScanner.Scan("You can run useful AI on the machine you already own.").Count == 0
                 && ImplementationLeakScanner.Scan("You can run useful AI on the machine you already own.").Count == 0),
             ("allows quoted character dialogue", () =>
                 ScriptBoundaryScanner.Scan("The student asks, \"Do I know you?\" The assistant answers softly.").Count == 0),
@@ -513,14 +535,16 @@ public static class SelfCheck
                 TextOverlap.Coverage("local AI on consumer hardware", "Run local AI on consumer hardware today.") >= ResultPolicy.MinimumConceptCoverage),
             ("serializes every artifact shape", SerializationWorks),
             ("maps PASS, REVIEW, and FAIL", () =>
-                ResultPolicy.Compute(true, true, true, true, false, false, 0, true) == "PASS"
-                && ResultPolicy.Compute(true, true, true, true, false, false, 1, true) == "REVIEW"
-                && ResultPolicy.Compute(true, true, true, true, false, false, 0, false) == "REVIEW"
-                && ResultPolicy.Compute(true, true, false, true, false, false, 0, true) == "FAIL"
-                && ResultPolicy.Compute(true, true, true, false, false, false, 0, true) == "FAIL"
-                && ResultPolicy.Compute(true, true, true, true, true, false, 0, true) == "FAIL"
-                && ResultPolicy.Compute(true, true, true, true, false, true, 0, true) == "FAIL"
-                && ResultPolicy.Compute(true, true, true, true, false, false, 3, true) == "FAIL")
+                ResultPolicy.Compute(true, true, true, false, false, false, 0, 0) == "PASS"
+                && ResultPolicy.Compute(true, true, true, true, false, false, 0, 0) == "REVIEW"
+                && ResultPolicy.Compute(true, true, true, false, true, false, 0, 0) == "REVIEW"
+                && ResultPolicy.Compute(true, true, true, false, false, false, 1, 0) == "REVIEW"
+                && ResultPolicy.Compute(true, true, false, false, false, false, 0, 0) == "FAIL"
+                && ResultPolicy.Compute(false, true, true, false, false, false, 0, 0) == "FAIL"
+                && ResultPolicy.Compute(true, true, true, false, false, true, 0, 0) == "FAIL"
+                && ResultPolicy.Compute(true, true, true, false, false, false, 0, 3) == "FAIL"),
+            ("keeps low concept/audience overlap as a REVIEW signal, never FAIL", () =>
+                ResultPolicy.Compute(true, true, true, true, true, false, 0, 0) == "REVIEW")
         };
 
         var failures = 0;

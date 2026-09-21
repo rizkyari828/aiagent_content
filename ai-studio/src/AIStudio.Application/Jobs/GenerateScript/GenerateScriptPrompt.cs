@@ -35,6 +35,12 @@ internal static class GenerateScriptPrompt
 
         builder
             .AppendLine()
+            .AppendLine("Script fields are spoken content:")
+            .AppendLine("- openingHook, every sections[].narration, and closing are the exact words intended to be spoken aloud; write natural spoken language there.")
+            .AppendLine("- A sections[].heading is a short title or label, not necessarily spoken.")
+            .AppendLine("- Never put camera, shot, lens, editing, acting, sound-effect, visual-effect, or scene-direction instructions inside openingHook, narration, or closing.")
+            .AppendLine("- Creative guidance and beat purposes describe intent; translate them into spoken words instead of copying their production directions.")
+            .AppendLine()
             .AppendLine("Return exactly these camelCase fields:")
             .AppendLine("title, openingHook, sections, closing.")
             .AppendLine("sections must be a non-empty ordered array of objects with exactly:")
