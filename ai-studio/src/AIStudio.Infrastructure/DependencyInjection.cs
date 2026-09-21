@@ -497,6 +497,7 @@ public static class DependencyInjection
         // is wired here.
         services.AddSingleton<ICharacterBibleRegistry>(_ => new CharacterBibleRegistry());
         services.AddSingleton<IWorldBibleRegistry>(_ => new WorldBibleRegistry());
+        services.AddSingleton<StoryPlanGrounder>();
     }
 
     private static void AddStoryContext(IServiceCollection services)
