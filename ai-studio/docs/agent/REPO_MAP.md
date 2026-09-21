@@ -132,6 +132,20 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `StoryJsonConverters.cs` — plain-scalar JSON for the story value objects.
 - `tests/AIStudio.Tests/Stories/` — value-object validation, registry behavior, structural plan/pattern validation, JSON round-trip, strict parser accept/reject, deterministic director, anime-horror and kids-song patterns as data without new C#, boundary/security regressions, and DI wiring.
 
+## Bibles (Character + World Bible, stable narrative identity)
+
+- `src/AIStudio.Application/Bibles/CharacterBibleId.cs`, `WorldBibleId.cs`, `AssetReferenceId.cs` — validated data identity (`CharacterBibleId`/`CharacterBibleVersion`, `WorldBibleId`/`WorldBibleVersion`, `AssetReferenceId`) reusing the `AIStudio.Application.Stories.StoryIdentifier` rule, so a new character/world/asset category is data, not an enum.
+- `CharacterBible.cs` — stable `CharacterBible` + `CharacterIdentity`/`CharacterVariant`/`CharacterRelationship` and the separate scene-level `CharacterState`; identity is descriptive data (human/robot/animal/fantasy all use one shape), state carries emotion/pose/action/variant/location/held props.
+- `WorldBible.cs` — stable `WorldBible` + `WorldIdentity`/`WorldLocation` and the separate scene-level `WorldState`; identity holds environment type, visual description, spatial traits, recurring props and continuity rules, while state holds time/weather/lighting/temporary props.
+- `AssetReference.cs` — engine-neutral id-only asset pointer (`AssetReferenceId`, data-driven purpose, optional variant); never a path, URL, command, or provider workflow. No asset storage in v1.
+- `BibleIssue.cs` — shared issue record and stable validation codes.
+- `CharacterBibleValidator.cs`, `WorldBibleValidator.cs` — pure structural validation (identity/traits/variants/relationships/locations/assets, state tokens, approved-variant enforcement); no visual scoring or model call.
+- `ICharacterBibleRegistry.cs`, `CharacterBibleRegistry.cs`, `IWorldBibleRegistry.cs`, `WorldBibleRegistry.cs` — trusted in-memory catalogs (validate on register, fail-fast duplicate/invalid id+version, deterministic id-then-version order, `Get`/`GetLatest`/`TryGet`/`TryGetLatest`).
+- `StoryContinuityValidator.cs` — additive check that a `StoryPlan`'s character/world references resolve to known bibles; does not modify the Story Director.
+- `BibleParser.cs` — strict future-data JSON parser (unknown members rejected) returning validated character/world bibles; no speculative repair.
+- `BibleJsonConverters.cs` — plain-scalar JSON for the bible value objects.
+- `tests/AIStudio.Tests/Bibles/` — value-object validation, registry behavior, structural validators, JSON round-trip, strict parser accept/reject, identity-vs-state separation, approved-variant handling, additive StoryPlan reference validation, anime/3D-preschool/robot characters and multiple world types as data, security reflection, and DI wiring.
+
 ## Narrative Sync + Scene Timing
 
 - `src/AIStudio.Application/Rendering/Narration/ReviewedNarrationScript.cs`, `NarrationText.cs`, `NarrativeTiming.cs` - parse the approved reviewed script, map it to storyboard scenes (positional/heading, else `audio_narration_source_unmapped`), strip quotes for TTS-safe text, and centralize lead/hold/transition constants.

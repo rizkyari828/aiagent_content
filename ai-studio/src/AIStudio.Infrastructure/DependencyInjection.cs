@@ -1,6 +1,7 @@
 using AIStudio.Application.Abstractions.Persistence;
 using AIStudio.Application.AI;
 using AIStudio.Application.Assets;
+using AIStudio.Application.Bibles;
 using AIStudio.Application.Capabilities;
 using AIStudio.Application.Concepts;
 using AIStudio.Application.Content;
@@ -71,6 +72,7 @@ public static class DependencyInjection
         AddConceptRegistry(services);
         AddCreativeDirection(services);
         AddStoryDirector(services);
+        AddBibles(services);
 
         return services;
     }
@@ -450,6 +452,16 @@ public static class DependencyInjection
         services.AddSingleton<INarrativePatternRegistry>(
             _ => new NarrativePatternRegistry(SeedNarrativePatterns.All));
         services.AddSingleton<IStoryDirector, StoryDirector>();
+    }
+
+    private static void AddBibles(IServiceCollection services)
+    {
+        // Character/world bibles are declarative data held in trusted in-memory
+        // registries. v1 seeds nothing: identities arrive later as data (or from a
+        // future planner), never as code. No database, asset storage, or provider
+        // is wired here.
+        services.AddSingleton<ICharacterBibleRegistry>(_ => new CharacterBibleRegistry());
+        services.AddSingleton<IWorldBibleRegistry>(_ => new WorldBibleRegistry());
     }
 
     private static bool IsValidBaseUrl(string? value) =>
