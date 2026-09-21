@@ -4,6 +4,7 @@ using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Domain.Jobs;
 using AIStudio.Domain.Scripts;
+using AIStudio.Tests.StoryContext;
 using Xunit;
 
 namespace AIStudio.Tests.Jobs;
@@ -67,7 +68,8 @@ public sealed class GenerateStoryboardJobHandlerTests
             new StubContentProjectReader(
                 new ContentProjectSnapshot(projectId, "Test project", "Test brief")),
             new StubScriptReviewRepository(null),
-            generator);
+            generator,
+            StoryContextTestSupport.Builder());
 
         var exception = await Assert.ThrowsAsync<JobExecutionException>(
             () => handler.ExecuteAsync(
@@ -89,7 +91,8 @@ public sealed class GenerateStoryboardJobHandlerTests
             new StubContentProjectReader(null),
             new StubScriptReviewRepository(
                 GenerateStoryboardTestData.Script(projectId, ScriptReviewStatus.Approved)),
-            generator);
+            generator,
+            StoryContextTestSupport.Builder());
 
         var exception = await Assert.ThrowsAsync<JobExecutionException>(
             () => handler.ExecuteAsync(
@@ -190,5 +193,6 @@ public sealed class GenerateStoryboardJobHandlerTests
                 new ContentProjectSnapshot(projectId, "Test project", "Test brief")),
             new StubScriptReviewRepository(
                 GenerateStoryboardTestData.Script(projectId, status)),
-            generator);
+            generator,
+            StoryContextTestSupport.Builder());
 }

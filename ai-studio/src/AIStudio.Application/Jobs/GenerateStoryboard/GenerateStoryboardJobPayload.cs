@@ -1,9 +1,17 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using AIStudio.Application.Bibles;
+using AIStudio.Application.Creative;
+using AIStudio.Application.Stories;
 
 namespace AIStudio.Application.Jobs.GenerateStoryboard;
 
-public sealed record GenerateStoryboardJobPayload(Guid ContentProjectId)
+public sealed record GenerateStoryboardJobPayload(
+    Guid ContentProjectId,
+    CreativeDirection? CreativeDirection = null,
+    StoryPlan? StoryPlan = null,
+    IReadOnlyList<CharacterState>? CharacterStates = null,
+    IReadOnlyList<WorldState>? WorldStates = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
