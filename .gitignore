@@ -22,6 +22,9 @@ ai-studio/assets/
 # Content Studio runtime artifacts (registered assets, narration, subtitles, renders)
 ai-studio/src/AIStudio.Api/assets/
 
+# Content Studio real-model validation artifacts (generated, never committed)
+ai-studio/.demo/artifacts/
+
 # .NET
 **/bin/
 **/obj/
