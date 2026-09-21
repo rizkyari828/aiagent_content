@@ -23,6 +23,7 @@ using AIStudio.Application.Jobs.GenerateSceneVisuals;
 using AIStudio.Application.Rendering.Visuals;
 using AIStudio.Application.Scripts;
 using AIStudio.Application.Stories;
+using AIStudio.Application.StoryContext;
 using AIStudio.Application.Subtitles;
 using AIStudio.Infrastructure.AI;
 using AIStudio.Infrastructure.Assets;
@@ -73,6 +74,7 @@ public static class DependencyInjection
         AddCreativeDirection(services);
         AddStoryDirector(services);
         AddBibles(services);
+        AddStoryContext(services);
 
         return services;
     }
@@ -462,6 +464,13 @@ public static class DependencyInjection
         // is wired here.
         services.AddSingleton<ICharacterBibleRegistry>(_ => new CharacterBibleRegistry());
         services.AddSingleton<IWorldBibleRegistry>(_ => new WorldBibleRegistry());
+    }
+
+    private static void AddStoryContext(IServiceCollection services)
+    {
+        // The context builder is a pure, AI-free projector over the trusted
+        // registries. It executes nothing and touches no provider or database.
+        services.AddSingleton<IStoryContextBuilder, StoryContextBuilder>();
     }
 
     private static bool IsValidBaseUrl(string? value) =>

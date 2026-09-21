@@ -146,6 +146,15 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `BibleJsonConverters.cs` — plain-scalar JSON for the bible value objects.
 - `tests/AIStudio.Tests/Bibles/` — value-object validation, registry behavior, structural validators, JSON round-trip, strict parser accept/reject, identity-vs-state separation, approved-variant handling, additive StoryPlan reference validation, anime/3D-preschool/robot characters and multiple world types as data, security reflection, and DI wiring.
 
+## Story Context (token-efficient narrative projection)
+
+- `src/AIStudio.Application/StoryContext/StoryContext.cs` — the compact, consumer-neutral `StoryContext` plus `StoryConceptContext`, `StoryNarrativeContext`, `StoryBeatContext`, and `StoryStateContext`; concept/treatment/story summary, ordered beats, and optional caller state kept separate from identity.
+- `StoryCharacterContext.cs`, `StoryWorldContext.cs` — projections of a referenced `CharacterBible`/`WorldBible` (reusing `CharacterIdentity`/`WorldIdentity`), with `StoryRelationshipContext` and the id-only `StoryAssetContext` (assetId/purpose/variant; never a path or URL).
+- `StoryContextRequest.cs` — consumes the existing `CreativeDirection` and `StoryPlan`, optional `BeatId` (beat scope), `IncludeAssetReferences` (default false), and optional `CharacterState`/`WorldState`; nothing is duplicated or mutated.
+- `StoryContextIssue.cs`, `StoryContextBuildResult.cs` — deterministic issues (unresolved references reuse the bible-continuity codes; plus request/beat-not-found) and the `Context` + `Issues` result with `IsValid`.
+- `IStoryContextBuilder.cs`, `StoryContextBuilder.cs` — deterministic, AI-free projector: relevance filtering, dedup, ordering, latest-version resolution, `StoryContinuityValidator` reuse on a scope-copied plan, and transitive `continuityFrom` closure for beat scope. No provider, process, or model dependency.
+- `tests/AIStudio.Tests/StoryContext/` — full build and compactness, deterministic ordering, only-referenced character/world and relationship filtering, token-efficiency proof, unresolved-reference issues, latest-version resolution, asset opt-in safety, beat-scoped context and closure, state-vs-identity, source/registry immutability, JSON round-trip, tech/anime/preschool generality, security reflection, and DI wiring.
+
 ## Narrative Sync + Scene Timing
 
 - `src/AIStudio.Application/Rendering/Narration/ReviewedNarrationScript.cs`, `NarrationText.cs`, `NarrativeTiming.cs` - parse the approved reviewed script, map it to storyboard scenes (positional/heading, else `audio_narration_source_unmapped`), strip quotes for TTS-safe text, and centralize lead/hold/transition constants.
