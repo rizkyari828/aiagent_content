@@ -22,6 +22,17 @@ This guide applies to `ai-studio/`. Run product commands from this directory. Th
 - Avoid speculative abstractions and unrelated edits. Do not change architecture, security, concurrency, migrations, durable-job semantics, or `global.json` unless the current task explicitly requires it.
 - Preserve existing worktree changes and never let agents edit it concurrently. Do not spawn subagents unless the user explicitly requests delegation.
 
+## Modular and Domain Boundaries
+
+AI Studio is a modular monolith by default. Modules stay remotely extractable by contract, but remote transport appears only when operationally justified. See `docs/development/ARCHITECTURE.md` and PRD addendum `docs/product/parts/13_EXTRACTABLE_MODULE_BOUNDARIES.md` (ADR-018/019).
+
+- No cross-module persistence or infrastructure access: never use another module's `DbContext`, `DbSet`, EF entity, repository, or table as an integration API, and never depend on another module's Infrastructure.
+- Cross-module interaction uses application-owned, transport-neutral contracts (immutable serializable DTOs, owned queries/commands, integration events) — never EF entities, provider instances, delegates, commands, or runtime types.
+- Background workers belong to the owning business module; do not build a generic cross-domain worker.
+- Domains stay domain-specific: no universal Idea/Analytics/`Generic<T>` abstractions; a new domain is a new module, not a mode switch.
+- Extract shared technical capabilities only after a second real workflow proves duplication, keeping domain-specific business models intact.
+- Add no microservice infrastructure (broker, service discovery, separate database, remote client) and no hypothetical abstraction layer until a module is actually being extracted.
+
 ## Editing fallback
 
 - If the built-in editor or patch helper fails because bubblewrap is unavailable, do not retry it. Use an available system patch/edit utility immediately, preserve the requested scope, inspect the resulting diff, and run the requested validation. Treat bubblewrap absence as a tooling limitation, not a repository failure.

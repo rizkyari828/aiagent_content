@@ -70,3 +70,11 @@ Every numbered top-level section from v0.9.2 appears in exactly one canonical sp
 | 58. Final Principle | `parts/12_ADR_FREEZE_AND_FINAL_RULES.md` |
 
 Coverage validation performed during package generation: no numbered section omitted or duplicated.
+
+## Post-freeze addenda (not source sections)
+
+These files are adopted after v0.9.2 and are **not** derived from the frozen source; the source SHA-256 in `PRD_INDEX.md` is unchanged.
+
+| Addendum | Split file | Contents |
+|---|---|---|
+| Extractable Module Boundaries | `parts/13_EXTRACTABLE_MODULE_BOUNDARIES.md` | Modular-first/distributed-when-justified; extractable-by-contract; domain-specific workflows; proven-capability reuse; illustrative Content vs Stock topology; ADR-018 and ADR-019 |
