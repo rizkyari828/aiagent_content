@@ -8,8 +8,21 @@ using Xunit;
 
 namespace AIStudio.Tests.Bibles;
 
-public sealed class BibleDependencyInjectionTests
+public sealed class BibleDependencyInjectionTests : IDisposable
 {
+    private readonly string assetsRoot = Path.Combine(
+        Path.GetTempPath(),
+        "aistudio-bible-di-tests",
+        Guid.NewGuid().ToString("N"));
+
+    public void Dispose()
+    {
+        if (Directory.Exists(assetsRoot))
+        {
+            Directory.Delete(assetsRoot, recursive: true);
+        }
+    }
+
     [Fact]
     public void ResolvesEmptyBibleRegistriesAsSingletons()
     {
@@ -51,7 +64,7 @@ public sealed class BibleDependencyInjectionTests
         Assert.True(worlds.TryGetLatest(new WorldBibleId("rio-bedroom"), out _));
     }
 
-    private static ServiceProvider BuildProvider()
+    private ServiceProvider BuildProvider()
     {
         var values = new Dictionary<string, string?>
         {
@@ -62,6 +75,7 @@ public sealed class BibleDependencyInjectionTests
             ["Ollama:DefaultModel"] = "test-model",
             ["Ollama:TimeoutSeconds"] = "30",
             ["GpuResourceGate:Enabled"] = "true",
+            ["Assets:RootPath"] = assetsRoot,
             ["JobWorker:Enabled"] = "false",
             ["JobWorker:PollInterval"] = "00:00:01",
             ["JobWorker:LeaseDuration"] = "00:02:00"

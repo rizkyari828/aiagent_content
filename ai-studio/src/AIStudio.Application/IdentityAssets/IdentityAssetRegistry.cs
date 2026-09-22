@@ -13,15 +13,38 @@ public sealed class IdentityAssetRegistry : IIdentityAssetRegistry
 {
     private readonly object _gate = new();
     private readonly TimeProvider _timeProvider;
+    private readonly IIdentityAssetMetadataPersistence? _persistence;
     private readonly Dictionary<(AssetReferenceId Id, IdentityAssetVersion Version), IdentityAsset> _byVersion = [];
     private readonly Dictionary<AssetReferenceId, IdentityAsset> _latest = [];
     private readonly Dictionary<AssetReferenceId, IdentityAsset> _latestApproved = [];
 
     public IdentityAssetRegistry(
         IEnumerable<IdentityAsset>? assets = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        IIdentityAssetMetadataPersistence? persistence = null)
     {
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _persistence = persistence;
+
+        if (persistence is not null)
+        {
+            // Rehydrate durable state before serving any lookup so Draft/Approved
+            // status, ApprovedAt, and version allocation survive restart.
+            foreach (var asset in persistence.LoadAll())
+            {
+                var issues = IdentityAssetValidator.Validate(asset);
+                if (issues.Count > 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Persisted identity asset '{asset.Id}' v{asset.Version.Value} is invalid: {issues[0].Code}.");
+                }
+
+                lock (_gate)
+                {
+                    AddToIndex(Snapshot(asset));
+                }
+            }
+        }
 
         foreach (var asset in assets ?? [])
         {
@@ -81,19 +104,34 @@ public sealed class IdentityAssetRegistry : IIdentityAssetRegistry
 
         var snapshot = Snapshot(asset);
 
+        // Durable first: expose the record only after it is safely persisted.
+        _persistence?.Create(snapshot);
+
         lock (_gate)
         {
-            if (!_byVersion.TryAdd((snapshot.Id, snapshot.Version), snapshot))
-            {
-                throw new InvalidOperationException(
-                    $"Duplicate identity asset registration '{snapshot.Id}' v{snapshot.Version.Value}.");
-            }
+            AddToIndex(snapshot);
+        }
+    }
 
-            if (!_latest.TryGetValue(snapshot.Id, out var current)
-                || snapshot.Version.Value > current.Version.Value)
-            {
-                _latest[snapshot.Id] = snapshot;
-            }
+    private void AddToIndex(IdentityAsset snapshot)
+    {
+        if (!_byVersion.TryAdd((snapshot.Id, snapshot.Version), snapshot))
+        {
+            throw new InvalidOperationException(
+                $"Duplicate identity asset registration '{snapshot.Id}' v{snapshot.Version.Value}.");
+        }
+
+        if (!_latest.TryGetValue(snapshot.Id, out var current)
+            || snapshot.Version.Value > current.Version.Value)
+        {
+            _latest[snapshot.Id] = snapshot;
+        }
+
+        if (snapshot.Status == IdentityAssetStatus.Approved
+            && (!_latestApproved.TryGetValue(snapshot.Id, out var currentApproved)
+                || snapshot.Version.Value > currentApproved.Version.Value))
+        {
+            _latestApproved[snapshot.Id] = snapshot;
         }
     }
 
@@ -116,6 +154,9 @@ public sealed class IdentityAssetRegistry : IIdentityAssetRegistry
                 Status = IdentityAssetStatus.Approved,
                 ApprovedAt = _timeProvider.GetUtcNow()
             };
+
+            // Durable first, so an approval is never visible before it is persisted.
+            _persistence?.Update(approved);
 
             _byVersion[(id, version)] = approved;
             if (_latest.TryGetValue(id, out var latest) && latest.Version == version)

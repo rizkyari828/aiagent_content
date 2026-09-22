@@ -2,9 +2,11 @@ using AIStudio.Application.Bibles;
 using AIStudio.Application.Content;
 using AIStudio.Application.IdentityAssets;
 using AIStudio.Application.Jobs.GenerateSceneVisuals;
+using AIStudio.Infrastructure.Assets;
 using AIStudio.Tests.Assets;
 using AIStudio.Tests.IdentityAssets;
 using AIStudio.Tests.Jobs;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace AIStudio.Tests.Rendering;
@@ -192,6 +194,37 @@ public sealed class GenerateSceneVisualsIdentityMaterializationTests
     }
 
     [Fact]
+    public async Task SelectedReferenceStaysPinnedAfterRegistryRestart()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "aistudio-identity-materialization-tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var first = RegistryAt(root);
+            first.Register(Create(1));
+            first.Register(Create(2));
+            first.Approve(new AssetReferenceId(ReferenceId), new IdentityAssetVersion(1));
+
+            // Process-equivalent restart: reopen the same durable metadata root.
+            var reopened = RegistryAt(root);
+            var context = new RecordingDbContext();
+
+            await Enqueue(context, reopened, Reference(version: null));
+            Assert.Equal(1, Assert.Single(Pins(context)).Version.Value);
+
+            reopened.Approve(new AssetReferenceId(ReferenceId), new IdentityAssetVersion(2));
+            Assert.Equal(1, Assert.Single(Pins(context)).Version.Value);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void PayloadExposesNoInfrastructureOrAuthoringMetadata()
     {
         var types = typeof(GenerateSceneVisualsJobPayload)
@@ -224,6 +257,12 @@ public sealed class GenerateSceneVisualsIdentityMaterializationTests
         IdentityAssetTestSupport.Reference(version: version, id: id);
 
     private static IdentityAssetRegistry Registry(params IdentityAsset[] assets) => new(assets);
+
+    private static IdentityAssetRegistry RegistryAt(string root) =>
+        new(
+            timeProvider: new FixedTimeProvider(AssetTestData.Now),
+            persistence: new LocalIdentityAssetMetadataPersistence(
+                Options.Create(new AssetStorageOptions { RootPath = root })));
 
     private static IReadOnlyList<PinnedIdentityAsset> Pins(RecordingDbContext context) =>
         GenerateSceneVisualsJobPayload.Deserialize(context.AddedJob!.Payload).IdentityReferences!;

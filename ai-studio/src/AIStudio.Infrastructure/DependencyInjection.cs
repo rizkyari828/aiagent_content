@@ -502,8 +502,11 @@ public static class DependencyInjection
         // is wired here.
         services.AddSingleton<ICharacterBibleRegistry>(_ => new CharacterBibleRegistry());
         services.AddSingleton<IWorldBibleRegistry>(_ => new WorldBibleRegistry());
+        services.AddSingleton<IIdentityAssetMetadataPersistence, LocalIdentityAssetMetadataPersistence>();
         services.AddSingleton<IIdentityAssetRegistry>(serviceProvider =>
-            new IdentityAssetRegistry(timeProvider: serviceProvider.GetRequiredService<TimeProvider>()));
+            new IdentityAssetRegistry(
+                timeProvider: serviceProvider.GetRequiredService<TimeProvider>(),
+                persistence: serviceProvider.GetRequiredService<IIdentityAssetMetadataPersistence>()));
         services.AddSingleton<IIdentityAssetResolver, IdentityAssetResolver>();
         services.AddSingleton<StoryPlanGrounder>();
         services.AddScoped<IStoryBiblePlanner, QwenStoryBiblePlanner>();
