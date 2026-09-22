@@ -508,6 +508,8 @@ public static class DependencyInjection
                 timeProvider: serviceProvider.GetRequiredService<TimeProvider>(),
                 persistence: serviceProvider.GetRequiredService<IIdentityAssetMetadataPersistence>()));
         services.AddSingleton<IIdentityAssetResolver, IdentityAssetResolver>();
+        services.AddScoped<ImportIdentityAssetWorkflow>();
+        services.AddScoped<ApproveIdentityAssetWorkflow>();
         services.AddSingleton<StoryPlanGrounder>();
         services.AddScoped<IStoryBiblePlanner, QwenStoryBiblePlanner>();
     }

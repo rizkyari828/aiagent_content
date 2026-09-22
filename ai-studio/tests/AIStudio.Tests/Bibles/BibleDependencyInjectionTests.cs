@@ -50,6 +50,17 @@ public sealed class BibleDependencyInjectionTests : IDisposable
     }
 
     [Fact]
+    public void ResolvesIdentityAssetAuthoringWorkflows()
+    {
+        using var provider = BuildProvider();
+
+        Assert.IsType<ImportIdentityAssetWorkflow>(
+            provider.GetRequiredService<ImportIdentityAssetWorkflow>());
+        Assert.IsType<ApproveIdentityAssetWorkflow>(
+            provider.GetRequiredService<ApproveIdentityAssetWorkflow>());
+    }
+
+    [Fact]
     public void ResolvedRegistriesAcceptTrustedData()
     {
         using var provider = BuildProvider();
