@@ -1,5 +1,7 @@
 using AIStudio.Application.Assets;
+using AIStudio.Application.Bibles;
 using AIStudio.Application.Content;
+using AIStudio.Application.IdentityAssets;
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.GenerateSceneVisuals;
 using AIStudio.Application.Jobs.GenerateStoryboard;
@@ -173,6 +175,7 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
         var request = Assert.Single(aiImages.Requests);
         Assert.False(string.IsNullOrWhiteSpace(request.Prompt));
         Assert.True(request.Seed >= 0);
+        Assert.Empty(request.IdentityReferences);
 
         // A still alone is not a scene: the motion treatment overlay must run.
         Assert.Single(svg.MotionLabels);
@@ -182,6 +185,118 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
             Assert.Equal(AssetType.Video, asset.Type);
             Assert.StartsWith("AiImage", asset.Creator);
         });
+    }
+
+    [Fact]
+    public async Task Handler_PassesConcreteIdentityPinToImageRequest()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateSceneVisualsTestData.ClosingStoryboard);
+        var aiImages = new StubImageGenerationProvider(isEnabled: true);
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            new RecordingAssetRepository(),
+            new StubSceneVisualRenderer(),
+            imageProvider: aiImages);
+
+        await handler.ExecuteAsync(
+            GenerateSceneVisualsTestData.Job(
+                projectId,
+                storyboard.Id,
+                identityReferences: [Pin(1)]),
+            TestContext.Current.CancellationToken);
+
+        var reference = Assert.Single(Assert.Single(aiImages.Requests).IdentityReferences);
+        Assert.Equal("student-01-reference", reference.AssetId.Value);
+        Assert.Equal(1, reference.Version.Value);
+    }
+
+    [Fact]
+    public async Task Handler_ReplayOfSamePayloadReusesSamePinnedIdentityReference()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateSceneVisualsTestData.ClosingStoryboard);
+        var aiImages = new StubImageGenerationProvider(isEnabled: true);
+        var job = GenerateSceneVisualsTestData.Job(
+            projectId,
+            storyboard.Id,
+            identityReferences: [Pin(1)]);
+
+        // Two independent replays of the SAME persisted payload. The pin is carried
+        // by the payload, not re-resolved, so a later approval cannot drift it.
+        foreach (var _ in Enumerable.Range(0, 2))
+        {
+            var handler = CreateHandler(
+                projectId,
+                storyboard,
+                new RecordingAssetRepository(),
+                new StubSceneVisualRenderer(),
+                imageProvider: aiImages);
+            await handler.ExecuteAsync(job, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(2, aiImages.Requests.Count);
+        Assert.All(aiImages.Requests, request =>
+        {
+            var reference = Assert.Single(request.IdentityReferences);
+            Assert.Equal("student-01-reference", reference.AssetId.Value);
+            Assert.Equal(1, reference.Version.Value);
+        });
+    }
+
+    [Fact]
+    public async Task Handler_RejectsMoreThanOneIdentityReference()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateSceneVisualsTestData.ClosingStoryboard);
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            new RecordingAssetRepository(),
+            new StubSceneVisualRenderer(),
+            imageProvider: new StubImageGenerationProvider(isEnabled: true));
+
+        var exception = await Assert.ThrowsAsync<JobExecutionException>(
+            () => handler.ExecuteAsync(
+                GenerateSceneVisualsTestData.Job(
+                    projectId,
+                    storyboard.Id,
+                    identityReferences:
+                    [
+                        Pin(1),
+                        new PinnedIdentityAsset(
+                            new AssetReferenceId("teacher-02-reference"),
+                            new IdentityAssetVersion(1))
+                    ]),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("visual_identity_reference_count_unsupported", exception.ErrorCode);
+    }
+
+    [Fact]
+    public void Handler_DoesNotDependOnIdentityAssetResolution()
+    {
+        var parameters = Assert
+            .Single(typeof(GenerateSceneVisualsJobHandler).GetConstructors())
+            .GetParameters();
+
+        var forbidden = new[]
+        {
+            typeof(IIdentityAssetRegistry),
+            typeof(IIdentityAssetResolver),
+            typeof(IIdentityAssetStore)
+        };
+
+        Assert.DoesNotContain(
+            parameters,
+            parameter => forbidden.Contains(parameter.ParameterType));
     }
 
     [Fact]
@@ -495,6 +610,9 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
             parameters,
             parameter => forbidden.Contains(parameter.ParameterType));
     }
+
+    private static PinnedIdentityAsset Pin(int version) =>
+        new(new AssetReferenceId("student-01-reference"), new IdentityAssetVersion(version));
 
     private GenerateSceneVisualsJobHandler CreateHandler(
         Guid projectId,

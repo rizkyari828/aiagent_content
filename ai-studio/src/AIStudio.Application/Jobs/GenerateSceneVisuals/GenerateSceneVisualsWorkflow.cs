@@ -2,7 +2,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AIStudio.Application.Abstractions.Persistence;
+using AIStudio.Application.Bibles;
 using AIStudio.Application.Content;
+using AIStudio.Application.IdentityAssets;
 using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Application.Rendering.Visuals;
 using AIStudio.Domain.Jobs;
@@ -13,6 +15,7 @@ public sealed class GenerateSceneVisualsWorkflow(
     IApplicationDbContext dbContext,
     IContentProjectReader contentProjects,
     IJobReader jobs,
+    IIdentityAssetResolver identityAssetResolver,
     TimeProvider timeProvider)
 {
     private static readonly JsonSerializerOptions JsonOptions =
@@ -22,17 +25,32 @@ public sealed class GenerateSceneVisualsWorkflow(
         Guid contentProjectId,
         Guid storyboardJobId,
         CancellationToken cancellationToken) =>
-        EnqueueAsync(contentProjectId, storyboardJobId, force: false, cancellationToken);
+        EnqueueAsync(contentProjectId, storyboardJobId, force: false, identityReferences: null, cancellationToken);
 
     /// <summary>
     /// <paramref name="force"/> is an explicit operator action: it regenerates every
     /// scene (including existing manual/generated assets) instead of reusing them.
     /// A normal re-run keeps reusing current-version assets.
     /// </summary>
+    public Task<Guid?> EnqueueAsync(
+        Guid contentProjectId,
+        Guid storyboardJobId,
+        bool force,
+        CancellationToken cancellationToken) =>
+        EnqueueAsync(contentProjectId, storyboardJobId, force, identityReferences: null, cancellationToken);
+
+    /// <summary>
+    /// Materialization boundary. <paramref name="identityReferences"/> are the
+    /// explicit, caller-selected Bible references. A floating version is resolved to
+    /// the latest Approved asset exactly once here, before the job is persisted; the
+    /// durable payload then carries only concrete pins, so execution and retries
+    /// never re-resolve. The caller-selected count is never inferred or guessed.
+    /// </summary>
     public async Task<Guid?> EnqueueAsync(
         Guid contentProjectId,
         Guid storyboardJobId,
         bool force,
+        IReadOnlyList<AssetReference>? identityReferences,
         CancellationToken cancellationToken)
     {
         RequireIdentifier(contentProjectId, nameof(contentProjectId));
@@ -52,8 +70,13 @@ public sealed class GenerateSceneVisualsWorkflow(
             jobs,
             cancellationToken);
 
+        var identityPins = MaterializeIdentityReferences(identityReferences);
+
         var payload = JsonSerializer.Serialize(
-            new GenerateSceneVisualsJobPayload(contentProjectId, storyboardJobId, force),
+            new GenerateSceneVisualsJobPayload(contentProjectId, storyboardJobId, force)
+            {
+                IdentityReferences = identityPins.Count == 0 ? null : identityPins
+            },
             JsonOptions);
 
         var job = Job.Create(
@@ -106,6 +129,46 @@ public sealed class GenerateSceneVisualsWorkflow(
                 "The storyboard result is not a valid structured storyboard.",
                 exception);
         }
+    }
+
+    /// <summary>
+    /// Resolves each caller-selected reference to one concrete Approved pin. An
+    /// explicit version resolves that exact asset; a null version resolves the
+    /// latest Approved asset once. Draft/missing references fail clearly and the
+    /// job is not created; more than one reference is unsupported in v1.
+    /// </summary>
+    private IReadOnlyList<PinnedIdentityAsset> MaterializeIdentityReferences(
+        IReadOnlyList<AssetReference>? identityReferences)
+    {
+        if (identityReferences is null || identityReferences.Count == 0)
+        {
+            return [];
+        }
+
+        if (identityReferences.Count > 1)
+        {
+            throw Error(
+                "visual_identity_reference_count_unsupported",
+                "GenerateSceneVisuals supports at most one identity reference in v1.");
+        }
+
+        var pins = new List<PinnedIdentityAsset>(identityReferences.Count);
+        foreach (var reference in identityReferences)
+        {
+            var resolution = identityAssetResolver.Resolve(reference);
+            if (!resolution.IsSuccess || resolution.Value is null)
+            {
+                var issue = resolution.Issues.FirstOrDefault();
+                throw Error(
+                    "visual_identity_reference_unresolved",
+                    $"Identity reference '{reference.AssetId}' could not be resolved to an approved version"
+                    + (issue is null ? "." : $": {issue.Message}"));
+            }
+
+            pins.Add(resolution.Value);
+        }
+
+        return pins;
     }
 
     private static string ComputeInputVersionHash(

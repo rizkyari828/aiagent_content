@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using AIStudio.Application.Assets;
 using AIStudio.Application.Content;
+using AIStudio.Application.IdentityAssets;
 using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Application.Narration;
 using AIStudio.Application.Rendering;
@@ -92,6 +93,10 @@ public sealed class GenerateSceneVisualsJobHandler(
             threeDRenderer.IsEnabled,
             timing.Windows);
 
+        // Concrete pins persisted at materialization. Execution never resolves a
+        // latest version and never reads the Bible/registry to pick an asset.
+        var identityReferences = payload.IdentityReferences ?? [];
+
         var generated = new List<GeneratedSceneVisual>(plans.Count);
         var routing = new List<SceneVisualRouting>(plans.Count);
 
@@ -121,6 +126,7 @@ public sealed class GenerateSceneVisualsJobHandler(
                 sceneIndex,
                 job.ContentProjectId,
                 payload.StoryboardJobId,
+                identityReferences,
                 cancellationToken);
             var file = await WriteAsync(relativePath, bytes, cancellationToken);
 
@@ -277,6 +283,7 @@ public sealed class GenerateSceneVisualsJobHandler(
         int sceneIndex,
         Guid contentProjectId,
         Guid storyboardJobId,
+        IReadOnlyList<PinnedIdentityAsset> identityReferences,
         CancellationToken cancellationToken)
     {
         var duration = plan.Direction?.DurationSeconds
@@ -302,6 +309,7 @@ public sealed class GenerateSceneVisualsJobHandler(
                     storyboardJobId,
                     sceneIndex,
                     duration,
+                    identityReferences,
                     cancellationToken),
                 SceneVisualEngine.AnimatedSvg => await svgRenderer.RenderAnimationAsync(
                     plan.Brief,
@@ -359,13 +367,36 @@ public sealed class GenerateSceneVisualsJobHandler(
         Guid storyboardJobId,
         int sceneIndex,
         double durationSeconds,
+        IReadOnlyList<PinnedIdentityAsset> identityReferences,
         CancellationToken cancellationToken)
     {
-        var image = await imageProvider.GenerateAsync(
-            new ImageGenerationRequest(
+        ImageGenerationRequest request;
+        try
+        {
+            // The exact persisted pins flow through unchanged. Beyond one reference
+            // is unsupported by the FLUX provider in v1 and must fail clearly rather
+            // than silently choosing the first.
+            request = new ImageGenerationRequest(
                 SceneImagePrompt.Build(plan.Brief),
-                DeriveSeed(storyboardJobId, sceneIndex)),
-            cancellationToken);
+                DeriveSeed(storyboardJobId, sceneIndex),
+                identityReferences);
+        }
+        catch (NotSupportedException exception)
+        {
+            throw Error(
+                "visual_identity_reference_count_unsupported",
+                exception.Message,
+                exception);
+        }
+        catch (ArgumentException exception)
+        {
+            throw Error(
+                "visual_identity_reference_invalid",
+                exception.Message,
+                exception);
+        }
+
+        var image = await imageProvider.GenerateAsync(request, cancellationToken);
 
         // A still alone is not a scene: apply the repository-owned motion treatment.
         return await svgRenderer.RenderImageMotionAsync(

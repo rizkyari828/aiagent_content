@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AIStudio.Application.IdentityAssets;
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.GenerateSceneVisuals;
 using AIStudio.Application.Rendering.Visuals;
@@ -162,22 +163,30 @@ internal static class GenerateSceneVisualsTestData
         }
         """;
 
-    public static string Payload(Guid contentProjectId, Guid storyboardJobId, bool force = false) =>
+    public static string Payload(
+        Guid contentProjectId,
+        Guid storyboardJobId,
+        bool force = false,
+        IReadOnlyList<PinnedIdentityAsset>? identityReferences = null) =>
         JsonSerializer.Serialize(
-            new GenerateSceneVisualsJobPayload(contentProjectId, storyboardJobId, force),
+            new GenerateSceneVisualsJobPayload(contentProjectId, storyboardJobId, force)
+            {
+                IdentityReferences = identityReferences
+            },
             JsonOptions);
 
     public static ClaimedJob Job(
         Guid contentProjectId,
         Guid storyboardJobId,
         JobType type = JobType.GenerateSceneVisuals,
-        bool force = false) =>
+        bool force = false,
+        IReadOnlyList<PinnedIdentityAsset>? identityReferences = null) =>
         new(
             Guid.NewGuid(),
             contentProjectId,
             type,
             "input-v1",
-            Payload(contentProjectId, storyboardJobId, force),
+            Payload(contentProjectId, storyboardJobId, force, identityReferences),
             0,
             2,
             false);

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using AIStudio.Application.IdentityAssets;
 
 namespace AIStudio.Application.Jobs.GenerateSceneVisuals;
 
@@ -8,6 +9,16 @@ public sealed record GenerateSceneVisualsJobPayload(
     Guid StoryboardJobId,
     bool Force = false)
 {
+    /// <summary>
+    /// Concrete, already-materialized identity pins for the AI image path. A
+    /// materialized job never carries a floating version: the resolution happened
+    /// exactly once before persistence. The list is omitted entirely for the
+    /// unchanged zero-reference path and is limited to one reference in v1.
+    /// </summary>
+    [JsonPropertyName("identityReferences")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<PinnedIdentityAsset>? IdentityReferences { get; init; }
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
@@ -38,7 +49,7 @@ public sealed record GenerateSceneVisualsJobPayload(
             throw InvalidPayload("GenerateSceneVisuals payload requires a storyboardJobId.");
         }
 
-        return payload;
+        return payload with { IdentityReferences = payload.IdentityReferences ?? [] };
     }
 
     private static JobExecutionException InvalidPayload(

@@ -1,4 +1,5 @@
 using AIStudio.Application.Content;
+using AIStudio.Application.IdentityAssets;
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.GenerateSceneVisuals;
 using AIStudio.Domain.Jobs;
@@ -40,6 +41,7 @@ public sealed class GenerateSceneVisualsWorkflowTests
             new RecordingDbContext(),
             new StubContentProjectReader(null),
             new StubJobReader(null),
+            new IdentityAssetResolver(new IdentityAssetRegistry()),
             new AssetStubTimeProvider(AssetTestData.Now));
 
         var jobId = await workflow.EnqueueAsync(
@@ -93,5 +95,6 @@ public sealed class GenerateSceneVisualsWorkflowTests
             new StubContentProjectReader(
                 new ContentProjectSnapshot(projectId, "Project", "Brief")),
             new StubJobReader(storyboard),
+            new IdentityAssetResolver(new IdentityAssetRegistry()),
             new AssetStubTimeProvider(AssetTestData.Now));
 }
