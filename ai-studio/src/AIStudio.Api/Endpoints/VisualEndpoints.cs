@@ -1,4 +1,7 @@
+using AIStudio.Application.Bibles;
+using AIStudio.Application.IdentityAssets;
 using AIStudio.Application.Jobs.GenerateSceneVisuals;
+using Microsoft.AspNetCore.Mvc;
 
 namespace AIStudio.Api.Endpoints;
 
@@ -21,10 +24,11 @@ public static class VisualEndpoints
         return endpoints;
     }
 
-    private static async Task<IResult> EnqueueVisualsAsync(
+    internal static async Task<IResult> EnqueueVisualsAsync(
         string contentProjectId,
         string storyboardJobId,
         bool? force,
+        [FromBody] EnqueueVisualsRequest? request,
         GenerateSceneVisualsWorkflow workflow,
         CancellationToken cancellationToken)
     {
@@ -38,12 +42,44 @@ public static class VisualEndpoints
             return InvalidIdentifier("storyboardJobId");
         }
 
+        // Optional explicit selection. The caller supplies an authoring reference;
+        // this endpoint never resolves a version or touches the registry.
+        IReadOnlyList<AssetReference>? identityReferences = null;
+        if (request?.IdentityReference is { } selection)
+        {
+            if (!AssetReferenceId.TryParse(selection.AssetId, out var assetId))
+            {
+                return Validation(
+                    "identityReference.assetId",
+                    "A valid lowercase asset reference id is required.");
+            }
+
+            if (selection.Version is { } version && version < IdentityAssetVersion.Minimum)
+            {
+                return Validation(
+                    "identityReference.version",
+                    $"An identity asset version must be at least {IdentityAssetVersion.Minimum}.");
+            }
+
+            identityReferences =
+            [
+                new AssetReference
+                {
+                    AssetId = assetId,
+                    Version = selection.Version is { } value
+                        ? new IdentityAssetVersion(value)
+                        : null
+                }
+            ];
+        }
+
         try
         {
             var jobId = await workflow.EnqueueAsync(
                 parsedProjectId,
                 parsedStoryboardJobId,
                 force ?? false,
+                identityReferences,
                 cancellationToken);
 
             if (jobId is null)
@@ -79,19 +115,39 @@ public static class VisualEndpoints
                 statusCode: StatusCodes.Status404NotFound,
                 title: "Storyboard not found.",
                 detail: exception.Message),
+            // Materialization failures (reference not found / not Approved) share one
+            // canonical error code from the workflow, so they map to the existing
+            // conflict outcome rather than guessing 404 vs 409 here.
             _ => Results.Problem(
                 statusCode: StatusCodes.Status409Conflict,
                 title: "Visual generation cannot start.",
                 detail: exception.Message)
         };
 
+    private static IResult Validation(string field, string message) =>
+        Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            [field] = [message]
+        });
+
     private static bool TryParseIdentifier(string value, out Guid id) =>
         Guid.TryParse(value, out id) && id != Guid.Empty;
 
     private static IResult InvalidIdentifier(string fieldName) =>
-        Results.ValidationProblem(
-            new Dictionary<string, string[]>
-            {
-                [fieldName] = ["A non-empty GUID is required."]
-            });
+        Validation(fieldName, "A non-empty GUID is required.");
 }
+
+/// <summary>
+/// Optional visual-enqueue body. v1 exposes at most one selected identity
+/// reference, matching the FLUX 0/1 support; the caller selects an authoring
+/// reference and materialization stays inside <see cref="GenerateSceneVisualsWorkflow"/>.
+/// A body-less request is valid and means zero references.
+/// </summary>
+public sealed record EnqueueVisualsRequest(VisualIdentityReference? IdentityReference);
+
+/// <summary>
+/// An authoring selection only: a concrete version is optional, and the workflow
+/// resolves the Approved version exactly once. Never a resolved pinned asset, and
+/// never a bare <c>(assetId, version)</c> pin.
+/// </summary>
+public sealed record VisualIdentityReference(string? AssetId, int? Version);
