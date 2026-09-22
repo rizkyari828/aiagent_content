@@ -213,6 +213,7 @@ public sealed class StoryContextBuilder : IStoryContextBuilder
             .Select(reference => new StoryAssetContext
             {
                 AssetId = reference.AssetId,
+                Version = reference.Version,
                 Purpose = reference.Purpose,
                 Variant = reference.Variant
             })

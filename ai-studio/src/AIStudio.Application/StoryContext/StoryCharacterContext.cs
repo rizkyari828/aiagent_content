@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using AIStudio.Application.Bibles;
+using AIStudio.Application.IdentityAssets;
 
 namespace AIStudio.Application.StoryContext;
 
@@ -67,6 +68,10 @@ public sealed record StoryAssetContext
 {
     [JsonPropertyName("assetId")]
     public AssetReferenceId AssetId { get; init; }
+
+    [JsonPropertyName("version")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IdentityAssetVersion? Version { get; init; }
 
     [JsonPropertyName("purpose")]
     public string Purpose { get; init; } = string.Empty;

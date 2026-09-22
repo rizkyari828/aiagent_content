@@ -1,4 +1,6 @@
 using AIStudio.Application.Bibles;
+using AIStudio.Application.IdentityAssets;
+using AIStudio.Infrastructure.Assets;
 using AIStudio.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,13 +17,23 @@ public sealed class BibleDependencyInjectionTests
 
         var characters = provider.GetRequiredService<ICharacterBibleRegistry>();
         var worlds = provider.GetRequiredService<IWorldBibleRegistry>();
+        var identityAssets = provider.GetRequiredService<IIdentityAssetRegistry>();
+        var resolver = provider.GetRequiredService<IIdentityAssetResolver>();
+        var store = provider.GetRequiredService<IIdentityAssetStore>();
 
         Assert.IsType<CharacterBibleRegistry>(characters);
         Assert.IsType<WorldBibleRegistry>(worlds);
+        Assert.IsType<IdentityAssetRegistry>(identityAssets);
+        Assert.IsType<IdentityAssetResolver>(resolver);
+        Assert.IsType<LocalIdentityAssetStore>(store);
         Assert.Same(characters, provider.GetRequiredService<ICharacterBibleRegistry>());
         Assert.Same(worlds, provider.GetRequiredService<IWorldBibleRegistry>());
+        Assert.Same(identityAssets, provider.GetRequiredService<IIdentityAssetRegistry>());
+        Assert.Same(resolver, provider.GetRequiredService<IIdentityAssetResolver>());
+        Assert.Same(store, provider.GetRequiredService<IIdentityAssetStore>());
         Assert.Empty(characters.Characters);
         Assert.Empty(worlds.Worlds);
+        Assert.Empty(identityAssets.Assets);
     }
 
     [Fact]

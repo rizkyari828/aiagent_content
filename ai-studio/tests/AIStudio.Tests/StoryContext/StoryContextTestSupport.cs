@@ -63,7 +63,7 @@ internal static class StoryContextTestSupport
             BibleTestSupport.Character(
                 "rio",
                 relationships: [BibleTestSupport.Relationship("hana", "sibling"), BibleTestSupport.Relationship("alex", "friend")],
-                assetReferences: [BibleTestSupport.Asset("character-rio-front-v1", "visual-reference")]),
+                assetReferences: [BibleTestSupport.Asset("character-rio-front-v1", "visual-reference", version: 2)]),
             BibleTestSupport.Character("hana", role: "sibling", hair: "long-brown"),
             BibleTestSupport.Character("alex", role: "friend")
         ]);

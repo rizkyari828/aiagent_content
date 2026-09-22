@@ -130,6 +130,7 @@ public sealed class StoryContextFilteringTests
 
         Assert.Equal("character-rio-front-v1", rio.AssetReferences.Single().AssetId.Value);
         Assert.Equal("visual-reference", rio.AssetReferences.Single().Purpose);
+        Assert.Equal(2, rio.AssetReferences.Single().Version!.Value.Value);
         Assert.Equal("environment-bedroom-reference", bedroom.AssetReferences.Single().AssetId.Value);
     }
 }

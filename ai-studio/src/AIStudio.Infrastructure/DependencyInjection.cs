@@ -7,6 +7,7 @@ using AIStudio.Application.Concepts;
 using AIStudio.Application.Content;
 using AIStudio.Application.Creative;
 using AIStudio.Application.Jobs;
+using AIStudio.Application.IdentityAssets;
 using AIStudio.Application.Jobs.FinalVideoQa;
 using AIStudio.Application.Jobs.GenerateAudio;
 using AIStudio.Application.Jobs.GenerateIdea;
@@ -116,6 +117,7 @@ public static class DependencyInjection
         services.AddScoped<INarrationRepository, NarrationRepository>();
         services.AddScoped<ISubtitleRepository, SubtitleRepository>();
         services.AddSingleton<IAssetFileStore, LocalAssetFileStore>();
+        services.AddSingleton<IIdentityAssetStore, LocalIdentityAssetStore>();
         services.AddSingleton<IProcessRunner, SystemProcessRunner>();
         services.AddSingleton<IMediaInspector, FfprobeMediaInspector>();
         services.AddSingleton<IVideoRenderer, FfmpegVideoRenderer>();
@@ -497,6 +499,9 @@ public static class DependencyInjection
         // is wired here.
         services.AddSingleton<ICharacterBibleRegistry>(_ => new CharacterBibleRegistry());
         services.AddSingleton<IWorldBibleRegistry>(_ => new WorldBibleRegistry());
+        services.AddSingleton<IIdentityAssetRegistry>(serviceProvider =>
+            new IdentityAssetRegistry(timeProvider: serviceProvider.GetRequiredService<TimeProvider>()));
+        services.AddSingleton<IIdentityAssetResolver, IdentityAssetResolver>();
         services.AddSingleton<StoryPlanGrounder>();
         services.AddScoped<IStoryBiblePlanner, QwenStoryBiblePlanner>();
     }

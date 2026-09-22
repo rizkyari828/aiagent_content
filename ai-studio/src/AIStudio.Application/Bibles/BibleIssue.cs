@@ -52,6 +52,7 @@ public static class BibleIssueCodes
     public const string WorldStateNotesInvalid = "world_state_notes_invalid";
 
     public const string AssetReferenceIdInvalid = "asset_reference_id_invalid";
+    public const string AssetReferenceVersionInvalid = "asset_reference_version_invalid";
     public const string AssetReferencePurposeInvalid = "asset_reference_purpose_invalid";
     public const string AssetReferenceVariantInvalid = "asset_reference_variant_invalid";
     public const string AssetReferenceDuplicate = "asset_reference_duplicate";

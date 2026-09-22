@@ -1,4 +1,5 @@
 using AIStudio.Application.Bibles;
+using AIStudio.Application.IdentityAssets;
 
 namespace AIStudio.Tests.Bibles;
 
@@ -47,8 +48,15 @@ internal static class BibleTestSupport
     public static AssetReference Asset(
         string assetId,
         string purpose = "visual-reference",
-        string? variant = null) =>
-        new() { AssetId = new AssetReferenceId(assetId), Purpose = purpose, Variant = variant };
+        string? variant = null,
+        int? version = null) =>
+        new()
+        {
+            AssetId = new AssetReferenceId(assetId),
+            Version = version is null ? null : new IdentityAssetVersion(version.Value),
+            Purpose = purpose,
+            Variant = variant
+        };
 
     public static CharacterState CharacterState(
         string characterRef = "rio",

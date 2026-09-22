@@ -1,4 +1,5 @@
 using AIStudio.Application.Stories;
+using AIStudio.Application.IdentityAssets;
 
 namespace AIStudio.Application.Bibles;
 
@@ -226,6 +227,13 @@ public static class CharacterBibleValidator
                 issues.Add(Issue(
                     BibleIssueCodes.AssetReferenceIdInvalid,
                     "An asset reference must declare a valid asset id such as 'character-rio-front-v1'."));
+            }
+
+            if (reference.Version is { IsValid: false })
+            {
+                issues.Add(Issue(
+                    BibleIssueCodes.AssetReferenceVersionInvalid,
+                    $"An asset reference version must be at least {IdentityAssetVersion.Minimum}."));
             }
 
             if (!StoryIdentifier.IsValid(reference.Purpose))

@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using AIStudio.Application.IdentityAssets;
 
 namespace AIStudio.Application.Bibles;
 
@@ -12,6 +13,14 @@ public sealed record AssetReference
 {
     [JsonPropertyName("assetId")]
     public AssetReferenceId AssetId { get; init; }
+
+    /// <summary>
+    /// Optional authored pin. A missing value floats only until a production
+    /// materialization boundary resolves and records a concrete approved version.
+    /// </summary>
+    [JsonPropertyName("version")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IdentityAssetVersion? Version { get; init; }
 
     /// <summary>Data-driven purpose, for example <c>visual-reference</c> or <c>voice-reference</c>.</summary>
     [JsonPropertyName("purpose")]

@@ -146,6 +146,12 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `BibleJsonConverters.cs` — plain-scalar JSON for the bible value objects.
 - `tests/AIStudio.Tests/Bibles/` — value-object validation, registry behavior, structural validators, JSON round-trip, strict parser accept/reject, identity-vs-state separation, approved-variant handling, additive StoryPlan reference validation, anime/3D-preschool/robot characters and multiple world types as data, security reflection, and DI wiring.
 
+## Identity Assets (minimal reusable production identity)
+
+- `src/AIStudio.Application/IdentityAssets/` — provider/storage-neutral version, Draft/Approved metadata + minimal provenance, validation/issues, in-memory metadata/version/approval registry, byte-store port/blob facts, and Approved-only resolver that returns a concrete pinned `AssetReference`.
+- `src/AIStudio.Infrastructure/Assets/LocalIdentityAssetStore.cs` — Infrastructure-private deterministic key mapping over the existing `IAssetFileStore`; approved-root containment, traversal/symlink safety, atomic/idempotent writes, SHA-256/size facts, and changed-byte conflict rejection.
+- `tests/AIStudio.Tests/IdentityAssets/` — allocation/approval/immutability, local-byte safety/collision/hash, optional Bible JSON version, resolution/pinning, provider/SceneAsset regression, and no-path architecture coverage.
+
 ## Story Context (token-efficient narrative projection)
 
 - `src/AIStudio.Application/StoryContext/StoryContext.cs` — the compact, consumer-neutral `StoryContext` plus `StoryConceptContext`, `StoryNarrativeContext`, `StoryBeatContext`, and `StoryStateContext`; concept/treatment/story summary, ordered beats, and optional caller state kept separate from identity.

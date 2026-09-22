@@ -69,7 +69,8 @@ public sealed class BibleSecurityTests
             .Select(property => property.Name)
             .ToList();
 
-        Assert.Equal(["AssetId", "Purpose", "Variant"], properties);
+        Assert.Equal(["AssetId", "Version", "Purpose", "Variant"], properties);
+
     }
 
     [Fact]
