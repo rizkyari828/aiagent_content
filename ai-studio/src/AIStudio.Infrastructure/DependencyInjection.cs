@@ -296,6 +296,9 @@ public static class DependencyInjection
                 options => !string.IsNullOrWhiteSpace(options.WorkflowPath),
                 "ComfyUi:WorkflowPath is required.")
             .Validate(
+                options => !string.IsNullOrWhiteSpace(options.ImageEditWorkflowPath),
+                "ComfyUi:ImageEditWorkflowPath is required.")
+            .Validate(
                 options => options.TimeoutSeconds is >= 1 and <= 3600,
                 "ComfyUi:TimeoutSeconds must be between 1 and 3600.")
             .Validate(

@@ -16,19 +16,41 @@ public static class IdentityAssetResolutionIssueCodes
 }
 
 /// <summary>
-/// A production-safe result: the authored reference is copied with a concrete
-/// version, so later execution does not re-resolve latest.
+/// The provider-safe, concrete identity-asset key produced at materialization.
+/// It deliberately excludes authoring purpose, metadata, paths, and provider data.
 /// </summary>
 public sealed record PinnedIdentityAsset
 {
-    public AssetReference Reference { get; init; } = new();
+    public PinnedIdentityAsset(AssetReferenceId assetId, IdentityAssetVersion version)
+    {
+        if (string.IsNullOrEmpty(assetId.Value))
+        {
+            throw new ArgumentException("A valid identity asset id is required.", nameof(assetId));
+        }
 
-    public IdentityAsset Metadata { get; init; } = new();
+        if (!version.IsValid)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(version),
+                "A positive identity asset version is required.");
+        }
+
+        AssetId = assetId;
+        Version = version;
+    }
+
+    public AssetReferenceId AssetId { get; }
+
+    public IdentityAssetVersion Version { get; }
 }
 
 public sealed record IdentityAssetResolution
 {
     public PinnedIdentityAsset? Value { get; init; }
+
+    public AssetReference? MaterializedReference { get; init; }
+
+    public IdentityAsset? Metadata { get; init; }
 
     public IReadOnlyList<IdentityAssetResolutionIssue> Issues { get; init; } = [];
 
@@ -80,11 +102,9 @@ public sealed class IdentityAssetResolver(IIdentityAssetRegistry registry) : IId
 
         return new IdentityAssetResolution
         {
-            Value = new PinnedIdentityAsset
-            {
-                Reference = reference with { Version = asset.Version },
-                Metadata = asset
-            }
+            Value = new PinnedIdentityAsset(asset.Id, asset.Version),
+            MaterializedReference = reference with { Version = asset.Version },
+            Metadata = asset
         };
     }
 

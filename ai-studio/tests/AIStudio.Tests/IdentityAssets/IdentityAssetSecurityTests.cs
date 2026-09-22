@@ -16,6 +16,8 @@ public sealed class IdentityAssetSecurityTests
     [InlineData(typeof(IdentityAsset))]
     [InlineData(typeof(IdentityAssetProvenance))]
     [InlineData(typeof(IdentityAssetBlob))]
+    [InlineData(typeof(PinnedIdentityAsset))]
+    [InlineData(typeof(ImageGenerationRequest))]
     public void ApplicationContractExposesNoPhysicalStorageOrProviderConfiguration(Type type)
     {
         foreach (var property in type.GetProperties())
@@ -63,11 +65,14 @@ public sealed class IdentityAssetSecurityTests
     }
 
     [Fact]
-    public void ProviderRequestContractsRemainUnchanged()
+    public void ProviderRequestContractsExposeOnlyPinnedIdentity()
     {
         Assert.Equal(
-            ["Prompt", "Seed"],
+            ["Prompt", "Seed", "IdentityReferences"],
             typeof(ImageGenerationRequest).GetProperties().Select(property => property.Name));
+        Assert.Equal(
+            ["AssetId", "Version"],
+            typeof(PinnedIdentityAsset).GetProperties().Select(property => property.Name));
         Assert.Equal(
             ["Template", "Palette", "DurationSeconds", "Seed"],
             typeof(ThreeDRenderRequest).GetProperties().Select(property => property.Name));

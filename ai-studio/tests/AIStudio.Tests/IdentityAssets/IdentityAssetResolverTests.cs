@@ -19,10 +19,10 @@ public sealed class IdentityAssetResolverTests
             .Resolve(IdentityAssetTestSupport.Reference(version: 1));
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(1, result.Value!.Reference.Version!.Value.Value);
-        Assert.Equal(1, result.Value.Metadata.Version.Value);
-        Assert.Equal("character-primary-reference", result.Value.Reference.Purpose);
-        Assert.Equal("default", result.Value.Reference.Variant);
+        Assert.Equal(1, result.Value!.Version.Value);
+        Assert.Equal(1, result.Metadata!.Version.Value);
+        Assert.Equal("character-primary-reference", result.MaterializedReference!.Purpose);
+        Assert.Equal("default", result.MaterializedReference!.Variant);
     }
 
     [Fact]
@@ -61,8 +61,8 @@ public sealed class IdentityAssetResolverTests
         var result = new IdentityAssetResolver(registry)
             .Resolve(IdentityAssetTestSupport.Reference());
 
-        Assert.Equal(2, result.Value!.Reference.Version!.Value.Value);
-        Assert.Equal(2, result.Value.Metadata.Version.Value);
+        Assert.Equal(2, result.Value!.Version.Value);
+        Assert.Equal(2, result.Metadata!.Version.Value);
     }
 
     [Fact]
@@ -95,8 +95,8 @@ public sealed class IdentityAssetResolverTests
         var result = new IdentityAssetResolver(registry)
             .Resolve(IdentityAssetTestSupport.Reference());
 
-        Assert.Equal(1, result.Value!.Reference.Version!.Value.Value);
-        Assert.Equal(IdentityAssetStatus.Approved, result.Value.Metadata.Status);
+        Assert.Equal(1, result.Value!.Version.Value);
+        Assert.Equal(IdentityAssetStatus.Approved, result.Metadata!.Status);
     }
 
     [Fact]
@@ -106,13 +106,14 @@ public sealed class IdentityAssetResolverTests
             IdentityAssetTestSupport.Asset(version: 1),
             IdentityAssetTestSupport.Asset(version: 2));
         registry.Approve(Id, new IdentityAssetVersion(1));
-        var materialized = new IdentityAssetResolver(registry)
-            .Resolve(IdentityAssetTestSupport.Reference()).Value!;
+        var resolution = new IdentityAssetResolver(registry)
+            .Resolve(IdentityAssetTestSupport.Reference());
+        var materialized = resolution.Value!;
 
         registry.Approve(Id, new IdentityAssetVersion(2));
 
-        Assert.Equal(1, materialized.Reference.Version!.Value.Value);
-        Assert.Equal(1, materialized.Metadata.Version.Value);
+        Assert.Equal(1, materialized.Version.Value);
+        Assert.Equal(1, resolution.Metadata!.Version.Value);
         Assert.Equal(2, registry.GetLatestApproved(Id).Version.Value);
     }
 

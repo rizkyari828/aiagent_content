@@ -20,6 +20,13 @@ public sealed class ComfyUiOptions
     /// </summary>
     public string WorkflowPath { get; set; } = "Rendering/ComfyUI/flux2_klein_4b_distilled.json";
 
+    /// <summary>
+    /// Repository-owned image-edit graph used only for one approved pinned
+    /// identity reference.
+    /// </summary>
+    public string ImageEditWorkflowPath { get; set; } =
+        "Rendering/ComfyUI/flux2_klein_4b_distilled_edit.json";
+
     public int TimeoutSeconds { get; set; } = 600;
 
     public int Width { get; set; } = 1280;
