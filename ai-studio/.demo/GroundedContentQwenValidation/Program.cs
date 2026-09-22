@@ -551,7 +551,7 @@ ScriptValidation ValidateScript(
         ? GroundingSignalScanner.CharacterGrounding(characters, scriptText)
         : new SignalStatus { Status = "unavailable" };
     var worldGrounding = schemaValid
-        ? GroundingSignalScanner.WorldGrounding(worlds, scriptText)
+        ? GroundingSignalScanner.ScriptWorldGrounding(worlds, scriptText)
         : new SignalStatus { Status = "unavailable" };
     var preservation = GroundingSignalScanner.IdentityPreservation(characterGrounding, worldGrounding);
 

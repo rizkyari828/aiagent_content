@@ -490,6 +490,61 @@ public static class GroundingSignalScanner
     }
 
     /// <summary>
+    /// Script-owned world validation. The Script owns spoken language, so the absence of
+    /// a world identity token is NEUTRAL: only an explicit environment term that no world
+    /// bible claims (an unsupported relocation) is surfaced as REVIEW. The narration is
+    /// never required to name the location. Storyboard keeps the stricter
+    /// <see cref="WorldGrounding"/> because it owns visual realization.
+    /// </summary>
+    public static SignalStatus ScriptWorldGrounding(IReadOnlyList<WorldBible> worlds, string text)
+    {
+        if (worlds.Count == 0)
+        {
+            return new SignalStatus { Status = "unavailable" };
+        }
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return new SignalStatus { Status = "REVIEW", Details = ["no output text to compare"] };
+        }
+
+        var lower = text.ToLowerInvariant();
+        var worldText = string.Join(
+            ' ',
+            worlds.Select(world =>
+            {
+                var identity = world.Identity ?? new WorldIdentity();
+                return string.Join(
+                    ' ',
+                    world.DisplayName,
+                    world.Id.Value.Replace('-', ' '),
+                    identity.EnvironmentType,
+                    string.Join(' ', identity.SpatialTraits ?? []),
+                    string.Join(' ', world.RecurringProps ?? []),
+                    identity.VisualDescription);
+            })).ToLowerInvariant();
+
+        var relocations = RelocationTerms
+            .Where(term => ContainsWord(lower, term) && !ContainsWord(worldText, term))
+            .ToList();
+
+        if (relocations.Count > 0)
+        {
+            return new SignalStatus
+            {
+                Status = "REVIEW",
+                Details = [$"possible relocation: {string.Join(", ", relocations)}"]
+            };
+        }
+
+        var visible = worlds.Any(world => ContainsWorldToken(lower, world));
+
+        return visible
+            ? new SignalStatus { Status = "PASS" }
+            : new SignalStatus { Status = "PASS", Details = ["world not narrated; treated as neutral"] };
+    }
+
+    /// <summary>
     /// Shared REVIEW-only coherence signal for proposed world bibles; the logic lives in
     /// <see cref="BibleSemanticSignals"/> so the story-bible runner can report it too.
     /// </summary>
@@ -1162,6 +1217,71 @@ public static class SelfCheck
                 GroundingSignalScanner.WorldIdentityCoherence([world]);
                 var after = JsonSerializer.Serialize(world, ValidationArtifacts.Json);
                 return before == after;
+            }),
+            ("script world silence is neutral, not a review", () =>
+            {
+                var world = World("study-room", "Study Room", "room");
+                var signal = GroundingSignalScanner.ScriptWorldGrounding(
+                    [world],
+                    "The response begins to form on screen.");
+                return signal.Status == "PASS";
+            }),
+            ("script world contradiction surfaces review", () =>
+            {
+                var world = World("study-room", "Study Room", "room");
+                var signal = GroundingSignalScanner.ScriptWorldGrounding(
+                    [world],
+                    "We stand outside on a crowded city street and watch the traffic.");
+                return signal.Status == "REVIEW"
+                    && signal.Details.Any(detail => detail.Contains("relocation", StringComparison.Ordinal));
+            }),
+            ("script world matching its own environment is not a contradiction", () =>
+            {
+                var world = World("city-street", "City Street", "city-street");
+                var signal = GroundingSignalScanner.ScriptWorldGrounding(
+                    [world],
+                    "We stand on the crowded city street.");
+                return signal.Status == "PASS";
+            }),
+            ("identity preservation stays pass when world is merely omitted", () =>
+            {
+                var character = Bible("student-01", species: "human", age: "young-adult");
+                var world = World("study-room", "Study Room", "room");
+                var characterSignal = GroundingSignalScanner.CharacterGrounding([character], "The student waits calmly.");
+                var worldSignal = GroundingSignalScanner.ScriptWorldGrounding([world], "The student waits calmly.");
+                var preservation = GroundingSignalScanner.IdentityPreservation(characterSignal, worldSignal);
+                return characterSignal.Status == "PASS"
+                    && worldSignal.Status == "PASS"
+                    && preservation.Status == "PASS";
+            }),
+            ("identity preservation still reviews a real world contradiction", () =>
+            {
+                var character = Bible("student-01", species: "human", age: "young-adult");
+                var world = World("study-room", "Study Room", "room");
+                var characterSignal = GroundingSignalScanner.CharacterGrounding([character], "The student stands outside.");
+                var worldSignal = GroundingSignalScanner.ScriptWorldGrounding(
+                    [world],
+                    "The student stands on a crowded city street.");
+                var preservation = GroundingSignalScanner.IdentityPreservation(characterSignal, worldSignal);
+                return worldSignal.Status == "REVIEW" && preservation.Status == "REVIEW";
+            }),
+            ("storyboard world validation remains strict", () =>
+            {
+                var world = World("study-room", "Study Room", "room");
+                var silence = GroundingSignalScanner.WorldGrounding([world], "The response begins to form on screen.");
+                var contradiction = GroundingSignalScanner.WorldGrounding(
+                    [world],
+                    "We stand outside on a crowded city street.");
+                return silence.Status == "REVIEW" && contradiction.Status == "REVIEW";
+            }),
+            ("character grounding behavior remains unchanged", () =>
+            {
+                var bible = Bible("student-01", species: "human", age: "young-adult");
+                var contradiction = GroundingSignalScanner.CharacterGrounding([bible], "The elderly robot stepped forward.");
+                var absent = GroundingSignalScanner.CharacterGrounding([bible], "A quiet scene with nothing to see.");
+                return contradiction.Status == "REVIEW"
+                    && contradiction.Details.Any(detail => detail.Contains("robot", StringComparison.Ordinal))
+                    && absent.Status == "REVIEW";
             }),
             ("implementation leak is detected", () =>
                 ImplementationLeakScanner.Scan("Render with ComfyUI and save to /home/tama/scene.py").Count > 0),

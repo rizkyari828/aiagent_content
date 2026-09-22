@@ -23,8 +23,15 @@
 #   AISTUDIO_SCRIPT_LANGUAGE        default English
 #   AISTUDIO_CREATIVE_DIRECTIONS    creative-direction artifacts dir
 #   AISTUDIO_STORY_DIRECTIONS       story-plan artifacts dir
-#   AISTUDIO_STORY_BIBLE_DIRECTIONS story-bible artifacts dir
+#   STORY_BIBLE_ARTIFACT_DIR        story-bible artifact dir override (wins; absolute path)
+#   AISTUDIO_STORY_BIBLE_DIRECTIONS story-bible artifact dir override (legacy fallback)
 #   AISTUDIO_VALIDATION_OUTPUT      artifact directory override
+#
+# Story Bible selection: an explicit override (STORY_BIBLE_ARTIFACT_DIR, then the
+# legacy AISTUDIO_STORY_BIBLE_DIRECTIONS) always wins. Otherwise the newest COMPLETE
+# story-bible-qwen-* directory under .demo/artifacts is discovered automatically;
+# incomplete candidates are skipped and no valid artifact is a clear failure. The
+# runner never hardcodes a Story Bible timestamp.
 #
 # Exit codes: 0 for a completed run (even with per-case REVIEW/FAIL findings),
 #             1 for a total validation failure, 2 for a runner/infrastructure failure.
@@ -35,7 +42,10 @@ HARNESS_PROJECT="$REPO_ROOT/.demo/GroundedContentQwenValidation/AIStudio.Grounde
 HARNESS_DLL="$REPO_ROOT/.demo/GroundedContentQwenValidation/bin/Release/net10.0/AIStudio.GroundedContentValidation.dll"
 DEFAULT_CREATIVE_DIR="$REPO_ROOT/.demo/artifacts/creative-director-qwen-20260921T125832Z"
 DEFAULT_STORY_DIR="$REPO_ROOT/.demo/artifacts/story-director-qwen-20260921T135529Z"
-DEFAULT_BIBLE_DIR="$REPO_ROOT/.demo/artifacts/story-bible-qwen-20260921T161017Z"
+BIBLE_ARTIFACT_ROOT="$REPO_ROOT/.demo/artifacts"
+
+# shellcheck source=lib/story-bible-artifact-selection.sh
+. "$REPO_ROOT/scripts/lib/story-bible-artifact-selection.sh"
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -63,7 +73,33 @@ export AISTUDIO_SCRIPT_LANGUAGE="$LANGUAGE"
 
 CREATIVE_DIR="${AISTUDIO_CREATIVE_DIRECTIONS:-$DEFAULT_CREATIVE_DIR}"
 STORY_DIR="${AISTUDIO_STORY_DIRECTIONS:-$DEFAULT_STORY_DIR}"
-BIBLE_DIR="${AISTUDIO_STORY_BIBLE_DIRECTIONS:-$DEFAULT_BIBLE_DIR}"
+
+# Resolve the Story Bible artifact: explicit override wins, else newest COMPLETE.
+if [ -n "${STORY_BIBLE_ARTIFACT_DIR:-}" ]; then
+  BIBLE_OVERRIDE="$STORY_BIBLE_ARTIFACT_DIR"
+  BIBLE_DIR_SOURCE="explicit STORY_BIBLE_ARTIFACT_DIR"
+elif [ -n "${AISTUDIO_STORY_BIBLE_DIRECTIONS:-}" ]; then
+  BIBLE_OVERRIDE="$AISTUDIO_STORY_BIBLE_DIRECTIONS"
+  BIBLE_DIR_SOURCE="explicit AISTUDIO_STORY_BIBLE_DIRECTIONS"
+else
+  BIBLE_OVERRIDE=""
+  BIBLE_DIR_SOURCE="discovered newest complete"
+fi
+
+BIBLE_DIR="$(story_bible_select_artifact_dir "$BIBLE_OVERRIDE" "$BIBLE_ARTIFACT_ROOT")"
+
+if [ -z "$BIBLE_DIR" ]; then
+  die "No complete Story Bible artifact found under $BIBLE_ARTIFACT_ROOT. Expected a story-bible-qwen-* directory containing ${STORY_BIBLE_REQUIRED_CASES[*]} each with $STORY_BIBLE_PLAN_FILE. Run ./scripts/e2e-story-bible-qwen.sh first, or set STORY_BIBLE_ARTIFACT_DIR=/absolute/path."
+fi
+
+if [ ! -d "$BIBLE_DIR" ]; then
+  die "Story Bible artifact does not exist: $BIBLE_DIR. Set STORY_BIBLE_ARTIFACT_DIR to an existing absolute path."
+fi
+
+if ! story_bible_artifact_is_complete "$BIBLE_DIR"; then
+  die "Story Bible artifact is incomplete: $BIBLE_DIR (expected ${STORY_BIBLE_REQUIRED_CASES[*]}/$STORY_BIBLE_PLAN_FILE)."
+fi
+
 export AISTUDIO_CREATIVE_DIRECTIONS="$CREATIVE_DIR"
 export AISTUDIO_STORY_DIRECTIONS="$STORY_DIR"
 export AISTUDIO_STORY_BIBLE_DIRECTIONS="$BIBLE_DIR"
@@ -81,7 +117,7 @@ say "  model:    $MODEL"
 say "  language: $LANGUAGE"
 say "  creative: $CREATIVE_DIR"
 say "  story:    $STORY_DIR"
-say "  bible:    $BIBLE_DIR"
+say "  bible:    $BIBLE_DIR  [$BIBLE_DIR_SOURCE]"
 
 # Provider reachability: the configured local model must already be installed.
 # This validation never downloads a model or starts another inference server.
@@ -96,7 +132,6 @@ fi
 # Upstream real-Qwen planning inputs must already exist; never regenerate them.
 [ -d "$CREATIVE_DIR" ] || die "CreativeDirection artifacts missing: $CREATIVE_DIR. Run ./scripts/e2e-creative-director-qwen.sh first (or set AISTUDIO_CREATIVE_DIRECTIONS)."
 [ -d "$STORY_DIR" ] || die "StoryPlan artifacts missing: $STORY_DIR. Run ./scripts/e2e-story-director-qwen.sh first (or set AISTUDIO_STORY_DIRECTIONS)."
-[ -d "$BIBLE_DIR" ] || die "StoryBible artifacts missing: $BIBLE_DIR. Run ./scripts/e2e-story-bible-qwen.sh first (or set AISTUDIO_STORY_BIBLE_DIRECTIONS)."
 
 MISSING=0
 # name:creative_case:story_case:bible_case  (the three directories use different folder names)

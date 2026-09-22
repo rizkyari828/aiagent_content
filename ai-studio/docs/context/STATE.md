@@ -1,6 +1,6 @@
 # Work state
 
-Updated: 2026-09-21.
+Updated: 2026-09-22.
 
 ## Current milestone
 
@@ -27,6 +27,8 @@ Story Context Builder v1 DONE (office code-only milestone): a deterministic, AI-
 Extractable Domain Modules + Reusable Capability Rules DONE (documentation + development-guardrail milestone): `ai-studio/AGENTS.md` now carries the modular/domain boundary hard rules, the PRD gained the labeled post-freeze addendum `docs/product/parts/13_EXTRACTABLE_MODULE_BOUNDARIES.md` with ADR-018/ADR-019, and cheap assembly-level architecture tests enforce the layer directions. No source/runtime/package/schema/service-split change; no Stock implementation, broker, DB split, or remote client was introduced.
 
 ## Implemented
+
+- Grounded Validation Input + Script World Heuristic Fix v1 (harness + runner only; no production prompt/domain/schema/DB/job/API/media change, no model call): `scripts/e2e-grounded-content-qwen.sh` selects the Story Bible artifact without a hardcoded timestamp — explicit `STORY_BIBLE_ARTIFACT_DIR` wins (legacy `AISTUDIO_STORY_BIBLE_DIRECTIONS` still honored), else the newest COMPLETE `story-bible-qwen-*` under `.demo/artifacts`, skipping incomplete candidates and failing clearly when none is valid; the selected path + source print in Preflight. Selection lives in `scripts/lib/story-bible-artifact-selection.sh` with deterministic `scripts/tests/story-bible-artifact-selection-test.sh` coverage. Script world validation now treats an absent world token as neutral (new `GroundingSignalScanner.ScriptWorldGrounding`); only an explicit environment term no WorldBible claims REVIEWs, so `WorldGrounding`/`IdentityPreservation` no longer fail on silence. Storyboard keeps strict `WorldGrounding`; `CharacterGrounding` unchanged. Harness self-check 25/25. Home real-Qwen Story Bible already validated 2/2 at `.demo/artifacts/story-bible-qwen-20260922T003757Z`; the final grounded real-Qwen run remains HOME-only and the planning freeze waits for it.
 
 - Qwen Story Bible Planner v1 (application-layer AI proposal; no schema/migration, no DB/job/API, no media): the async `IStoryBiblePlanner`/`QwenStoryBiblePlanner` consumes `CreativeDirection` + `StoryPlan`, builds a deterministic prompt, makes one `IAiTextGenerator` request, and returns a strictly parsed + deterministically validated `StoryBiblePlan { CharacterBibles, WorldBibles, BeatGroundings }`. Validation reuses `CharacterBibleValidator`/`WorldBibleValidator` and resolves beat refs against the bibles in the same proposal (no runtime registries needed). It has no side effects: no registration, no grounding application, no plan mutation, no persistence. The proposal→register→`StoryPlanGrounder`→`StoryContextBuilder` path is proven. Real-Qwen Bible validation not yet run; state planning remains separate; visual consistency not claimed.
 
