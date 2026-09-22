@@ -67,6 +67,9 @@ export AISTUDIO_IDENTITY_PROOF_OUTPUT="$OUTPUT_DIR"
 say "Building proof harness (no generation yet)"
 dotnet build "$HARNESS_PROJECT" --configuration Release --nologo
 
+say "Running deterministic self-check (no generation, no ComfyUI)"
+dotnet run    --project "$HARNESS_PROJECT"    --configuration Release    --no-build    -- --self-check
+
 say "Running 3-scene proof with pinned asset $AISTUDIO_IDENTITY_ASSET_ID v$AISTUDIO_IDENTITY_ASSET_VERSION"
 dotnet run    --project "$HARNESS_PROJECT"    --configuration Release    --no-build
 
