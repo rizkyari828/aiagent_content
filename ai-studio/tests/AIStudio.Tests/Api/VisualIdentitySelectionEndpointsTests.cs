@@ -4,6 +4,7 @@ using AIStudio.Application.Content;
 using AIStudio.Application.IdentityAssets;
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.GenerateSceneVisuals;
+using AIStudio.Application.ProductionRecipes;
 using AIStudio.Infrastructure.Assets;
 using AIStudio.Tests.Assets;
 using AIStudio.Tests.IdentityAssets;
@@ -192,7 +193,7 @@ public sealed class VisualIdentitySelectionEndpointsTests : IDisposable
     public void RequestShapeExposesAtMostOneAuthoringReference()
     {
         Assert.Equal(
-            ["IdentityReference"],
+            ["IdentityReference", "ProductionRecipe"],
             typeof(EnqueueVisualsRequest).GetProperties().Select(property => property.Name));
 
         var referenceProperty = typeof(EnqueueVisualsRequest).GetProperty("IdentityReference")!;
@@ -202,6 +203,14 @@ public sealed class VisualIdentitySelectionEndpointsTests : IDisposable
         Assert.Equal(
             ["AssetId", "Version"],
             typeof(VisualIdentityReference).GetProperties().Select(property => property.Name));
+
+        var recipeProperty = typeof(EnqueueVisualsRequest).GetProperty("ProductionRecipe")!;
+        Assert.Equal(
+            typeof(VisualProductionRecipe),
+            Nullable.GetUnderlyingType(recipeProperty.PropertyType) ?? recipeProperty.PropertyType);
+        Assert.Equal(
+            ["Id", "Version"],
+            typeof(VisualProductionRecipe).GetProperties().Select(property => property.Name));
 
         foreach (var property in typeof(VisualIdentityReference).GetProperties())
         {
@@ -301,6 +310,7 @@ public sealed class VisualIdentitySelectionEndpointsTests : IDisposable
             new StubContentProjectReader(
                 new ContentProjectSnapshot(projectId, "Project", "Brief")),
             new StubJobReader(storyboard),
+            new ProductionRecipeRegistry(SeedProductionRecipes.All),
             new IdentityAssetResolver(registry),
             new AssetStubTimeProvider(AssetTestData.Now));
 

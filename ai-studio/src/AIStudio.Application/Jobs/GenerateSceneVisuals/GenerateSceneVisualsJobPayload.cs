@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AIStudio.Application.IdentityAssets;
+using AIStudio.Application.ProductionRecipes;
 
 namespace AIStudio.Application.Jobs.GenerateSceneVisuals;
 
@@ -18,6 +19,16 @@ public sealed record GenerateSceneVisualsJobPayload(
     [JsonPropertyName("identityReferences")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<PinnedIdentityAsset>? IdentityReferences { get; init; }
+
+    /// <summary>
+    /// The explicitly selected production recipe for this visual job, as stable
+    /// identity only (id + concrete version). Omitted entirely when the caller did
+    /// not select one, so a legacy payload keeps the exact previous routing. A job
+    /// never re-resolves "latest recipe".
+    /// </summary>
+    [JsonPropertyName("productionRecipe")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ProductionRecipeReference? ProductionRecipe { get; init; }
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {

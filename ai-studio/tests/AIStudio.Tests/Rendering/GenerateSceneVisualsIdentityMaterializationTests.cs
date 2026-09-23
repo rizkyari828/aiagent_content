@@ -2,6 +2,7 @@ using AIStudio.Application.Bibles;
 using AIStudio.Application.Content;
 using AIStudio.Application.IdentityAssets;
 using AIStudio.Application.Jobs.GenerateSceneVisuals;
+using AIStudio.Application.ProductionRecipes;
 using AIStudio.Infrastructure.Assets;
 using AIStudio.Tests.Assets;
 using AIStudio.Tests.IdentityAssets;
@@ -281,6 +282,7 @@ public sealed class GenerateSceneVisualsIdentityMaterializationTests
             new StubContentProjectReader(
                 new ContentProjectSnapshot(projectId, "Project", "Brief")),
             new StubJobReader(storyboard),
+            new ProductionRecipeRegistry(SeedProductionRecipes.All),
             new IdentityAssetResolver(registry),
             new AssetStubTimeProvider(AssetTestData.Now));
 

@@ -2,6 +2,7 @@ using System.Text.Json;
 using AIStudio.Application.IdentityAssets;
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.GenerateSceneVisuals;
+using AIStudio.Application.ProductionRecipes;
 using AIStudio.Application.Rendering.Visuals;
 using AIStudio.Domain.Jobs;
 
@@ -163,14 +164,46 @@ internal static class GenerateSceneVisualsTestData
         }
         """;
 
+    /// <summary>
+    /// Deterministic narrative fixture. Every heading and visual avoids the tech
+    /// keyword vocabulary, so each scene genuinely classifies as
+    /// <c>SceneVisualIntent.Generic</c> under the existing director. No anime keyword
+    /// is present anywhere.
+    /// </summary>
+    public const string NarrativeStoryboard = """
+        {
+          "title": "Narrative motion comic",
+          "scenes": [
+            {
+              "heading": "Student enters a quiet study room",
+              "visual": "The student steps into a calm room with a wooden desk and a warm lamp."
+            },
+            {
+              "heading": "Student notices a mysterious interface",
+              "visual": "A glowing panel awakens beside the student and pulses softly."
+            },
+            {
+              "heading": "A shadowy figure appears behind the student",
+              "visual": "A tall silhouette rises slowly in the dim background."
+            },
+            {
+              "heading": "Close emotional reaction and payoff",
+              "visual": "The student turns with wide eyes as the room brightens into hope."
+            }
+          ]
+        }
+        """;
+
     public static string Payload(
         Guid contentProjectId,
         Guid storyboardJobId,
         bool force = false,
-        IReadOnlyList<PinnedIdentityAsset>? identityReferences = null) =>
+        IReadOnlyList<PinnedIdentityAsset>? identityReferences = null,
+        ProductionRecipeReference? productionRecipe = null) =>
         JsonSerializer.Serialize(
             new GenerateSceneVisualsJobPayload(contentProjectId, storyboardJobId, force)
             {
+                ProductionRecipe = productionRecipe,
                 IdentityReferences = identityReferences
             },
             JsonOptions);
@@ -180,13 +213,14 @@ internal static class GenerateSceneVisualsTestData
         Guid storyboardJobId,
         JobType type = JobType.GenerateSceneVisuals,
         bool force = false,
-        IReadOnlyList<PinnedIdentityAsset>? identityReferences = null) =>
+        IReadOnlyList<PinnedIdentityAsset>? identityReferences = null,
+        ProductionRecipeReference? productionRecipe = null) =>
         new(
             Guid.NewGuid(),
             contentProjectId,
             type,
             "input-v1",
-            Payload(contentProjectId, storyboardJobId, force, identityReferences),
+            Payload(contentProjectId, storyboardJobId, force, identityReferences, productionRecipe),
             0,
             2,
             false);

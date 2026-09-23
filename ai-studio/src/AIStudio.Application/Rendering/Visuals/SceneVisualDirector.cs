@@ -24,7 +24,8 @@ public static class SceneVisualDirector
 
     public static IReadOnlyList<SceneVisualDirection> DirectAll(
         GenerateStoryboardResult storyboard,
-        IReadOnlyList<double> durations)
+        IReadOnlyList<double> durations,
+        SceneVisualRoutingProfile? routingProfile = null)
     {
         ArgumentNullException.ThrowIfNull(storyboard);
         ArgumentNullException.ThrowIfNull(durations);
@@ -43,7 +44,8 @@ public static class SceneVisualDirector
                 storyboard.Scenes[index],
                 index,
                 storyboard.Scenes.Count,
-                durations[index]));
+                durations[index],
+                routingProfile));
         }
 
         return directions;
@@ -53,12 +55,25 @@ public static class SceneVisualDirector
         StoryboardScene scene,
         int index,
         int sceneCount,
-        double durationSeconds)
+        double durationSeconds,
+        SceneVisualRoutingProfile? routingProfile = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
         var intent = Classify(scene, index, sceneCount);
         var composition = CompositionFor(intent);
         var (preferred, fallback, manim, threeD, required, motion) = Resolve(intent);
+
+        // A production format may prefer a richer engine for ordinary narrative
+        // scenes only. It is a data-driven default derived from the recipe's visual
+        // capability, never a text match; provider availability still governs the
+        // final engine, and technical intents keep their specialized routing.
+        if (intent == SceneVisualIntent.Generic
+            && routingProfile is { NarrativeEngine: SceneVisualEngine.AiImage })
+        {
+            preferred = SceneVisualEngine.AiImage;
+            fallback = SceneVisualEngine.AnimatedSvg;
+            motion = "parallax_push";
+        }
 
         return new SceneVisualDirection(
             index,

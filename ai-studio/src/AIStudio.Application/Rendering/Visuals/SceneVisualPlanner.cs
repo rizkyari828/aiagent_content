@@ -81,19 +81,28 @@ public static class SceneVisualPlanner
         GenerateStoryboardResult storyboard,
         bool enableAnimation,
         bool enableAiImages = false,
-        bool enableThreeD = false)
+        bool enableThreeD = false,
+        SceneVisualRoutingProfile? routingProfile = null)
     {
         ArgumentNullException.ThrowIfNull(storyboard);
         var durations = storyboard.Scenes
             .Select(_ => AnimationDurationSeconds)
             .ToArray();
-        return PlanAll(storyboard, durations, enableAnimation, enableAiImages, enableThreeD);
+        return PlanAll(
+            storyboard,
+            durations,
+            enableAnimation,
+            enableAiImages,
+            enableThreeD,
+            routingProfile: routingProfile);
     }
 
     /// <summary>
     /// Direction-aware planning. The director classifies each scene and the router
     /// resolves provider availability into an engine, degrading along the documented
-    /// fallback chain. Duration drives choreography so beats fit the real scene.
+    /// fallback chain. Duration drives choreography so beats fit the real scene. An
+    /// optional recipe-derived <paramref name="routingProfile"/> lets a production
+    /// format prefer a narrative engine without changing per-intent technical routing.
     /// </summary>
     public static IReadOnlyList<SceneVisualPlan> PlanAll(
         GenerateStoryboardResult storyboard,
@@ -101,7 +110,8 @@ public static class SceneVisualPlanner
         bool enableAnimation,
         bool enableAiImages = false,
         bool enableThreeD = false,
-        IReadOnlyList<SceneNarrationWindow>? narrationWindows = null)
+        IReadOnlyList<SceneNarrationWindow>? narrationWindows = null,
+        SceneVisualRoutingProfile? routingProfile = null)
     {
         ArgumentNullException.ThrowIfNull(storyboard);
         ArgumentNullException.ThrowIfNull(durations);
@@ -128,7 +138,8 @@ public static class SceneVisualPlanner
                 scene,
                 index,
                 storyboard.Scenes.Count,
-                durations[index]) with
+                durations[index],
+                routingProfile) with
             {
                 Choreography = SceneChoreographyPlanner.Build(
                     brief,

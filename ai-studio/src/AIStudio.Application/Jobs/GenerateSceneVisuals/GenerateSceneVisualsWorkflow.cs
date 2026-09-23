@@ -6,6 +6,7 @@ using AIStudio.Application.Bibles;
 using AIStudio.Application.Content;
 using AIStudio.Application.IdentityAssets;
 using AIStudio.Application.Jobs.GenerateStoryboard;
+using AIStudio.Application.ProductionRecipes;
 using AIStudio.Application.Rendering.Visuals;
 using AIStudio.Domain.Jobs;
 
@@ -15,6 +16,7 @@ public sealed class GenerateSceneVisualsWorkflow(
     IApplicationDbContext dbContext,
     IContentProjectReader contentProjects,
     IJobReader jobs,
+    IProductionRecipeRegistry recipes,
     IIdentityAssetResolver identityAssetResolver,
     TimeProvider timeProvider)
 {
@@ -25,7 +27,7 @@ public sealed class GenerateSceneVisualsWorkflow(
         Guid contentProjectId,
         Guid storyboardJobId,
         CancellationToken cancellationToken) =>
-        EnqueueAsync(contentProjectId, storyboardJobId, force: false, identityReferences: null, cancellationToken);
+        EnqueueAsync(contentProjectId, storyboardJobId, force: false, productionRecipe: null, identityReferences: null, cancellationToken);
 
     /// <summary>
     /// <paramref name="force"/> is an explicit operator action: it regenerates every
@@ -37,19 +39,31 @@ public sealed class GenerateSceneVisualsWorkflow(
         Guid storyboardJobId,
         bool force,
         CancellationToken cancellationToken) =>
-        EnqueueAsync(contentProjectId, storyboardJobId, force, identityReferences: null, cancellationToken);
+        EnqueueAsync(contentProjectId, storyboardJobId, force, productionRecipe: null, identityReferences: null, cancellationToken);
+
+    /// <summary>Identity-only selection; no production recipe context.</summary>
+    public Task<Guid?> EnqueueAsync(
+        Guid contentProjectId,
+        Guid storyboardJobId,
+        bool force,
+        IReadOnlyList<AssetReference>? identityReferences,
+        CancellationToken cancellationToken) =>
+        EnqueueAsync(contentProjectId, storyboardJobId, force, productionRecipe: null, identityReferences, cancellationToken);
 
     /// <summary>
-    /// Materialization boundary. <paramref name="identityReferences"/> are the
-    /// explicit, caller-selected Bible references. A floating version is resolved to
-    /// the latest Approved asset exactly once here, before the job is persisted; the
-    /// durable payload then carries only concrete pins, so execution and retries
-    /// never re-resolve. The caller-selected count is never inferred or guessed.
+    /// Materialization boundary. <paramref name="productionRecipe"/> is the explicit
+    /// per-job recipe selection and <paramref name="identityReferences"/> are the
+    /// explicit, caller-selected Bible references. Both are resolved exactly once
+    /// here, before the job is persisted: a floating identity version becomes a
+    /// concrete pin and a recipe must name a registered exact version. The durable
+    /// payload then carries only stable identity, so execution and retries never
+    /// re-resolve and cannot drift. Nothing is inferred from storyboard text.
     /// </summary>
     public async Task<Guid?> EnqueueAsync(
         Guid contentProjectId,
         Guid storyboardJobId,
         bool force,
+        ProductionRecipeReference? productionRecipe,
         IReadOnlyList<AssetReference>? identityReferences,
         CancellationToken cancellationToken)
     {
@@ -70,11 +84,13 @@ public sealed class GenerateSceneVisualsWorkflow(
             jobs,
             cancellationToken);
 
+        var recipe = MaterializeProductionRecipe(productionRecipe);
         var identityPins = MaterializeIdentityReferences(identityReferences);
 
         var payload = JsonSerializer.Serialize(
             new GenerateSceneVisualsJobPayload(contentProjectId, storyboardJobId, force)
             {
+                ProductionRecipe = recipe,
                 IdentityReferences = identityPins.Count == 0 ? null : identityPins
             },
             JsonOptions);
@@ -129,6 +145,33 @@ public sealed class GenerateSceneVisualsWorkflow(
                 "The storyboard result is not a valid structured storyboard.",
                 exception);
         }
+    }
+
+    /// <summary>
+    /// Resolves the explicitly selected recipe to a registered exact (id, version).
+    /// "Latest" is never consulted: an unknown id or version fails before the job is
+    /// created, so the persisted payload can only ever replay a known recipe.
+    /// </summary>
+    private ProductionRecipeReference? MaterializeProductionRecipe(
+        ProductionRecipeReference? selection)
+    {
+        if (selection is null)
+        {
+            return null;
+        }
+
+        if (!recipes.TryGet(selection.Id, selection.Version, out _))
+        {
+            throw Error(
+                "visual_production_recipe_not_found",
+                $"Production recipe '{selection.Id}' v{selection.Version.Value} is not registered.");
+        }
+
+        return new ProductionRecipeReference
+        {
+            Id = selection.Id,
+            Version = selection.Version
+        };
     }
 
     /// <summary>

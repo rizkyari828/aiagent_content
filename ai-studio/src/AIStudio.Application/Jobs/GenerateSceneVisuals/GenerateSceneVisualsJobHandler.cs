@@ -5,6 +5,7 @@ using AIStudio.Application.Content;
 using AIStudio.Application.IdentityAssets;
 using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Application.Narration;
+using AIStudio.Application.ProductionRecipes;
 using AIStudio.Application.Rendering;
 using AIStudio.Application.Rendering.AudioProduction;
 using AIStudio.Application.Rendering.Visuals;
@@ -25,6 +26,7 @@ namespace AIStudio.Application.Jobs.GenerateSceneVisuals;
 public sealed class GenerateSceneVisualsJobHandler(
     IContentProjectReader contentProjects,
     IJobReader jobs,
+    IProductionRecipeRegistry recipes,
     IAssetRepository assets,
     INarrationRepository narrations,
     IAssetFileStore fileStore,
@@ -85,13 +87,16 @@ public sealed class GenerateSceneVisualsJobHandler(
             animated,
             cancellationToken);
 
+        var routingProfile = ResolveRoutingProfile(payload.ProductionRecipe);
+
         var plans = SceneVisualPlanner.PlanAll(
             storyboard,
             timing.Durations,
             manimRenderer.IsEnabled,
             imageProvider.IsEnabled,
             threeDRenderer.IsEnabled,
-            timing.Windows);
+            timing.Windows,
+            routingProfile);
 
         // Concrete pins persisted at materialization. Execution never resolves a
         // latest version and never reads the Bible/registry to pick an asset.
@@ -204,6 +209,30 @@ public sealed class GenerateSceneVisualsJobHandler(
         {
             throw Error(exception.ErrorCode, exception.Message, exception);
         }
+    }
+
+    /// <summary>
+    /// Derives the visual routing context from the persisted recipe identity. The
+    /// exact (id, version) is re-read from the trusted registry, never "latest", so
+    /// a replay of the same payload routes identically. No recipe (or an unchanged
+    /// recipe) keeps the historical intent-only routing.
+    /// </summary>
+    private SceneVisualRoutingProfile ResolveRoutingProfile(
+        ProductionRecipeReference? reference)
+    {
+        if (reference is null)
+        {
+            return SceneVisualRoutingProfile.Default;
+        }
+
+        if (!recipes.TryGet(reference.Id, reference.Version, out var recipe))
+        {
+            throw Error(
+                "visual_production_recipe_not_found",
+                $"Production recipe '{reference.Id}' v{reference.Version.Value} is not registered.");
+        }
+
+        return SceneVisualRoutingProfile.FromRecipe(recipe);
     }
 
     /// <summary>

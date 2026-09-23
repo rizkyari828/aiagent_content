@@ -6,6 +6,7 @@ using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.GenerateSceneVisuals;
 using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Application.Narration;
+using AIStudio.Application.ProductionRecipes;
 using AIStudio.Application.Rendering;
 using AIStudio.Application.Rendering.AudioProduction;
 using AIStudio.Application.Rendering.Visuals;
@@ -457,6 +458,7 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
         var handler = new GenerateSceneVisualsJobHandler(
             new StubContentProjectReader(null),
             new StubJobReader(storyboard),
+            RecipeRegistry(),
             new RecordingAssetRepository(),
             new StubNarrationRepository(null),
             new LocalAssetFileStore(
@@ -592,6 +594,236 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task Handler_MotionComicRoutesGenericNarrativeScenesToAiImage()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateSceneVisualsTestData.NarrativeStoryboard);
+        var aiImages = new StubImageGenerationProvider(isEnabled: true);
+        var svg = new StubSceneVisualRenderer();
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            new RecordingAssetRepository(),
+            svg,
+            imageProvider: aiImages);
+
+        var result = GenerateSceneVisualsResult.Deserialize(
+            await handler.ExecuteAsync(
+                GenerateSceneVisualsTestData.Job(
+                    projectId,
+                    storyboard.Id,
+                    productionRecipe: Recipe()),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal(4, result.GeneratedCount);
+        Assert.All(result.Visuals, visual =>
+        {
+            Assert.Equal("AiImage", visual.Engine);
+            Assert.Equal("AiImage", visual.IntendedEngine);
+            Assert.Equal("Generic", visual.Intent);
+        });
+        Assert.All(
+            result.Routing!,
+            entry =>
+            {
+                Assert.Equal("AiImage", entry.IntendedEngine);
+                Assert.Equal("AiImage", entry.Engine);
+                Assert.False(string.IsNullOrWhiteSpace(entry.Status));
+            });
+        Assert.Equal(4, aiImages.Requests.Count);
+        Assert.Equal(4, svg.MotionLabels.Count);
+        Assert.Empty(svg.AnimatedBriefs);
+    }
+
+    [Fact]
+    public async Task Handler_NoRecipeKeepsGenericNarrativeScenesOnAnimatedSvg()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateSceneVisualsTestData.NarrativeStoryboard);
+        var aiImages = new StubImageGenerationProvider(isEnabled: true);
+        var svg = new StubSceneVisualRenderer();
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            new RecordingAssetRepository(),
+            svg,
+            imageProvider: aiImages);
+
+        var result = GenerateSceneVisualsResult.Deserialize(
+            await handler.ExecuteAsync(
+                GenerateSceneVisualsTestData.Job(projectId, storyboard.Id),
+                TestContext.Current.CancellationToken));
+
+        Assert.All(result.Visuals, visual => Assert.Equal("AnimatedSvg", visual.Engine));
+        Assert.All(result.Visuals, visual => Assert.Equal("AnimatedSvg", visual.IntendedEngine));
+        Assert.Empty(aiImages.Requests);
+        Assert.Equal(4, svg.AnimatedBriefs.Count);
+    }
+
+    [Fact]
+    public async Task Handler_TechExplainerRecipeKeepsGenericNarrativeScenesOnAnimatedSvg()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateSceneVisualsTestData.NarrativeStoryboard);
+        var aiImages = new StubImageGenerationProvider(isEnabled: true);
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            new RecordingAssetRepository(),
+            new StubSceneVisualRenderer(),
+            imageProvider: aiImages);
+
+        var result = GenerateSceneVisualsResult.Deserialize(
+            await handler.ExecuteAsync(
+                GenerateSceneVisualsTestData.Job(
+                    projectId,
+                    storyboard.Id,
+                    productionRecipe: Recipe("tech-explainer", 1)),
+                TestContext.Current.CancellationToken));
+
+        Assert.All(result.Visuals, visual => Assert.Equal("AnimatedSvg", visual.Engine));
+        Assert.Empty(aiImages.Requests);
+    }
+
+    [Fact]
+    public async Task Handler_MotionComicDoesNotForceTechnicalIntentsToAiImage()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateSceneVisualsTestData.AnimatedStoryboard);
+        var aiImages = new StubImageGenerationProvider(isEnabled: true);
+        var manim = new StubManimSceneRenderer(isEnabled: true);
+        var svg = new StubSceneVisualRenderer();
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            new RecordingAssetRepository(),
+            svg,
+            manim,
+            imageProvider: aiImages);
+
+        var result = GenerateSceneVisualsResult.Deserialize(
+            await handler.ExecuteAsync(
+                GenerateSceneVisualsTestData.Job(
+                    projectId,
+                    storyboard.Id,
+                    productionRecipe: Recipe()),
+                TestContext.Current.CancellationToken));
+
+        Assert.Contains(
+            result.Visuals,
+            visual => visual.Engine == "ManimAnimation" && visual.Template == "LocalAiFlow");
+        Assert.Contains(result.Visuals, visual => visual.Engine == "AnimatedSvg");
+        Assert.DoesNotContain(result.Visuals, visual => visual.Engine == "AiImage");
+        Assert.Empty(aiImages.Requests);
+        Assert.Single(manim.Calls);
+    }
+
+    [Fact]
+    public async Task Handler_MotionComicFallsBackToAnimatedSvgWhenAiImageDisabled()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateSceneVisualsTestData.NarrativeStoryboard);
+        var svg = new StubSceneVisualRenderer();
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            new RecordingAssetRepository(),
+            svg,
+            imageProvider: new StubImageGenerationProvider(isEnabled: false));
+
+        var result = GenerateSceneVisualsResult.Deserialize(
+            await handler.ExecuteAsync(
+                GenerateSceneVisualsTestData.Job(
+                    projectId,
+                    storyboard.Id,
+                    productionRecipe: Recipe()),
+                TestContext.Current.CancellationToken));
+
+        Assert.All(result.Visuals, visual =>
+        {
+            Assert.Equal("AnimatedSvg", visual.Engine);
+            Assert.Equal("AiImage", visual.IntendedEngine);
+            Assert.Equal("fallback", visual.Status);
+        });
+        Assert.Equal(4, svg.AnimatedBriefs.Count);
+    }
+
+    [Fact]
+    public async Task Handler_MotionComicPassesIdentityPinToImageRequest()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateSceneVisualsTestData.NarrativeStoryboard);
+        var aiImages = new StubImageGenerationProvider(isEnabled: true);
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            new RecordingAssetRepository(),
+            new StubSceneVisualRenderer(),
+            imageProvider: aiImages);
+
+        await handler.ExecuteAsync(
+            GenerateSceneVisualsTestData.Job(
+                projectId,
+                storyboard.Id,
+                identityReferences: [Pin(1)],
+                productionRecipe: Recipe()),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(4, aiImages.Requests.Count);
+        Assert.All(aiImages.Requests, request =>
+        {
+            var reference = Assert.Single(request.IdentityReferences);
+            Assert.Equal("student-01-reference", reference.AssetId.Value);
+            Assert.Equal(1, reference.Version.Value);
+        });
+    }
+
+    [Fact]
+    public async Task Handler_ReplayUsesSameRecipeRoutingContext()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateSceneVisualsTestData.NarrativeStoryboard);
+        var job = GenerateSceneVisualsTestData.Job(
+            projectId,
+            storyboard.Id,
+            productionRecipe: Recipe());
+
+        // Two independent replays of the SAME persisted payload must route the same
+        // way; the exact recipe version travels with the payload, never "latest".
+        foreach (var _ in Enumerable.Range(0, 2))
+        {
+            var aiImages = new StubImageGenerationProvider(isEnabled: true);
+            var handler = CreateHandler(
+                projectId,
+                storyboard,
+                new RecordingAssetRepository(),
+                new StubSceneVisualRenderer(),
+                imageProvider: aiImages);
+
+            var result = GenerateSceneVisualsResult.Deserialize(
+                await handler.ExecuteAsync(
+                    job,
+                    TestContext.Current.CancellationToken));
+
+            Assert.All(result.Visuals, visual => Assert.Equal("AiImage", visual.Engine));
+        }
+    }
+
+    [Fact]
     public void Handler_DoesNotDependOnAudioOrGpuGate()
     {
         var parameters = Assert
@@ -614,6 +846,16 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
     private static PinnedIdentityAsset Pin(int version) =>
         new(new AssetReferenceId("student-01-reference"), new IdentityAssetVersion(version));
 
+    private static IProductionRecipeRegistry RecipeRegistry() =>
+        new ProductionRecipeRegistry(SeedProductionRecipes.All);
+
+    private static ProductionRecipeReference Recipe(string id = "motion-comic", int version = 1) =>
+        new()
+        {
+            Id = new ProductionRecipeId(id),
+            Version = new ProductionRecipeVersion(version)
+        };
+
     private GenerateSceneVisualsJobHandler CreateHandler(
         Guid projectId,
         JobSnapshot? storyboard,
@@ -623,7 +865,8 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
         INarrationRepository? narrations = null,
         IMediaInspector? mediaInspector = null,
         StubImageGenerationProvider? imageProvider = null,
-        StubThreeDRenderingProvider? threeDRenderer = null)
+        StubThreeDRenderingProvider? threeDRenderer = null,
+        IProductionRecipeRegistry? recipes = null)
     {
         var inspector = mediaInspector
             ?? FakeMediaInspector.Returning(new MediaInspection(0, false, false, false, 0, 0));
@@ -634,6 +877,7 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
             new StubContentProjectReader(
                 new ContentProjectSnapshot(projectId, "Project", "Brief")),
             new StubJobReader(storyboard),
+            recipes ?? RecipeRegistry(),
             assets,
             narrations ?? new StubNarrationRepository(null),
             fileStore,
