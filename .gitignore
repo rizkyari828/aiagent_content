@@ -25,6 +25,12 @@ ai-studio/src/AIStudio.Api/assets/
 # Content Studio real-model validation artifacts (generated, never committed)
 ai-studio/.demo/artifacts/
 
+# Content Studio local runtime and generated caches
+ai-studio/.runtime/
+ai-studio/src/AIStudio.Api/.cache/
+/runtime-assets/
+/reference/
+
 # .NET
 **/bin/
 **/obj/
