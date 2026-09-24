@@ -19,7 +19,7 @@ Updated: 2026-09-15. Derived summary; canonical requirements: PRD v0.7, indexed 
 
 ## Technical baseline
 
-Content Studio is rooted at `ai-studio/` in the monorepo. The sibling `local-ai-infra/` solution is reusable runtime tooling, not an application runtime dependency.
+Content Studio is rooted at `ai-studio/` in this repository. The separate sibling `local-ai-infra/` repository is reusable runtime tooling, not an application runtime dependency.
 
 .NET 10 modular monolith + React/TypeScript/Vite + PostgreSQL metadata + filesystem media. Maintain explicit module/contracts boundaries so demonstrated resource-heavy workloads can later become specialized workers; P1 remains one core deployment without distributed-system infrastructure. Ollama/Qwen3-8B quantized candidate; recorded human narration; faster-whisper multilingual small candidate; validated manifests rendered with FFmpeg. Actual model digests, hardware suitability, and licenses still need implementation-time verification.
 

@@ -6,7 +6,8 @@ Qwen Code loads this file automatically from the project root. It supplements
 ## Start every task
 
 - Read the root `AGENTS.md`, then enter the owning solution and follow its guide
-  (`ai-studio/AGENTS.md` + `ai-studio/QWEN.md`, or `local-ai-infra/AGENTS.md`).
+  (`ai-studio/AGENTS.md` + `ai-studio/QWEN.md`, or the separate `local-ai-infra`
+  repository's `AGENTS.md`).
 - Work on exactly one bounded task. Name the target files before reading them.
 - Communicate in Indonesian; use English code identifiers.
 
@@ -33,4 +34,4 @@ Qwen Code loads this file automatically from the project root. It supplements
 - Fewer, smaller, targeted turns beat many exploratory turns. Aim to keep the live
   context well under the profile limit before editing.
 - Do not hand-edit managed Qwen settings or the Ollama override. Use
-  `local-ai-infra/scripts/ai-profile`; see `local-ai-infra/docs/QWEN_WORKFLOW.md`.
+  `../local-ai-infra/scripts/ai-profile`; see `../local-ai-infra/docs/QWEN_WORKFLOW.md`.
