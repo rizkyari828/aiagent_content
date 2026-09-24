@@ -199,11 +199,13 @@ internal static class GenerateSceneVisualsTestData
         Guid storyboardJobId,
         bool force = false,
         IReadOnlyList<PinnedIdentityAsset>? identityReferences = null,
-        ProductionRecipeReference? productionRecipe = null) =>
+        ProductionRecipeReference? productionRecipe = null,
+        string? artDirection = null) =>
         JsonSerializer.Serialize(
             new GenerateSceneVisualsJobPayload(contentProjectId, storyboardJobId, force)
             {
                 ProductionRecipe = productionRecipe,
+                ArtDirection = artDirection,
                 IdentityReferences = identityReferences
             },
             JsonOptions);
@@ -214,13 +216,14 @@ internal static class GenerateSceneVisualsTestData
         JobType type = JobType.GenerateSceneVisuals,
         bool force = false,
         IReadOnlyList<PinnedIdentityAsset>? identityReferences = null,
-        ProductionRecipeReference? productionRecipe = null) =>
+        ProductionRecipeReference? productionRecipe = null,
+        string? artDirection = null) =>
         new(
             Guid.NewGuid(),
             contentProjectId,
             type,
             "input-v1",
-            Payload(contentProjectId, storyboardJobId, force, identityReferences, productionRecipe),
+            Payload(contentProjectId, storyboardJobId, force, identityReferences, productionRecipe, artDirection),
             0,
             2,
             false);

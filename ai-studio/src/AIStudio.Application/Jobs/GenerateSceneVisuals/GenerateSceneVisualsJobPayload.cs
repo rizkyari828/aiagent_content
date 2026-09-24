@@ -30,6 +30,17 @@ public sealed record GenerateSceneVisualsJobPayload(
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ProductionRecipeReference? ProductionRecipe { get; init; }
 
+    /// <summary>
+    /// Optional caller-supplied art direction for narrative AI-image scenes, e.g.
+    /// "original cinematic anime, soft cel shading, deep blue night tones with warm
+    /// amber highlights". It is creative data selected per job (never a hardcoded
+    /// genre) and is applied only to narrative AiImage prompts; technical SVG/Manim
+    /// prompts are unaffected. Omitted entirely when not supplied.
+    /// </summary>
+    [JsonPropertyName("artDirection")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ArtDirection { get; init; }
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow

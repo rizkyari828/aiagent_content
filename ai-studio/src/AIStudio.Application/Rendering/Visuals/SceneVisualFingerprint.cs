@@ -35,6 +35,7 @@ public static class SceneVisualFingerprint
             .Append(plan.IsFallback).Append('|')
             .Append(Number(plan.Direction?.DurationSeconds ?? 0)).Append('|')
             .Append(plan.Brief.Heading).Append('|')
+            .Append(plan.Brief.VisualDescription).Append('|')
             .Append(plan.Brief.Kicker).Append('|')
             .Append(plan.Brief.Layout).Append('|')
             .Append(plan.Brief.Palette).Append('|')

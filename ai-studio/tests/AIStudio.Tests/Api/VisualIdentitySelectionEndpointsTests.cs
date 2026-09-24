@@ -193,7 +193,7 @@ public sealed class VisualIdentitySelectionEndpointsTests : IDisposable
     public void RequestShapeExposesAtMostOneAuthoringReference()
     {
         Assert.Equal(
-            ["IdentityReference", "ProductionRecipe"],
+            ["IdentityReference", "ProductionRecipe", "ArtDirection"],
             typeof(EnqueueVisualsRequest).GetProperties().Select(property => property.Name));
 
         var referenceProperty = typeof(EnqueueVisualsRequest).GetProperty("IdentityReference")!;

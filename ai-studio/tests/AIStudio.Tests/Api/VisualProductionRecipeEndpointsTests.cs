@@ -158,6 +158,41 @@ public sealed class VisualProductionRecipeEndpointsTests
     }
 
     [Fact]
+    public async Task ArtDirectionSelectionPersistsAndRoundTrips()
+    {
+        const string artDirection =
+            "original cinematic anime, soft cel shading, deep blue night tones with warm amber highlights";
+        var (projectId, storyboard, db) = Context();
+
+        var result = await Enqueue(
+            projectId,
+            storyboard,
+            db,
+            request: new EnqueueVisualsRequest(null, Request("motion-comic", 1).ProductionRecipe, artDirection));
+
+        Assert.IsType<Accepted<EnqueueJobResponse>>(result);
+        Assert.Contains("\"artDirection\"", db.AddedJob!.Payload, StringComparison.Ordinal);
+        var payload = GenerateSceneVisualsJobPayload.Deserialize(db.AddedJob.Payload);
+        Assert.Equal(artDirection, payload.ArtDirection);
+    }
+
+    [Fact]
+    public async Task InvalidArtDirectionFailsBeforeJobCreation()
+    {
+        var (projectId, storyboard, db) = Context();
+        var tooLong = new string('a', 401);
+
+        var result = await Enqueue(
+            projectId,
+            storyboard,
+            db,
+            request: new EnqueueVisualsRequest(null, Request("motion-comic", 1).ProductionRecipe, tooLong));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(result).StatusCode);
+        Assert.Null(db.AddedJob);
+    }
+
+    [Fact]
     public void PayloadRoundTripPreservesRecipeIdentity()
     {
         var json = GenerateSceneVisualsTestData.Payload(

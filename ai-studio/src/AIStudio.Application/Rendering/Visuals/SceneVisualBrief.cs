@@ -58,4 +58,5 @@ public sealed record SceneVisualBrief(
     string? Command = null,
     double Progress = 0,
     bool Typing = false,
-    bool Completion = false);
+    bool Completion = false,
+    string? VisualDescription = null);

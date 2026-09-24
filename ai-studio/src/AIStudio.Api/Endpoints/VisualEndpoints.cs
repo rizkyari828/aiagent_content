@@ -109,6 +109,7 @@ public static class VisualEndpoints
                 parsedStoryboardJobId,
                 force ?? false,
                 productionRecipe,
+                request?.ArtDirection,
                 identityReferences,
                 cancellationToken);
 
@@ -145,6 +146,11 @@ public static class VisualEndpoints
                 statusCode: StatusCodes.Status404NotFound,
                 title: "Storyboard not found.",
                 detail: exception.Message),
+            "visual_art_direction_invalid" => Results.ValidationProblem(
+                new Dictionary<string, string[]>
+                {
+                    ["artDirection"] = [exception.Message]
+                }),
             // Materialization failures (reference not found / not Approved) share one
             // canonical error code from the workflow, so they map to the existing
             // conflict outcome rather than guessing 404 vs 409 here.
@@ -168,15 +174,18 @@ public static class VisualEndpoints
 }
 
 /// <summary>
-/// Optional visual-enqueue body. v1 exposes at most one selected production recipe
-/// and at most one selected identity reference; both are optional and additive, so a
-/// body-less request remains valid and unchanged. The recipe names an exact version
-/// (no "latest"); the identity reference is an authoring selection whose version is
-/// optional. Materialization stays inside <see cref="GenerateSceneVisualsWorkflow"/>.
+/// Optional visual-enqueue body. v1 exposes at most one selected production recipe,
+/// one optional narrative art direction, and at most one selected identity
+/// reference; all are optional and additive, so a body-less request remains valid
+/// and unchanged. The recipe names an exact version (no "latest"); the art direction
+/// is free-text creative data; the identity reference is an authoring selection
+/// whose version is optional. Materialization stays inside
+/// <see cref="GenerateSceneVisualsWorkflow"/>.
 /// </summary>
 public sealed record EnqueueVisualsRequest(
     VisualIdentityReference? IdentityReference,
-    VisualProductionRecipe? ProductionRecipe = null);
+    VisualProductionRecipe? ProductionRecipe = null,
+    string? ArtDirection = null);
 
 /// <summary>
 /// Transport selection of a production format: a stable recipe id and a concrete

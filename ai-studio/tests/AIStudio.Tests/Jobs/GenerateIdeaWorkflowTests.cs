@@ -2,6 +2,7 @@ using AIStudio.Application.Abstractions.Persistence;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.GenerateIdea;
+using AIStudio.Application.Jobs.GenerateSceneVisuals;
 using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Domain.Content;
 using AIStudio.Domain.Jobs;
@@ -194,6 +195,62 @@ public sealed class GenerateIdeaWorkflowTests
         var result = Assert.IsType<GenerateStoryboardResult>(job.Result);
         Assert.Equal("Local AI Storyboard", result.Title);
         Assert.Equal(2, result.Scenes.Count);
+    }
+
+    [Fact]
+    public async Task FindJob_DeserializesCompletedGenerateSceneVisualsResult()
+    {
+        var jobId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
+        var result = new GenerateSceneVisualsResult(
+            Guid.NewGuid(),
+            SceneCount: 2,
+            GeneratedCount: 1,
+            SkippedCount: 1,
+            Visuals:
+            [
+                new GeneratedSceneVisual(
+                    0,
+                    "AnimatedSvg",
+                    "None",
+                    "visuals/0bdba51c/48821f7d/scene_0.mp4",
+                    1024,
+                    new string('a', 64))
+            ],
+            Routing:
+            [
+                new SceneVisualRouting(0, "AnimatedSvg", "AnimatedSvg", "generated", "None"),
+                new SceneVisualRouting(1, "AnimatedSvg", "AnimatedSvg", "reused", "None")
+            ]);
+        var snapshot = new JobSnapshot(
+            jobId,
+            projectId,
+            JobType.GenerateSceneVisuals,
+            JobStatus.Succeeded,
+            0,
+            2,
+            result.Serialize(),
+            null,
+            null,
+            Now,
+            Now,
+            Now,
+            Now);
+        var workflow = CreateWorkflow(
+            new RecordingDbContext(),
+            jobSnapshot: snapshot);
+
+        var job = await workflow.FindJobAsync(
+            jobId,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(job);
+        Assert.Equal(JobStatus.Succeeded, job.Status);
+        var visual = Assert.IsType<GenerateSceneVisualsResult>(job.Result);
+        Assert.Equal(1, visual.GeneratedCount);
+        Assert.Equal(1, visual.SkippedCount);
+        Assert.Equal("AnimatedSvg", visual.Visuals[0].Engine);
+        Assert.Equal(2, visual.Routing!.Count);
     }
 
     [Fact]

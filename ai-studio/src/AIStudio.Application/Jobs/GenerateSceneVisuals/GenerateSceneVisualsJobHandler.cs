@@ -88,6 +88,7 @@ public sealed class GenerateSceneVisualsJobHandler(
             cancellationToken);
 
         var routingProfile = ResolveRoutingProfile(payload.ProductionRecipe);
+        var narrativeImage = routingProfile.NarrativeEngine == SceneVisualEngine.AiImage;
 
         var plans = SceneVisualPlanner.PlanAll(
             storyboard,
@@ -132,6 +133,8 @@ public sealed class GenerateSceneVisualsJobHandler(
                 job.ContentProjectId,
                 payload.StoryboardJobId,
                 identityReferences,
+                narrativeImage,
+                payload.ArtDirection,
                 cancellationToken);
             var file = await WriteAsync(relativePath, bytes, cancellationToken);
 
@@ -313,6 +316,8 @@ public sealed class GenerateSceneVisualsJobHandler(
         Guid contentProjectId,
         Guid storyboardJobId,
         IReadOnlyList<PinnedIdentityAsset> identityReferences,
+        bool narrativeImage,
+        string? artDirection,
         CancellationToken cancellationToken)
     {
         var duration = plan.Direction?.DurationSeconds
@@ -339,6 +344,8 @@ public sealed class GenerateSceneVisualsJobHandler(
                     sceneIndex,
                     duration,
                     identityReferences,
+                    narrativeImage,
+                    artDirection,
                     cancellationToken),
                 SceneVisualEngine.AnimatedSvg => await svgRenderer.RenderAnimationAsync(
                     plan.Brief,
@@ -397,6 +404,8 @@ public sealed class GenerateSceneVisualsJobHandler(
         int sceneIndex,
         double durationSeconds,
         IReadOnlyList<PinnedIdentityAsset> identityReferences,
+        bool narrativeImage,
+        string? artDirection,
         CancellationToken cancellationToken)
     {
         ImageGenerationRequest request;
@@ -406,7 +415,7 @@ public sealed class GenerateSceneVisualsJobHandler(
             // is unsupported by the FLUX provider in v1 and must fail clearly rather
             // than silently choosing the first.
             request = new ImageGenerationRequest(
-                SceneImagePrompt.Build(plan.Brief),
+                SceneImagePrompt.Build(plan.Brief, narrativeImage, artDirection),
                 DeriveSeed(storyboardJobId, sceneIndex),
                 identityReferences);
         }
@@ -428,9 +437,10 @@ public sealed class GenerateSceneVisualsJobHandler(
         var image = await imageProvider.GenerateAsync(request, cancellationToken);
 
         // A still alone is not a scene: apply the repository-owned motion treatment.
+        // A narrative scene carries no technical badge, so only the slow push remains.
         return await svgRenderer.RenderImageMotionAsync(
             image,
-            ImageOverlayLabel,
+            narrativeImage ? string.Empty : ImageOverlayLabel,
             plan.Brief.Palette,
             durationSeconds,
             cancellationToken);

@@ -129,6 +129,14 @@ public static class SceneVisualSvg
         double opacity,
         double scale)
     {
+        // A blank label means "no badge": return a transparent frame so the motion
+        // treatment still applies (slow push) without a placeholder overlay. This is
+        // how narrative AiImage scenes avoid the technical badge.
+        if (string.IsNullOrWhiteSpace(label))
+        {
+            return $"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{Width}\" height=\"{Height}\" viewBox=\"0 0 {Width} {Height}\"></svg>";
+        }
+
         var colors = Palettes[palette];
         var clampedOpacity = Math.Clamp(opacity, 0, 1);
         var clampedScale = Math.Clamp(scale, 0.5, 1.5);

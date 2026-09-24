@@ -824,6 +824,107 @@ public sealed class GenerateSceneVisualsJobHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task Handler_MotionComicUsesStoryboardVisualInImagePromptAndDropsBadge()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateSceneVisualsTestData.NarrativeStoryboard);
+        var aiImages = new StubImageGenerationProvider(isEnabled: true);
+        var svg = new StubSceneVisualRenderer();
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            new RecordingAssetRepository(),
+            svg,
+            imageProvider: aiImages);
+
+        await handler.ExecuteAsync(
+            GenerateSceneVisualsTestData.Job(
+                projectId,
+                storyboard.Id,
+                productionRecipe: Recipe()),
+            TestContext.Current.CancellationToken);
+
+        // The storyboard `visual` text must reach the provider, not SVG card/heading text.
+        Assert.Equal(4, aiImages.Requests.Count);
+        Assert.Contains("wooden desk and a warm lamp", aiImages.Requests[0].Prompt);
+        Assert.Contains("glowing panel awakens", aiImages.Requests[1].Prompt);
+        Assert.Contains("tall silhouette rises slowly", aiImages.Requests[2].Prompt);
+        Assert.Contains("room brightens into hope", aiImages.Requests[3].Prompt);
+        Assert.All(aiImages.Requests, request =>
+            Assert.DoesNotContain("technology explainer", request.Prompt));
+
+        // The technical placeholder badge must be suppressed for narrative scenes.
+        Assert.Equal(4, svg.MotionLabels.Count);
+        Assert.All(svg.MotionLabels, label => Assert.Equal(string.Empty, label));
+    }
+
+    [Fact]
+    public async Task Handler_MotionComicAppendsArtDirectionToNarrativePrompt()
+    {
+        const string artDirection =
+            "original cinematic anime, detailed anime background, clean expressive "
+            + "linework, soft cel shading, cinematic lighting, cohesive character "
+            + "design, deep blue night tones with warm amber highlights";
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateSceneVisualsTestData.NarrativeStoryboard);
+        var aiImages = new StubImageGenerationProvider(isEnabled: true);
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            new RecordingAssetRepository(),
+            new StubSceneVisualRenderer(),
+            imageProvider: aiImages);
+
+        await handler.ExecuteAsync(
+            GenerateSceneVisualsTestData.Job(
+                projectId,
+                storyboard.Id,
+                productionRecipe: Recipe(),
+                artDirection: artDirection),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(4, aiImages.Requests.Count);
+        Assert.All(aiImages.Requests, request =>
+        {
+            Assert.Contains("original cinematic anime", request.Prompt);
+            Assert.Contains("warm amber highlights", request.Prompt);
+        });
+        Assert.Contains("wooden desk and a warm lamp", aiImages.Requests[0].Prompt);
+    }
+
+    [Fact]
+    public async Task Handler_NonNarrativeAiImageKeepsTechPromptAndBadge()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateSceneVisualsTestData.ClosingStoryboard);
+        var aiImages = new StubImageGenerationProvider(isEnabled: true);
+        var svg = new StubSceneVisualRenderer();
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            new RecordingAssetRepository(),
+            svg,
+            imageProvider: aiImages);
+
+        var result = GenerateSceneVisualsResult.Deserialize(
+            await handler.ExecuteAsync(
+                GenerateSceneVisualsTestData.Job(projectId, storyboard.Id),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("AiImage", Assert.Single(result.Visuals).Engine);
+        var request = Assert.Single(aiImages.Requests);
+        Assert.Contains("Closing", request.Prompt);
+        Assert.Contains("technology explainer", request.Prompt);
+        Assert.Equal("AI LOKAL · OFFLINE", Assert.Single(svg.MotionLabels));
+    }
+
+    [Fact]
     public void Handler_DoesNotDependOnAudioOrGpuGate()
     {
         var parameters = Assert

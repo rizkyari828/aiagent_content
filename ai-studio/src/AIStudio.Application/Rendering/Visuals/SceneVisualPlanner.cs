@@ -20,7 +20,7 @@ namespace AIStudio.Application.Rendering.Visuals;
 public static class SceneVisualPlanner
 {
     /// <summary>Bump when the mapping changes so job input hashes change.</summary>
-    public const int PlannerVersion = 3;
+    public const int PlannerVersion = 4;
 
     /// <summary>Animation templates must fit their scene; aligned with the timing floor.</summary>
     public const double AnimationDurationSeconds = SceneTiming.AnimationMinimumSeconds;
@@ -248,7 +248,8 @@ public static class SceneVisualPlanner
             cards,
             note,
             command,
-            progress);
+            progress,
+            VisualDescription: scene.Visual);
     }
 
     private static SceneAnimationParameters BuildAnimationParameters(

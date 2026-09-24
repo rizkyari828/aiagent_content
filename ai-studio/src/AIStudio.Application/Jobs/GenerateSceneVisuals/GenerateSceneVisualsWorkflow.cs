@@ -23,11 +23,13 @@ public sealed class GenerateSceneVisualsWorkflow(
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
 
+    private const int MaxArtDirectionLength = 400;
+
     public Task<Guid?> EnqueueAsync(
         Guid contentProjectId,
         Guid storyboardJobId,
         CancellationToken cancellationToken) =>
-        EnqueueAsync(contentProjectId, storyboardJobId, force: false, productionRecipe: null, identityReferences: null, cancellationToken);
+        EnqueueAsync(contentProjectId, storyboardJobId, force: false, productionRecipe: null, artDirection: null, identityReferences: null, cancellationToken);
 
     /// <summary>
     /// <paramref name="force"/> is an explicit operator action: it regenerates every
@@ -39,24 +41,25 @@ public sealed class GenerateSceneVisualsWorkflow(
         Guid storyboardJobId,
         bool force,
         CancellationToken cancellationToken) =>
-        EnqueueAsync(contentProjectId, storyboardJobId, force, productionRecipe: null, identityReferences: null, cancellationToken);
+        EnqueueAsync(contentProjectId, storyboardJobId, force, productionRecipe: null, artDirection: null, identityReferences: null, cancellationToken);
 
-    /// <summary>Identity-only selection; no production recipe context.</summary>
+    /// <summary>Identity-only selection; no production recipe or art-direction context.</summary>
     public Task<Guid?> EnqueueAsync(
         Guid contentProjectId,
         Guid storyboardJobId,
         bool force,
         IReadOnlyList<AssetReference>? identityReferences,
         CancellationToken cancellationToken) =>
-        EnqueueAsync(contentProjectId, storyboardJobId, force, productionRecipe: null, identityReferences, cancellationToken);
+        EnqueueAsync(contentProjectId, storyboardJobId, force, productionRecipe: null, artDirection: null, identityReferences, cancellationToken);
 
     /// <summary>
     /// Materialization boundary. <paramref name="productionRecipe"/> is the explicit
-    /// per-job recipe selection and <paramref name="identityReferences"/> are the
-    /// explicit, caller-selected Bible references. Both are resolved exactly once
+    /// per-job recipe selection, <paramref name="artDirection"/> is optional narrative
+    /// creative style, and <paramref name="identityReferences"/> are the explicit,
+    /// caller-selected Bible references. They are resolved/normalized exactly once
     /// here, before the job is persisted: a floating identity version becomes a
     /// concrete pin and a recipe must name a registered exact version. The durable
-    /// payload then carries only stable identity, so execution and retries never
+    /// payload then carries only stable values, so execution and retries never
     /// re-resolve and cannot drift. Nothing is inferred from storyboard text.
     /// </summary>
     public async Task<Guid?> EnqueueAsync(
@@ -64,6 +67,7 @@ public sealed class GenerateSceneVisualsWorkflow(
         Guid storyboardJobId,
         bool force,
         ProductionRecipeReference? productionRecipe,
+        string? artDirection,
         IReadOnlyList<AssetReference>? identityReferences,
         CancellationToken cancellationToken)
     {
@@ -85,12 +89,14 @@ public sealed class GenerateSceneVisualsWorkflow(
             cancellationToken);
 
         var recipe = MaterializeProductionRecipe(productionRecipe);
+        var normalizedArtDirection = NormalizeArtDirection(artDirection);
         var identityPins = MaterializeIdentityReferences(identityReferences);
 
         var payload = JsonSerializer.Serialize(
             new GenerateSceneVisualsJobPayload(contentProjectId, storyboardJobId, force)
             {
                 ProductionRecipe = recipe,
+                ArtDirection = normalizedArtDirection,
                 IdentityReferences = identityPins.Count == 0 ? null : identityPins
             },
             JsonOptions);
@@ -145,6 +151,29 @@ public sealed class GenerateSceneVisualsWorkflow(
                 "The storyboard result is not a valid structured storyboard.",
                 exception);
         }
+    }
+
+    /// <summary>
+    /// Normalizes the optional narrative art direction. Blank means "none"; an
+    /// over-long value or one containing control characters is rejected before the
+    /// job is created so it can never reach the image provider.
+    /// </summary>
+    private static string? NormalizeArtDirection(string? artDirection)
+    {
+        if (string.IsNullOrWhiteSpace(artDirection))
+        {
+            return null;
+        }
+
+        var trimmed = artDirection.Trim();
+        if (trimmed.Length > MaxArtDirectionLength || trimmed.Any(char.IsControl))
+        {
+            throw Error(
+                "visual_art_direction_invalid",
+                $"Art direction must be at most {MaxArtDirectionLength} characters and contain no control characters.");
+        }
+
+        return trimmed;
     }
 
     /// <summary>
