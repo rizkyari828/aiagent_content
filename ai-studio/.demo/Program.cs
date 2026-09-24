@@ -91,35 +91,28 @@ var narrationDuration = (await inspector.InspectAsync(narration, CancellationTok
 
 var plans = SceneVisualPlanner.PlanAll(storyboard, manimRenderer.IsEnabled);
 
-// Narration-aware fallback: proportional to scene text length, with a higher
-// floor for animated scenes so each template can finish.
+// Narration-aware timing: same SceneTiming source production uses.
 var weights = storyboard.Scenes
     .Select(scene => SceneTiming.WeightFor(scene.Heading, scene.Visual))
     .ToArray();
-var minimums = plans
-    .Select(plan => plan.Engine == SceneVisualEngine.ManimAnimation
-        ? SceneTiming.AnimationMinimumSeconds
-        : SceneTiming.DefaultMinimumSeconds)
+var animatedScenes = plans
+    .Select(plan => plan.Engine == SceneVisualEngine.ManimAnimation)
     .ToArray();
-var durations = SceneTiming.Allocate(weights, narrationDuration, minimums);
+var durations = SceneTiming.AllocateForScenes(
+    storyboard.Scenes.Select(scene => scene.Heading).ToArray(),
+    storyboard.Scenes.Select(scene => scene.Visual).ToArray(),
+    animatedScenes,
+    narrationDuration);
 
-// Re-time the burned subtitle to the derived scene boundaries so the heading
-// matches the visible scene (the canonical subtitle asset is left untouched).
-var subtitleBuilder = new System.Text.StringBuilder();
-var cursor = 0d;
-for (var index = 0; index < storyboard.Scenes.Count; index++)
-{
-    subtitleBuilder.AppendLine((index + 1).ToString());
-    subtitleBuilder.AppendLine(
-        $"{FormatTimestamp(cursor)} --> {FormatTimestamp(cursor + durations[index])}");
-    subtitleBuilder.AppendLine(storyboard.Scenes[index].Heading);
-    subtitleBuilder.AppendLine();
-    cursor += durations[index];
-}
-
-var demoSubtitle = Path.Combine(assetsRoot, "vq2-demo/subtitle-v2.srt");
-await File.WriteAllTextAsync(demoSubtitle, subtitleBuilder.ToString());
-Console.WriteLine($"subtitle={demoSubtitle} total={cursor:0.###}s");
+// Re-time the burned subtitle to the derived scene boundaries; the canonical
+// subtitle asset is read-only and left untouched.
+var demoSubtitle = Path.Combine(assetsRoot, "vq2-demo/subtitle-v3.srt");
+await File.WriteAllTextAsync(
+    demoSubtitle,
+    SubtitleTimeline.Build(
+        storyboard.Scenes.Select(scene => scene.Heading).ToArray(),
+        durations));
+Console.WriteLine($"subtitle={demoSubtitle} total={durations.Sum():0.###}s");
 
 var sceneInputs = new List<SceneMediaInput>(plans.Count);
 for (var index = 0; index < plans.Count; index++)
@@ -135,7 +128,7 @@ for (var index = 0; index < plans.Count; index++)
         : await svgRenderer.RenderPngAsync(plan.Brief, CancellationToken.None);
 
     var info = await fileStore.WriteAsync(
-        $"vq2-demo/generated/scene_{index}.{extension}",
+        $"vq2-demo/generated-v3/scene_{index}.{extension}",
         bytes,
         CancellationToken.None);
 
@@ -155,16 +148,10 @@ var animatedOutput = await renderer.RenderAsync(
     new VideoRenderRequest(
         sceneInputs,
         narration,
-        "renders/vq2-demo/animated-explainer-v2.mp4",
+        "renders/vq2-demo/animated-explainer-v3.mp4",
         demoSubtitle),
     CancellationToken.None);
 
 Console.WriteLine(
     $"mode={mode} path={animatedOutput.RelativePath} bytes={animatedOutput.ByteSize} hash={animatedOutput.ContentHash} duration={animatedOutput.DurationSeconds:0.###}");
 return 0;
-
-static string FormatTimestamp(double seconds)
-{
-    var span = TimeSpan.FromSeconds(seconds);
-    return $"{span.Hours:00}:{span.Minutes:00}:{span.Seconds:00},{span.Milliseconds:000}";
-}
