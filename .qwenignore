@@ -14,17 +14,6 @@
 **/coverage/
 *.tsbuildinfo
 
-# local-ai-infra runtime/generated output (schemas and examples stay visible)
-local-ai-infra/telemetry/runs/
-local-ai-infra/telemetry/errors/
-local-ai-infra/telemetry/escalations/
-local-ai-infra/telemetry/spans/
-local-ai-infra/benchmarks/results/
-local-ai-infra/evals/results/
-local-ai-infra/datasets/accepted/
-local-ai-infra/datasets/candidates/
-local-ai-infra/datasets/rejected/
-
 # Caches, local state, and logs
 **/__pycache__/
 *.py[cod]

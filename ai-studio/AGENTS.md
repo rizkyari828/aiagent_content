@@ -1,6 +1,6 @@
 # Agent guide — Local AI Content Studio
 
-This guide applies to `ai-studio/`. Run product commands from this directory. The sibling `local-ai-infra/` solution manages reusable local runtime concerns and is not a Content Studio runtime dependency.
+This guide applies to `ai-studio/`. Run product commands from this directory. The separate sibling `local-ai-infra/` repository manages reusable local runtime concerns and is not a Content Studio runtime dependency (resolve it with `LAI_REPO`, default `../local-ai-infra`).
 
 ## Start small
 

@@ -1,17 +1,17 @@
-# Agent guide — AI monorepo
+# Agent guide — Content Studio repository
 
 ## Start with the owning solution
 
 - Inspect `git status` before editing, then scope the task to exactly one solution unless the request explicitly crosses boundaries.
 - For Content Studio work, enter `ai-studio/` and follow `ai-studio/AGENTS.md`. Its checkpoint, project state, lessons, and repository map are authoritative for the product.
-- For reusable local runtime tooling, enter `local-ai-infra/` and follow `local-ai-infra/AGENTS.md`.
+- For reusable local runtime tooling, work in the separate sibling repository `local-ai-infra/` (resolve it with `LAI_REPO`, default `../local-ai-infra`) and follow its own `AGENTS.md`.
 - Use targeted reads and searches. Do not scan both solutions or read full specifications by default.
 - Communicate in Indonesian; use English code identifiers. Keep updates and handoffs concise.
 
 ## Repository boundaries
 
 - `ai-studio/` owns the Content Studio product, domain knowledge, application configuration, durable jobs, API, web client, tests, and product documentation.
-- `local-ai-infra/` owns reusable local AI configuration, profiles, verification, benchmarks, telemetry formats, evals, and learning-data conventions.
+- The separate sibling repository `local-ai-infra/` owns reusable local AI configuration, profiles, verification, benchmarks, telemetry formats, evals, and learning-data conventions. It is not part of this repository.
 - Local AI infrastructure describes **how** local AI runs. Content Studio describes **what** the product does and which model it requests.
 - Content Studio must not acquire a runtime dependency on `local-ai-infra/` without an explicit architectural decision.
 - Keep repository-wide files at the root. Keep solution-specific guidance and configuration inside the owning solution.
@@ -48,4 +48,4 @@ REPO_MAP   = where things live
 DECISIONS  = why important choices exist
 ```
 
-This rule is not model-specific. For `local-ai-infra/`, follow its own `AGENTS.md`.
+This rule is not model-specific. For the separate `local-ai-infra/` repository, follow its own `AGENTS.md`.
