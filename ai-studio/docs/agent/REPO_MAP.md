@@ -243,3 +243,4 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 ## Agent context
 
 - `../AGENTS.md` (Repository Context Protocol), `AGENTS.md` (Studio rules), `QWEN.md`, `docs/agent/CHECKPOINT.md`, `docs/context/STATE.md`, `docs/agent/REPO_MAP.md`, `docs/development/DECISIONS.md`, `docs/agent/LESSONS.md` — monorepo + Studio rules, resume point, verified state, module map, and durable decision rationale.
+- `docs/development/I2V_PLAN.md` — active cross-machine plan for real I2V character animation (Mac = docs/contracts/tests, home = GPU benchmark and E2E); read this first for the current milestone.
