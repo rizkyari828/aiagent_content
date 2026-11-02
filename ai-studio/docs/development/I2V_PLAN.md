@@ -65,26 +65,28 @@ Each item states owner, deliverable, and how to verify it. Do not check an item 
 - [x] **P0.2 [Mac] Docs reconciliation** (this branch). Canonical anime Video #1 and Ken Burns
       status recorded as reported, "Video #1" ambiguity removed, next milestone points here.
       Verify: links resolve, `git diff --check` clean.
-- [ ] **P0.3 [Mac] Database baseline.** `ai-studio/.env` with `POSTGRES_PORT=5544` (5432 is taken
+- [x] **P0.3 [Mac] Database baseline.** `ai-studio/.env` with `POSTGRES_PORT=5544` (5432 is taken
       by an unrelated container on this machine), `docker compose up -d`, then
       `dotnet test` with `ConnectionStrings__DefaultConnection`.
       Verify: 0 failed, 1 skipped; exact counts appended to STATE.
+      Done 2026-11-02: 1190 total, 1189 pass, 0 failed, 1 skipped (existing migrations applied
+      with `dotnet-ef 10.0.12`; no new migration).
 
 ### P1 — design and scaffold (Mac)
 
-- [ ] **P1.1 ADR.** Add a `DECISIONS.md` entry for the I2V boundary: Application-owned port,
+- [x] **P1.1 ADR.** Add a `DECISIONS.md` entry for the I2V boundary: Application-owned port,
       Infrastructure adapter, trusted repository-owned workflow only, no caller graph/node/path,
       GPU lease held across the whole generation, CPU persist/probe after release.
-- [ ] **P1.2 Contracts.** `IVideoGenerationProvider`, `VideoGenerationRequest` (animation prompt,
+- [x] **P1.2 Contracts.** `IVideoGenerationProvider`, `VideoGenerationRequest` (animation prompt,
       first-frame asset reference — one pinned identity allowed, duration/fps/size/seed),
       `VideoGenerationResult`, `VideoGenerationException` with stable `video_*` codes, modelled
       on `IImageGenerationProvider`. No paths, URLs, node graphs, or model names in Application.
-- [ ] **P1.3 Options + DI.** `ComfyUiVideoOptions` (`Enabled=false` default, BaseUrl, WorkflowPath,
+- [x] **P1.3 Options + DI.** `ComfyUiVideoOptions` (`Enabled=false` default, BaseUrl, WorkflowPath,
       width/height/fps/max seconds/timeout). Provider registered but disabled by default.
-- [ ] **P1.4 Capability.** Register the provider for existing `visual.character_animation` in
+- [x] **P1.4 Capability.** Register the provider for existing `visual.character_animation` in
       `ProductionCapabilityCatalog`, enablement driven by options.
       Verify: capability tests (catalog mapping, DI enablement reflection) still pass.
-- [ ] **P1.5 Fake provider + tests.** `FakeVideoGenerationProvider`; tests for request validation,
+- [x] **P1.5 Fake provider + tests.** `FakeVideoGenerationProvider`; tests for request validation,
       duration/fps bounds, disabled behavior, GPU-lease lifecycle, error mapping, no-path leak.
       Verify: full suite green with no GPU and no model.
 - [ ] **P1.6 Workflow template.** Repository-owned JSON under `Rendering/ComfyUI/` for the selected
