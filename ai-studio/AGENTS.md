@@ -20,7 +20,7 @@ This guide applies to `ai-studio/`. Run product commands from this directory. Th
 - Bind services to loopback by default. Validate paths, media, and scene schemas. Pass structured process arguments; never execute model-generated shell commands.
 - Do not add deferred infrastructure or autonomous publishing without a current need and authorization. Repo development does not itself authorize public uploads, purchases, or external messages.
 - Avoid speculative abstractions and unrelated edits. Do not change architecture, security, concurrency, migrations, durable-job semantics, or `global.json` unless the current task explicitly requires it.
-- Preserve existing worktree changes and never let agents edit it concurrently. Do not spawn subagents unless the user explicitly requests delegation.
+- Preserve existing worktree changes and never let agents edit it concurrently. Do not spawn subagents unless the user explicitly requests delegation. Standing operator rule for this repository: when the operator asks to "exec"/"eksekusi" work, delegate it to a subagent (separate context) instead of doing it inline, then report the subagent's result with the same verification evidence.
 
 ## Modular and Domain Boundaries
 
