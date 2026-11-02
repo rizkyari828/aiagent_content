@@ -193,7 +193,7 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `src/AIStudio.Infrastructure/Rendering/ComfyUiVideoOptions.cs`, `ComfyUiVideoGenerationProvider.cs` — optional local ComfyUI I2V adapter. `ComfyUiVideo:Enabled=false` by default; one trusted repository-owned workflow per mode (text-only vs. first frame), JSON-escaped prompt/seed/dimensions/placeholders, verified ComfyUI `/prompt` -> `/history` -> `/view` shape, GPU lease held across submit -> poll -> download and released before CPU persist through `IAssetFileStore`. The real workflow JSON and `IMediaInspector` probe are `TODO(verify-on-home)`.
 - `src/AIStudio.Application/Capabilities/CapabilityIds.cs` (`VisualCharacterAnimation`), `ProductionCapabilityCatalog.cs` (`comfyui-i2v`) — the existing `visual.character_animation` capability is registered and enabled only by `ComfyUiVideo:Enabled=true`; no production router or handler selects it in v1.
 - `tests/AIStudio.Tests/Rendering/ComfyUiVideoGenerationProviderTests.cs`, `FakeVideoGenerationProvider.cs` — fake-HTTP coverage (disabled, trusted bounds, timeout, execution/download errors, artifact signature, no path/host leakage, GPU-lease window, pinned first frame) and a reusable provider double for future routing tests.
-- `docs/development/I2V_PLAN.md`, `I2V_AGENT_TASK.md` — cross-machine checklist (Mac scaffold vs. home benchmark/E2E) and the ready-to-run execution prompt.
+- `docs/development/I2V_PLAN.md`, `I2V_AGENT_TASK.md`, `I2V_HOME_TASK.md` — cross-machine checklist (Mac scaffold vs. home benchmark/E2E) plus the ready-to-run execution prompt for each machine.
 
 ## Final Video QA (pre-publish deterministic validation)
 

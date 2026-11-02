@@ -6,25 +6,32 @@ This file is the single entry point for the next milestone (real character anima
 session on either machine should be able to start from here without a briefing: read this file,
 then `../agent/CHECKPOINT.md` and `../context/STATE.md`.
 
-To execute the Mac-side scaffold (P0.3, P1.1–P1.5) in a new session, use the ready prompt in
-`I2V_AGENT_TASK.md` (same directory).
+To execute the work, use the ready prompt for the machine you are on:
+
+- `I2V_AGENT_TASK.md` — Mac scaffold (P0.3, P1.1–P1.5); done 2026-11-02, kept for reference.
+- `I2V_HOME_TASK.md` — home GPU steps (P0.1 push, P1.6 real workflow, P2 benchmark).
 
 ## 1. Where we actually are
 
 Verified in this checkout (2026-11-02, office Mac):
 
-- `HEAD` is `10d17d9` (2026-09-24); worktree clean; `main` equals `origin/main`.
-  `git fetch --all --prune` found no newer commit on any remote branch.
-- Release build 0 warnings / 0 errors. Test run without a database:
-  1168 total, 1157 passed, 10 failed (`ConnectionStrings__DefaultConnection` absent,
-  `AIStudio.Tests.Persistence` only), 1 skipped (real audio E2E gated by env vars).
+- `main` is still `10d17d9` (2026-09-24) and nothing has been pushed. The Mac scaffold lives on
+  `feat/i2v-scaffold` (4 commits on top of `docs/video1-state-cleanup`): Application contracts,
+  ComfyUI adapter, options, capability registration, and tests.
+- Release build 0 warnings / 0 errors. Full suite against the local PostgreSQL 18.6 Compose
+  container (port 5544): 1190 total, 1189 passed, 0 failed, 1 skipped (real audio E2E). Without
+  a database the same 10 `AIStudio.Tests.Persistence` tests fail for the missing connection
+  string only.
 - The render pipeline already consumes video clips: `AssetType.Video` flows through
   `SceneMediaInput`, and both Manim and Blender emit clips (D-028). I2V is therefore
   provider + routing + clip-duration fitting, not new render plumbing.
-- No `IVideoGenerationProvider` exists. `visual.character_animation` is already a valid
-  capability id used as the documented "valid data, no provider yet" example (D-036) —
-  use that id, do not invent a new one.
-- `STATE.md` ("Known issues") still lists character animation as deferred.
+- `IVideoGenerationProvider` exists (D-046); `visual.character_animation` is registered against
+  provider `comfyui-i2v`, disabled by default. No router or handler selects it yet.
+- The real workflow JSON files (`i2v_workflow.json`, `i2v_workflow_first_frame.json`) do not
+  exist by design. `ComfyUiVideo:WorkflowPath` points at them, so enabling the engine without
+  authoring them fails with `video_not_configured` instead of inventing a graph.
+- Artifact verification is still an MP4/WebM signature check; replace it with `IMediaInspector`
+  once the real output format is confirmed (P3.1).
 
 Reported from the 2026-10-01 home session — NOT verifiable in this checkout (code and
 artifacts are absent):
