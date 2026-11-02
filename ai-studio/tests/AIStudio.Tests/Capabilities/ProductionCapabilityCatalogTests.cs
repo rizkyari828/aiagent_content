@@ -17,6 +17,7 @@ public sealed class ProductionCapabilityCatalogTests
         Assert.Contains(CapabilityIds.VisualUiMotion, ids);
         Assert.Contains(CapabilityIds.VisualAiImage, ids);
         Assert.Contains(CapabilityIds.VisualThreeD, ids);
+        Assert.Contains(CapabilityIds.VisualCharacterAnimation, ids);
         Assert.Contains(CapabilityIds.MediaCompose, ids);
         Assert.Contains(CapabilityIds.SubtitleBurned, ids);
     }
@@ -31,7 +32,8 @@ public sealed class ProductionCapabilityCatalogTests
                 musicEnabled: true,
                 manimEnabled: true,
                 imageEnabled: true,
-                threeDEnabled: true));
+                threeDEnabled: true,
+                videoEnabled: true));
 
         AssertProvider(registry, CapabilityIds.SpeechNarration, "voxcpm2");
         AssertProvider(registry, CapabilityIds.MusicInstrumental, "ace-step");
@@ -40,8 +42,35 @@ public sealed class ProductionCapabilityCatalogTests
         AssertProvider(registry, CapabilityIds.VisualUiMotion, "animated-svg");
         AssertProvider(registry, CapabilityIds.VisualAiImage, "comfyui-flux");
         AssertProvider(registry, CapabilityIds.VisualThreeD, "blender");
+        AssertProvider(registry, CapabilityIds.VisualCharacterAnimation, "comfyui-i2v");
         AssertProvider(registry, CapabilityIds.MediaCompose, "ffmpeg-compose");
         AssertProvider(registry, CapabilityIds.SubtitleBurned, "ffmpeg-subtitle-burn");
+    }
+
+    [Fact]
+    public void CharacterAnimationProviderIsDisabledByDefault()
+    {
+        var registry = new CapabilityRegistry(
+            ProductionCapabilityCatalog.Capabilities,
+            ProductionCapabilityCatalog.CreateProviders(
+                speechEnabled: false,
+                musicEnabled: false,
+                manimEnabled: false,
+                imageEnabled: false,
+                threeDEnabled: false,
+                videoEnabled: false));
+
+        var resolution = registry.Resolve(
+            CapabilityRequirement.For(CapabilityIds.VisualCharacterAnimation));
+
+        Assert.False(resolution.IsResolved);
+        Assert.Equal(CapabilityGapReason.ProviderDisabled, resolution.Gap!.Reason);
+        Assert.Equal("comfyui-i2v", registry
+            .GetProviders(CapabilityIds.VisualCharacterAnimation)[0]
+            .ProviderId);
+        Assert.False(registry
+            .GetProviders(CapabilityIds.VisualCharacterAnimation)[0]
+            .Enabled);
     }
 
     [Fact]
@@ -54,7 +83,8 @@ public sealed class ProductionCapabilityCatalogTests
                 musicEnabled: false,
                 manimEnabled: false,
                 imageEnabled: false,
-                threeDEnabled: false));
+                threeDEnabled: false,
+                videoEnabled: false));
 
         Assert.True(registry.Resolve(CapabilityRequirement.For(CapabilityIds.VisualStill)).IsResolved);
         Assert.True(registry.Resolve(CapabilityRequirement.For(CapabilityIds.VisualUiMotion)).IsResolved);
@@ -73,6 +103,9 @@ public sealed class ProductionCapabilityCatalogTests
         Assert.Equal(
             CapabilityGapReason.ProviderDisabled,
             registry.Resolve(CapabilityRequirement.For(CapabilityIds.VisualThreeD)).Gap!.Reason);
+        Assert.Equal(
+            CapabilityGapReason.ProviderDisabled,
+            registry.Resolve(CapabilityRequirement.For(CapabilityIds.VisualCharacterAnimation)).Gap!.Reason);
     }
 
     [Fact]
@@ -83,7 +116,8 @@ public sealed class ProductionCapabilityCatalogTests
             musicEnabled: true,
             manimEnabled: true,
             imageEnabled: true,
-            threeDEnabled: true);
+            threeDEnabled: true,
+            videoEnabled: true);
 
         Assert.All(providers, provider =>
         {

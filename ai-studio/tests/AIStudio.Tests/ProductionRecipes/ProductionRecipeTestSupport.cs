@@ -35,15 +35,34 @@ internal static class ProductionRecipeTestSupport
         bool musicEnabled = true,
         bool manimEnabled = true,
         bool imageEnabled = true,
-        bool threeDEnabled = true) =>
+        bool threeDEnabled = true,
+        bool videoEnabled = true) =>
         new(
-            ProductionCapabilityCatalog.Capabilities,
-            ProductionCapabilityCatalog.CreateProviders(
-                speechEnabled,
-                musicEnabled,
-                manimEnabled,
-                imageEnabled,
-                threeDEnabled));
+            Capabilities,
+            ProductionCapabilityCatalog
+                .CreateProviders(
+                    speechEnabled,
+                    musicEnabled,
+                    manimEnabled,
+                    imageEnabled,
+                    threeDEnabled,
+                    videoEnabled)
+                .Where(provider => provider.CapabilityId != CapabilityIds.VisualCharacterAnimation)
+                .ToArray());
+
+    /// <summary>
+    /// The production catalog minus the I2V capability. These recipe tests keep a fixed
+    /// "valid data, no provider yet" fixture (see
+    /// <c>ProductionRecipeResolverTests.FutureCapabilityIsValidDataButUnresolved</c>):
+    /// the I2V scaffold registers <c>visual.character_animation</c> in the production
+    /// catalog, so it is excluded here to keep that scenario testable. The registration
+    /// itself is covered by <c>ProductionCapabilityCatalogTests</c> and
+    /// <c>CapabilityRegistryDependencyInjectionTests</c>.
+    /// </summary>
+    private static IReadOnlyList<CapabilityDescriptor> Capabilities =>
+        ProductionCapabilityCatalog.Capabilities
+            .Where(capability => capability.Id != CapabilityIds.VisualCharacterAnimation)
+            .ToArray();
 }
 
 /// <summary>

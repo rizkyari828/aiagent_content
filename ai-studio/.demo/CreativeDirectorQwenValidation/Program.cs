@@ -67,7 +67,8 @@ var capabilities = new CapabilityRegistry(
         musicEnabled: GetEnvBool("MusicGeneration__Enabled", false),
         manimEnabled: GetEnvBool("Manim__Enabled", false),
         imageEnabled: GetEnvBool("ComfyUi__Enabled", false),
-        threeDEnabled: GetEnvBool("Blender__Enabled", false)));
+        threeDEnabled: GetEnvBool("Blender__Enabled", false),
+        videoEnabled: GetEnvBool("ComfyUiVideo__Enabled", false)));
 
 var recipeRegistry = new ProductionRecipeRegistry(SeedProductionRecipes.All);
 var recipeResolver = new ProductionRecipeResolver(capabilities);

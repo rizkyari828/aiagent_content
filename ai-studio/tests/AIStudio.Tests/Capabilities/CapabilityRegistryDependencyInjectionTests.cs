@@ -47,6 +47,33 @@ public sealed class CapabilityRegistryDependencyInjectionTests
     }
 
     [Fact]
+    public void CharacterAnimationProviderIsEnabledOnlyByItsOptionsSection()
+    {
+        using (var provider = BuildProvider())
+        {
+            var registry = provider.GetRequiredService<ICapabilityRegistry>();
+            var resolution = registry.Resolve(
+                CapabilityRequirement.For(CapabilityIds.VisualCharacterAnimation));
+
+            Assert.False(resolution.IsResolved);
+            Assert.Equal(CapabilityGapReason.ProviderDisabled, resolution.Gap!.Reason);
+        }
+
+        using (var provider = BuildProvider(new Dictionary<string, string?>
+        {
+            ["ComfyUiVideo:Enabled"] = "true"
+        }))
+        {
+            var registry = provider.GetRequiredService<ICapabilityRegistry>();
+            var resolution = registry.Resolve(
+                CapabilityRequirement.For(CapabilityIds.VisualCharacterAnimation));
+
+            Assert.True(resolution.IsResolved);
+            Assert.Equal("comfyui-i2v", resolution.Provider!.ProviderId);
+        }
+    }
+
+    [Fact]
     public void UnknownCapabilityReportsNotImplementedWithoutAnExternalRuntime()
     {
         using var provider = BuildProvider();

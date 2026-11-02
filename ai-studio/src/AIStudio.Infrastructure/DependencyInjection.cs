@@ -320,6 +320,52 @@ public static class DependencyInjection
                     UriKind.Absolute);
                 client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
             });
+
+        services
+            .AddOptions<ComfyUiVideoOptions>()
+            .Bind(configuration.GetSection(ComfyUiVideoOptions.SectionName))
+            .Validate(
+                options => IsValidBaseUrl(options.BaseUrl),
+                "ComfyUiVideo:BaseUrl must be an absolute HTTP or HTTPS URL.")
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.WorkflowPath),
+                "ComfyUiVideo:WorkflowPath is required.")
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.FirstFrameWorkflowPath),
+                "ComfyUiVideo:FirstFrameWorkflowPath is required.")
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.OutputDirectory),
+                "ComfyUiVideo:OutputDirectory is required.")
+            .Validate(
+                options => options.TimeoutSeconds is >= 1 and <= 7200,
+                "ComfyUiVideo:TimeoutSeconds must be between 1 and 7200.")
+            .Validate(
+                options => options.MaxSeconds is >= 1 and <= 60,
+                "ComfyUiVideo:MaxSeconds must be between 1 and 60.")
+            .Validate(
+                options => options.Width is >= 16 and <= 4096,
+                "ComfyUiVideo:Width must be between 16 and 4096.")
+            .Validate(
+                options => options.Height is >= 16 and <= 4096,
+                "ComfyUiVideo:Height must be between 16 and 4096.")
+            .Validate(
+                options => options.Fps is >= 1 and <= 120,
+                "ComfyUiVideo:Fps must be between 1 and 120.")
+            .ValidateOnStart();
+
+        // Registered but disabled by default and not selected by any production path
+        // in v1; a missing external ComfyUI runtime never affects existing engines.
+        services.AddHttpClient<IVideoGenerationProvider, ComfyUiVideoGenerationProvider>(
+            (serviceProvider, client) =>
+            {
+                var options = serviceProvider
+                    .GetRequiredService<IOptions<ComfyUiVideoOptions>>()
+                    .Value;
+                client.BaseAddress = new Uri(
+                    $"{options.BaseUrl.TrimEnd('/')}/",
+                    UriKind.Absolute);
+                client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+            });
     }
 
     private static void AddAudioGeneration(
@@ -408,13 +454,17 @@ public static class DependencyInjection
             var threeD = serviceProvider
                 .GetRequiredService<IOptions<BlenderOptions>>()
                 .Value;
+            var video = serviceProvider
+                .GetRequiredService<IOptions<ComfyUiVideoOptions>>()
+                .Value;
 
             var providers = ProductionCapabilityCatalog.CreateProviders(
                 speechEnabled: speech.Enabled,
                 musicEnabled: music.Enabled,
                 manimEnabled: manim.Enabled,
                 imageEnabled: images.Enabled,
-                threeDEnabled: threeD.Enabled);
+                threeDEnabled: threeD.Enabled,
+                videoEnabled: video.Enabled);
 
             return new CapabilityRegistry(
                 ProductionCapabilityCatalog.Capabilities,

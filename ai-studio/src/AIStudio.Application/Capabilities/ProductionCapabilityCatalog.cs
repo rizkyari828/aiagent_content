@@ -19,6 +19,7 @@ public static class ProductionCapabilityCatalog
         new() { Id = CapabilityIds.VisualUiMotion, DisplayName = "UI motion graphics", Category = "visual" },
         new() { Id = CapabilityIds.VisualAiImage, DisplayName = "AI generated image", Category = "visual" },
         new() { Id = CapabilityIds.VisualThreeD, DisplayName = "3D scene render", Category = "visual" },
+        new() { Id = CapabilityIds.VisualCharacterAnimation, DisplayName = "Character animation (I2V)", Category = "visual" },
         new() { Id = CapabilityIds.MediaCompose, DisplayName = "Media composition", Category = "media" },
         new() { Id = CapabilityIds.SubtitleBurned, DisplayName = "Burned-in subtitles", Category = "subtitle" }
     ];
@@ -34,7 +35,8 @@ public static class ProductionCapabilityCatalog
         bool musicEnabled,
         bool manimEnabled,
         bool imageEnabled,
-        bool threeDEnabled) =>
+        bool threeDEnabled,
+        bool videoEnabled) =>
     [
         new()
         {
@@ -91,6 +93,14 @@ public static class ProductionCapabilityCatalog
             Priority = 100,
             Enabled = threeDEnabled,
             RuntimeCategory = "external_process_gpu"
+        },
+        new()
+        {
+            ProviderId = "comfyui-i2v",
+            CapabilityId = CapabilityIds.VisualCharacterAnimation,
+            Priority = 100,
+            Enabled = videoEnabled,
+            RuntimeCategory = "local_service_gpu"
         },
         new()
         {
