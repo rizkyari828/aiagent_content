@@ -6,6 +6,9 @@ This file is the single entry point for the next milestone (real character anima
 session on either machine should be able to start from here without a briefing: read this file,
 then `../agent/CHECKPOINT.md` and `../context/STATE.md`.
 
+To execute the Mac-side scaffold (P0.3, P1.1–P1.5) in a new session, use the ready prompt in
+`I2V_AGENT_TASK.md` (same directory).
+
 ## 1. Where we actually are
 
 Verified in this checkout (2026-11-02, office Mac):
