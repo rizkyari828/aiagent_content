@@ -76,7 +76,7 @@ public sealed class ProductionRecipeValidatorTests
         var recipe = ProductionRecipeTestSupport.Recipe(
             "future-format",
             1,
-            ProductionRecipeRequirement.Required(new CapabilityId("visual.character_animation")));
+            ProductionRecipeRequirement.Required(new CapabilityId("visual.lip_sync")));
 
         Assert.Empty(recipe.Validate());
     }
