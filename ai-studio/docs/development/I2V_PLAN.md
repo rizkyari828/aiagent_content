@@ -15,12 +15,12 @@ To execute the work, use the ready prompt for the machine you are on:
 
 Verified in this checkout (2026-11-02, office Mac):
 
-- `main` is still `10d17d9` (2026-09-24), and the work lives on two pushed branches:
-  `docs/video1-state-cleanup` (plan/task docs) and `feat/i2v-scaffold` (built on it:
-  Application contracts, ComfyUI adapter, options, capability registration, tests). Fetch and
-  merge both on the home machine; `main` does not contain them yet.
+- `main` now contains the Mac work: merge `233113a` brings the docs reconciliation, the I2V
+  scaffold (contracts, ComfyUI adapter, options, capability, tests), and the office P3 items
+  (FinalVideoQa in job details, `IMediaInspector` artifact verification, `VideoClipTiming`,
+  trusted workflow validator). The home machine only needs `git pull` on `main`.
 - Release build 0 warnings / 0 errors. Full suite against the local PostgreSQL 18.6 Compose
-  container (port 5544): 1190 total, 1189 passed, 0 failed, 1 skipped (real audio E2E). Without
+  container (port 5544): 1246 total, 1245 passed, 0 failed, 1 skipped (real audio E2E). Without
   a database the same 10 `AIStudio.Tests.Persistence` tests fail for the missing connection
   string only.
 - The render pipeline already consumes video clips: `AssetType.Video` flows through
