@@ -6,6 +6,7 @@ using AIStudio.Domain.Jobs;
 using AIStudio.Domain.Narration;
 using AIStudio.Domain.Scripts;
 using AIStudio.Domain.Subtitles;
+using AIStudio.Domain.Tracking;
 using Microsoft.EntityFrameworkCore;
 
 namespace AIStudio.Infrastructure.Persistence;
@@ -28,6 +29,12 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<FinalApproval> FinalApprovals => Set<FinalApproval>();
 
     public DbSet<PublicationRecord> PublicationRecords => Set<PublicationRecord>();
+
+    public DbSet<MetricSnapshot> MetricSnapshots => Set<MetricSnapshot>();
+
+    public DbSet<TimeEntry> TimeEntries => Set<TimeEntry>();
+
+    public DbSet<CostEntry> CostEntries => Set<CostEntry>();
 
     public void Add(ContentProject project)
     {

@@ -609,6 +609,197 @@ namespace AIStudio.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AIStudio.Domain.Tracking.CostEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("amount");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("category");
+
+                    b.Property<Guid>("ContentProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("content_project_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<DateTimeOffset>("IncurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("incurred_at");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("notes");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContentProjectId", "IncurredAt")
+                        .HasDatabaseName("ix_cost_entries_content_project_id_incurred_at");
+
+                    b.ToTable("cost_entries", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_cost_entries_amount", "amount > 0");
+
+                            t.HasCheckConstraint("ck_cost_entries_currency", "char_length(currency) = 3");
+
+                            t.HasCheckConstraint("ck_cost_entries_kind", "kind IN ('Actual', 'Estimated', 'Refunded')");
+                        });
+                });
+
+            modelBuilder.Entity("AIStudio.Domain.Tracking.MetricSnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal?>("AverageViewDurationSeconds")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("average_view_duration_seconds");
+
+                    b.Property<DateTimeOffset>("CapturedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("captured_at");
+
+                    b.Property<decimal?>("ClickThroughRate")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)")
+                        .HasColumnName("click_through_rate");
+
+                    b.Property<Guid>("ContentProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("content_project_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int?>("Impressions")
+                        .HasColumnType("integer")
+                        .HasColumnName("impressions");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("notes");
+
+                    b.Property<Guid?>("PublicationRecordId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("publication_record_id");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("source");
+
+                    b.Property<int?>("SubscribersGained")
+                        .HasColumnType("integer")
+                        .HasColumnName("subscribers_gained");
+
+                    b.Property<int?>("Views")
+                        .HasColumnType("integer")
+                        .HasColumnName("views");
+
+                    b.Property<decimal?>("WatchTimeMinutes")
+                        .HasPrecision(14, 3)
+                        .HasColumnType("numeric(14,3)")
+                        .HasColumnName("watch_time_minutes");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PublicationRecordId")
+                        .HasDatabaseName("ix_metric_snapshots_publication_record_id");
+
+                    b.HasIndex("ContentProjectId", "CapturedAt")
+                        .IsUnique()
+                        .HasDatabaseName("ux_metric_snapshots_content_project_id_captured_at");
+
+                    b.ToTable("metric_snapshots", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_metric_snapshots_click_through_rate", "click_through_rate IS NULL OR (click_through_rate >= 0 AND click_through_rate <= 1)");
+
+                            t.HasCheckConstraint("ck_metric_snapshots_non_negative", "(views IS NULL OR views >= 0) AND (impressions IS NULL OR impressions >= 0) AND (average_view_duration_seconds IS NULL OR average_view_duration_seconds >= 0) AND (watch_time_minutes IS NULL OR watch_time_minutes >= 0) AND (subscribers_gained IS NULL OR subscribers_gained >= 0)");
+                        });
+                });
+
+            modelBuilder.Entity("AIStudio.Domain.Tracking.TimeEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("category");
+
+                    b.Property<Guid>("ContentProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("content_project_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("kind");
+
+                    b.Property<decimal>("Minutes")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("minutes");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("notes");
+
+                    b.Property<DateTimeOffset>("RecordedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("recorded_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContentProjectId", "RecordedAt")
+                        .HasDatabaseName("ix_time_entries_content_project_id_recorded_at");
+
+                    b.ToTable("time_entries", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_time_entries_kind", "kind IN ('Human', 'Machine')");
+
+                            t.HasCheckConstraint("ck_time_entries_minutes", "minutes > 0");
+                        });
+                });
+
             modelBuilder.Entity("AIStudio.Domain.Approvals.FinalApproval", b =>
                 {
                     b.HasOne("AIStudio.Domain.Content.ContentProject", "ContentProject")
@@ -732,6 +923,38 @@ namespace AIStudio.Infrastructure.Persistence.Migrations
                     b.Navigation("ContentProject");
 
                     b.Navigation("SourceJob");
+                });
+
+            modelBuilder.Entity("AIStudio.Domain.Tracking.CostEntry", b =>
+                {
+                    b.HasOne("AIStudio.Domain.Content.ContentProject", null)
+                        .WithMany()
+                        .HasForeignKey("ContentProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AIStudio.Domain.Tracking.MetricSnapshot", b =>
+                {
+                    b.HasOne("AIStudio.Domain.Content.ContentProject", null)
+                        .WithMany()
+                        .HasForeignKey("ContentProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AIStudio.Domain.Approvals.PublicationRecord", null)
+                        .WithMany()
+                        .HasForeignKey("PublicationRecordId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("AIStudio.Domain.Tracking.TimeEntry", b =>
+                {
+                    b.HasOne("AIStudio.Domain.Content.ContentProject", null)
+                        .WithMany()
+                        .HasForeignKey("ContentProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

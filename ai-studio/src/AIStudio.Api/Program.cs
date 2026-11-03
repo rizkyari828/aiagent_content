@@ -73,6 +73,7 @@ app.MapAudioApi();
 app.MapIdentityAssetApi();
 app.MapFinalApprovalApi();
 app.MapPublicationApi();
+app.MapTrackingApi();
 
 app.Run();
 
