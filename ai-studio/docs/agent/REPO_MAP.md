@@ -20,6 +20,18 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `src/AIStudio.Api/Endpoints/ContentProjectEndpoints.cs` — `GET|PUT /api/content-projects/{id}`, `GET /api/content-projects`, `GET .../readiness`, `POST .../transitions` with stable `code` extensions.
 - `tests/AIStudio.Tests/Content/`, `tests/AIStudio.Tests/Api/ContentProjectApiContractTests.cs`, `tests/AIStudio.Tests/Persistence/ContentProjectLifecycleVerticalSliceTests.cs` — workflow, readiness, API contract, and DB-gated slice coverage.
 
+## Project transfer (export/import)
+
+- `src/AIStudio.Application/Transfer/ProjectTransferManifest.cs` — versioned manifest DTOs for one project (project, reviewed script, terminal source jobs, scene assets, narration/subtitle, final approval, publication, tracking rows, relative file index); no absolute path, credential, log, model, or build artifact is representable.
+- `ProjectPackageSerializer.cs`, `ProjectPackagePath.cs` — strict JSON contract (schemaVersion 1, unknown members/enum values rejected) and the single safe relative-path rule used by both package entries and asset-root paths.
+- `ProjectPackageReader.cs` — validates schemaVersion -> safe entries (no traversal/absolute path/symlink/case collision) -> manifest structure and cross-references -> per-file size and SHA-256; returns verified file entries.
+- `ProjectExportWorkflow.cs`, `ProjectImportWorkflow.cs` — export one project to one ZIP atomically (recomputes hashes, compares persisted metadata, enforces limits); import stages one multipart package, rejects an existing project id, writes files exclusively, inserts all rows through the repository, and cleans up on failure. v1 has no id remap, merge, or overwrite.
+- `IProjectTransferStore.cs`, `IProjectTransferRepository.cs`, `ProjectTransferSnapshot.cs`, `ProjectTransferException.cs`, `ProjectTransferLimits.cs` — application-owned ports/contracts with stable `code`s.
+- `src/AIStudio.Infrastructure/Transfer/LocalProjectTransferStore.cs` — approved-root ZIP/filesystem adapter (temporary package + atomic promote, exclusive import writes, list without reading contents, hashed copies).
+- `src/AIStudio.Infrastructure/Transfer/ProjectTransferRepository.cs`, `ProjectTransferOptions.cs` — EF read snapshot and single-transaction exact-restore insert (ids/statuses/revisions/timestamps via the domain factories plus private-setter restore), plus `ProjectTransfer:RootPath`/size-limit options.
+- `src/AIStudio.Api/Endpoints/ProjectTransferEndpoints.cs` — `POST|GET /api/content-projects/{id}/exports` and `POST /api/projects/imports` (multipart) with stable `code` extensions.
+- `tests/AIStudio.Tests/Transfer/`, `tests/AIStudio.Tests/Persistence/ProjectTransferVerticalSliceTests.cs` — manifest/path/hash/limit/reader/import/export/API tests plus the DB-gated export -> delete -> import round-trip and identifier-conflict rollback.
+
 ## GenerateScript
 
 - `src/AIStudio.Application/Jobs/GenerateScript/GenerateScriptWorkflow.cs` — enqueue selected idea as a durable script job.
