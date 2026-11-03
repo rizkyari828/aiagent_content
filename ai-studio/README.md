@@ -1,8 +1,8 @@
 # Local AI Content Studio
 
-Studio produksi konten lokal untuk satu operator dan satu channel YouTube, berdasarkan PRD v0.7.
+Studio produksi konten lokal untuk satu operator dan satu channel YouTube, berdasarkan PRD v0.9.2 (frozen); dokumen v0.7 lama tetap tersimpan sebagai arsip.
 
-**Status:** Foundation, local runtime, core domain/persistent jobs, safe PostgreSQL worker claiming, dan AI Gateway/Ollama integration selesai. P1/MVP secara keseluruhan belum selesai; workflow konten dan UI produk masih menunggu milestone berikutnya serta handoff Figma.
+**Status:** Foundation, local runtime, core domain/persistent jobs, safe PostgreSQL worker claiming, AI Gateway/Ollama, dan jalur produksi Video #1 (idea → script → review → storyboard → aset → narasi/subtitle → render → QA) selesai. P1/MVP secara keseluruhan **belum** selesai: UI produk masih placeholder, dan A3/publication record, metrics, serta export/import belum ada. Rincian bukti: [P1 readiness audit](docs/development/P1_READINESS.md).
 
 ## Mulai dari sini
 
@@ -12,7 +12,7 @@ Studio produksi konten lokal untuk satu operator dan satu channel YouTube, berda
 - [Status dan verifikasi](docs/context/STATE.md)
 - [Backlog](docs/development/PLAN.md)
 - [Arsitektur](docs/development/ARCHITECTURE.md)
-- [PRD dan indeks](docs/product/INDEX.md)
+- [PRD dan indeks](docs/product/PRD_INDEX.md) (v0.9.2, otoritatif; arsip v0.7 di `docs/product/INDEX.md`)
 
 ## Environment development
 

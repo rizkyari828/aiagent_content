@@ -1,6 +1,6 @@
 # Incremental implementation plan
 
-Status: working breakdown of PRD v0.7; infrastructure foundation and the first persistent domain/job slice are complete, while the broader product behavior remains pending. This orders delivery without removing P1 requirements or promising an unbenchmarked schedule.
+Status: working breakdown of PRD v0.9.2 (frozen source; index at `../product/PRD_INDEX.md`). Infrastructure foundation, the persistent job slice, and the Video #1 production path are implemented; P1 acceptance is **not** met yet. Live audit: [P1_READINESS.md](P1_READINESS.md) (2026-11-03: 2 Done / 6 Partial / 3 Missing / 1 Unverified). This orders delivery without removing P1 requirements or promising an unbenchmarked schedule.
 
 ## Immediate scope
 
