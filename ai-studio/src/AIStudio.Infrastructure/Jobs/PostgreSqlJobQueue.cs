@@ -3,6 +3,7 @@ using System.Text.Json;
 using AIStudio.Application.Jobs;
 using AIStudio.Domain.Jobs;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -257,6 +258,65 @@ public sealed class PostgreSqlJobQueue(
         command.Parameters.AddWithValue("now", NpgsqlDbType.TimestampTz, utcNow.ToUniversalTime());
 
         return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+    }
+
+    public async Task<JobCancelResult> CancelAsync(
+        Guid jobId,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken)
+    {
+        if (jobId == Guid.Empty)
+        {
+            throw new ArgumentException("Job ID cannot be empty.", nameof(jobId));
+        }
+
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await context.Database.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await context.Database.BeginTransactionAsync(
+            IsolationLevel.ReadCommitted,
+            cancellationToken);
+
+        var connection = (NpgsqlConnection)context.Database.GetDbConnection();
+        var dbTransaction = (NpgsqlTransaction)transaction.GetDbTransaction();
+
+        JobStatus? currentStatus;
+        await using (var lockCommand = new NpgsqlCommand(
+            "SELECT status FROM jobs WHERE id = @job_id FOR UPDATE;",
+            connection,
+            dbTransaction))
+        {
+            lockCommand.Parameters.AddWithValue("job_id", NpgsqlDbType.Uuid, jobId);
+            var scalar = await lockCommand.ExecuteScalarAsync(cancellationToken);
+            currentStatus = scalar is null or DBNull
+                ? null
+                : Enum.Parse<JobStatus>((string)scalar);
+        }
+
+        if (currentStatus is null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new JobCancelResult(JobCancelOutcome.NotFound, null);
+        }
+
+        // The aggregate enforces the same Queued/Running rule; the row lock above makes
+        // the read-then-write safe against a concurrent claim/completion.
+        var job = await context.Jobs.SingleAsync(
+            candidate => candidate.Id == jobId,
+            cancellationToken);
+
+        try
+        {
+            job.Cancel(utcNow);
+        }
+        catch (InvalidOperationException)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new JobCancelResult(JobCancelOutcome.NotAllowed, currentStatus);
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new JobCancelResult(JobCancelOutcome.Cancelled, job.Status);
     }
 
     private static void ValidateWorkerAndLease(
