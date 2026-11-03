@@ -100,6 +100,12 @@ public sealed record ProjectManifestMediaTrack(
     DateTimeOffset? RetrievedAt,
     DateTimeOffset CreatedAt);
 
+/// <summary>
+/// A3 final approval. Schema v2 records the review direction explicitly: the lowercase
+/// decision token, the decision note (mandatory for <c>changes_requested</c>), and when
+/// the current decision was written. Schema v1 packages carry none of the three fields
+/// and resolve to the legacy approval.
+/// </summary>
 public sealed record ProjectManifestFinalApproval(
     Guid Id,
     Guid ContentProjectId,
@@ -113,7 +119,26 @@ public sealed record ProjectManifestFinalApproval(
     int Revision,
     DateTimeOffset ApprovedAt,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? Decision = null,
+    string? DecisionNote = null,
+    DateTimeOffset? DecidedAt = null)
+{
+    /// <summary>
+    /// v1 packages have no decision, so they restore the legacy approval. The reader
+    /// rejects an unknown or non-canonical token before this is called.
+    /// </summary>
+    public FinalApprovalDecision ResolveDecision() =>
+        Decision is null
+            ? FinalApprovalDecision.Approved
+            : FinalApprovalDecisionTokens.Parse(Decision);
+
+    /// <summary>
+    /// v1 rows predate <c>decided_at</c>; the D-051 migration backfilled it from
+    /// <c>approved_at</c>, so a v1 package restores the same value here.
+    /// </summary>
+    public DateTimeOffset ResolveDecidedAt() => DecidedAt ?? ApprovedAt;
+}
 
 public sealed record ProjectManifestPublication(
     Guid Id,

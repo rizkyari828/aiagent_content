@@ -1,6 +1,9 @@
+using System.IO.Compression;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using AIStudio.Application.Approvals;
 using AIStudio.Application.Transfer;
+using AIStudio.Domain.Approvals;
 using AIStudio.Domain.Assets;
 using AIStudio.Domain.Content;
 using AIStudio.Domain.Jobs;
@@ -156,6 +159,10 @@ public sealed class ProjectTransferVerticalSliceTests
                 Assert.Equal(1, approval.Revision);
                 Assert.Equal("youtube", approval.Destination);
                 Assert.Equal(TransferTestData.Sha256(renderBytes), approval.ArtifactContentHash);
+                Assert.Equal(FinalApprovalDecision.Approved, approval.Decision);
+                Assert.Null(approval.DecisionNote);
+                AssertClose(snapshot.FinalApproval.DecidedAt, approval.DecidedAt);
+                AssertClose(snapshot.FinalApproval.ApprovedAt, approval.ApprovedAt);
 
                 var publication = await verification.PublicationRecords
                     .AsNoTracking()
@@ -198,6 +205,187 @@ public sealed class ProjectTransferVerticalSliceTests
                 var status = await approvalWorkflow.EvaluateAsync(projectId, cancellationToken);
                 Assert.NotNull(status);
                 Assert.Equal(FinalApprovalState.Approved, status.State);
+            }
+        }
+        finally
+        {
+            await DeleteProjectAndFilesAsync(
+                options,
+                fixture,
+                projectId,
+                cancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task ExportDeleteImport_RestoresChangesRequestedDecisionNoteAndTimestamp()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var connectionString =
+            Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
+        Assert.False(
+            string.IsNullOrWhiteSpace(connectionString),
+            "Set ConnectionStrings__DefaultConnection before running integration tests.");
+
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseNpgsql(connectionString)
+            .Options;
+        var factory = new TestDbContextFactory(options);
+        const string note = "Subtitles are cut off in scene 3";
+        var snapshot = TransferTestData.Snapshot(
+            out var renderBytes,
+            out var sceneBytes,
+            out var narrationBytes,
+            out var subtitleBytes,
+            decision: FinalApprovalDecision.ChangesRequested,
+            decisionNote: note);
+        using var fixture = TransferTestStore.Create();
+        WriteFiles(fixture, renderBytes, sceneBytes, narrationBytes, subtitleBytes);
+        var projectId = snapshot.Project.Id;
+        var sourceApproval = snapshot.FinalApproval!;
+
+        try
+        {
+            await SeedAsync(options, snapshot, cancellationToken);
+
+            byte[] package;
+            await using (var exportContext = new ApplicationDbContext(options))
+            {
+                var export = new ProjectExportWorkflow(
+                    new ProjectTransferRepository(exportContext),
+                    fixture.Store,
+                    TimeProvider.System);
+                var info = await export.ExportAsync(projectId, cancellationToken);
+                package = fixture.ReadPackage(info.FileName);
+            }
+
+            await DeleteProjectAndFilesAsync(
+                options,
+                fixture,
+                projectId,
+                cancellationToken);
+
+            await using (var importContext = new ApplicationDbContext(options))
+            {
+                var import = new ProjectImportWorkflow(
+                    new ProjectTransferRepository(importContext),
+                    fixture.Store);
+                var result = await import.ImportAsync(
+                    new MemoryStream(package),
+                    cancellationToken);
+                Assert.Equal(1, result.Counts.FinalApprovals);
+            }
+
+            await using (var verification = new ApplicationDbContext(options))
+            {
+                var approval = await verification.FinalApprovals
+                    .AsNoTracking()
+                    .SingleAsync(
+                        candidate => candidate.ContentProjectId == projectId,
+                        cancellationToken);
+                Assert.Equal(FinalApprovalDecision.ChangesRequested, approval.Decision);
+                Assert.Equal(note, approval.DecisionNote);
+                Assert.Equal(sourceApproval.Revision, approval.Revision);
+                AssertClose(sourceApproval.DecidedAt, approval.DecidedAt);
+                AssertClose(sourceApproval.ApprovedAt, approval.ApprovedAt);
+                AssertClose(sourceApproval.CreatedAt, approval.CreatedAt);
+                AssertClose(sourceApproval.UpdatedAt, approval.UpdatedAt);
+
+                var approvalWorkflow = new FinalApprovalWorkflow(
+                    new FinalApprovalRepository(verification),
+                    new ContentProjectReader(factory),
+                    new JobReader(factory),
+                    new LocalAssetFileStore(
+                        Options.Create(new AssetStorageOptions
+                        {
+                            RootPath = fixture.AssetRoot
+                        })),
+                    TimeProvider.System);
+                var status = await approvalWorkflow.EvaluateAsync(
+                    projectId,
+                    cancellationToken);
+                Assert.NotNull(status);
+                Assert.Equal(FinalApprovalState.ChangesRequested, status.State);
+                Assert.Equal(note, status.Approval!.DecisionNote);
+            }
+        }
+        finally
+        {
+            await DeleteProjectAndFilesAsync(
+                options,
+                fixture,
+                projectId,
+                cancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task Import_V1PackageWithoutDecision_RestoresApproved()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var connectionString =
+            Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
+        Assert.False(
+            string.IsNullOrWhiteSpace(connectionString),
+            "Set ConnectionStrings__DefaultConnection before running integration tests.");
+
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseNpgsql(connectionString)
+            .Options;
+        var snapshot = TransferTestData.Snapshot(
+            out var renderBytes,
+            out var sceneBytes,
+            out var narrationBytes,
+            out var subtitleBytes);
+        using var fixture = TransferTestStore.Create();
+        WriteFiles(fixture, renderBytes, sceneBytes, narrationBytes, subtitleBytes);
+        var projectId = snapshot.Project.Id;
+        var sourceApproval = snapshot.FinalApproval!;
+
+        try
+        {
+            await SeedAsync(options, snapshot, cancellationToken);
+
+            byte[] v1Package;
+            await using (var exportContext = new ApplicationDbContext(options))
+            {
+                var export = new ProjectExportWorkflow(
+                    new ProjectTransferRepository(exportContext),
+                    fixture.Store,
+                    TimeProvider.System);
+                var info = await export.ExportAsync(projectId, cancellationToken);
+                v1Package = RewriteAsSchemaVersion1(
+                    fixture.ReadPackage(info.FileName));
+            }
+
+            await DeleteProjectAndFilesAsync(
+                options,
+                fixture,
+                projectId,
+                cancellationToken);
+
+            await using (var importContext = new ApplicationDbContext(options))
+            {
+                var import = new ProjectImportWorkflow(
+                    new ProjectTransferRepository(importContext),
+                    fixture.Store);
+                var result = await import.ImportAsync(
+                    new MemoryStream(v1Package),
+                    cancellationToken);
+                Assert.Equal(1, result.Counts.FinalApprovals);
+            }
+
+            await using (var verification = new ApplicationDbContext(options))
+            {
+                var approval = await verification.FinalApprovals
+                    .AsNoTracking()
+                    .SingleAsync(
+                        candidate => candidate.ContentProjectId == projectId,
+                        cancellationToken);
+                Assert.Equal(FinalApprovalDecision.Approved, approval.Decision);
+                Assert.Null(approval.DecisionNote);
+                AssertClose(sourceApproval.ApprovedAt, approval.DecidedAt);
+                AssertClose(sourceApproval.ApprovedAt, approval.ApprovedAt);
             }
         }
         finally
@@ -475,6 +663,65 @@ public sealed class ProjectTransferVerticalSliceTests
         fixture.WriteAssetFile(TransferTestData.ScenePath, sceneBytes);
         fixture.WriteAssetFile(TransferTestData.NarrationPath, narrationBytes);
         fixture.WriteAssetFile(TransferTestData.SubtitlePath, subtitleBytes);
+    }
+
+    /// <summary>
+    /// Rewrites one exported v2 package into the pre-decision v1 shape: schemaVersion 1
+    /// and a final approval without the three decision members. Everything else (files,
+    /// hashes, rows) stays byte-identical.
+    /// </summary>
+    private static byte[] RewriteAsSchemaVersion1(byte[] package)
+    {
+        using var source = new MemoryStream(package);
+        using var sourceArchive = new ZipArchive(source, ZipArchiveMode.Read);
+        using var target = new MemoryStream();
+        using (var targetArchive = new ZipArchive(
+            target,
+            ZipArchiveMode.Create,
+            leaveOpen: true))
+        {
+            foreach (var entry in sourceArchive.Entries)
+            {
+                if (string.Equals(
+                        entry.FullName,
+                        ProjectPackageSerializer.ManifestEntryName,
+                        StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var copy = targetArchive.CreateEntry(entry.FullName);
+                using var input = entry.Open();
+                using var output = copy.Open();
+                input.CopyTo(output);
+            }
+
+            var manifestEntry = sourceArchive.GetEntry(
+                ProjectPackageSerializer.ManifestEntryName)
+                ?? throw new InvalidOperationException("The package manifest is missing.");
+            JsonObject manifest;
+            using (var manifestStream = manifestEntry.Open())
+            {
+                manifest = JsonNode.Parse(manifestStream)?.AsObject()
+                    ?? throw new InvalidOperationException("The package manifest is empty.");
+            }
+
+            manifest["schemaVersion"] = ProjectPackageSerializer.MinimumSchemaVersion;
+            var approval = manifest["finalApproval"]?.AsObject()
+                ?? throw new InvalidOperationException(
+                    "The package does not contain a final approval.");
+            approval.Remove("decision");
+            approval.Remove("decisionNote");
+            approval.Remove("decidedAt");
+
+            var manifestCopy = targetArchive.CreateEntry(
+                ProjectPackageSerializer.ManifestEntryName);
+            using var manifestOutput = manifestCopy.Open();
+            using var writer = new StreamWriter(manifestOutput);
+            writer.Write(manifest.ToJsonString());
+        }
+
+        return target.ToArray();
     }
 
     private static void AssertClose(DateTimeOffset expected, DateTimeOffset actual) =>

@@ -81,7 +81,9 @@ public sealed class PublicationWorkflow(
         {
             throw Error(
                 "publication_approval_required",
-                $"A valid final approval is required before recording a publication ({status.Reason}).");
+                status.IsChangesRequested
+                    ? "The A3 review requested changes; update the production and approve a new render before recording a publication."
+                    : $"A valid final approval is required before recording a publication ({status.Reason}).");
         }
 
         if (!string.Equals(

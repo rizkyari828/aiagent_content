@@ -1,6 +1,7 @@
 using Xunit;
 using System.IO.Compression;
 using AIStudio.Application.Transfer;
+using AIStudio.Domain.Approvals;
 using AIStudio.Domain.Content;
 using AIStudio.Domain.Jobs;
 
@@ -53,8 +54,16 @@ public sealed class ProjectExportWorkflowTests
         Assert.Single(manifest.SceneAssets);
         Assert.NotNull(manifest.NarrationTrack);
         Assert.NotNull(manifest.SubtitleTrack);
+        Assert.Equal(
+            ProjectPackageSerializer.CurrentSchemaVersion,
+            manifest.SchemaVersion);
         Assert.NotNull(manifest.FinalApproval);
         Assert.Equal("youtube", manifest.FinalApproval.Destination);
+        Assert.Equal(FinalApprovalDecisionTokens.Approved, manifest.FinalApproval.Decision);
+        Assert.Null(manifest.FinalApproval.DecisionNote);
+        Assert.Equal(
+            snapshot.FinalApproval!.DecidedAt,
+            manifest.FinalApproval.DecidedAt);
         Assert.NotNull(manifest.PublicationRecord);
         Assert.Equal("dQw4w9WgXcQ", manifest.PublicationRecord.VideoId);
         Assert.Single(manifest.MetricSnapshots);
@@ -81,6 +90,45 @@ public sealed class ProjectExportWorkflowTests
         Assert.Equal(package.FileName, listedPackage.FileName);
         Assert.Equal(package.ByteSize, listedPackage.ByteSize);
         Assert.Null(listedPackage.Sha256);
+    }
+
+    [Fact]
+    public async Task Export_ChangesRequestedApproval_WritesDecisionNoteAndTimestamp()
+    {
+        using var fixture = TransferTestStore.Create();
+        const string note = "Subtitles are cut off in scene 3";
+        var snapshot = TransferTestData.Snapshot(
+            out var renderBytes,
+            out var sceneBytes,
+            out var narrationBytes,
+            out var subtitleBytes,
+            decision: FinalApprovalDecision.ChangesRequested,
+            decisionNote: note);
+        WriteFiles(fixture, snapshot, renderBytes, sceneBytes, narrationBytes, subtitleBytes);
+        var workflow = new ProjectExportWorkflow(
+            new FakeProjectTransferRepository { Snapshot = snapshot },
+            fixture.Store,
+            TimeProvider.System);
+
+        var package = await workflow.ExportAsync(
+            snapshot.Project.Id,
+            TestContext.Current.CancellationToken);
+
+        using var stream = new MemoryStream(fixture.ReadPackage(package.FileName));
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        var manifest = ProjectPackageSerializer.Deserialize(
+            ReadEntry(archive.GetEntry("manifest.json")!));
+
+        Assert.Equal(
+            FinalApprovalDecisionTokens.ChangesRequested,
+            manifest.FinalApproval!.Decision);
+        Assert.Equal(note, manifest.FinalApproval.DecisionNote);
+        Assert.Equal(
+            snapshot.FinalApproval!.DecidedAt,
+            manifest.FinalApproval.DecidedAt);
+        Assert.Equal(
+            FinalApprovalDecision.ChangesRequested,
+            manifest.FinalApproval.ResolveDecision());
     }
 
     [Fact]

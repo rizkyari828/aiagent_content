@@ -3,6 +3,7 @@ using System.Text.Json;
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.FinalVideoQa;
 using AIStudio.Application.Jobs.RenderVideo;
+using AIStudio.Domain.Approvals;
 using AIStudio.Domain.Jobs;
 
 namespace AIStudio.Application.Transfer;
@@ -244,7 +245,10 @@ public sealed class ProjectExportWorkflow(
                     snapshot.FinalApproval.Revision,
                     snapshot.FinalApproval.ApprovedAt,
                     snapshot.FinalApproval.CreatedAt,
-                    snapshot.FinalApproval.UpdatedAt),
+                    snapshot.FinalApproval.UpdatedAt,
+                    FinalApprovalDecisionTokens.ToToken(snapshot.FinalApproval.Decision),
+                    snapshot.FinalApproval.DecisionNote,
+                    snapshot.FinalApproval.DecidedAt),
             snapshot.PublicationRecord is null
                 ? null
                 : new ProjectManifestPublication(

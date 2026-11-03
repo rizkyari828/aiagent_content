@@ -13,6 +13,7 @@ public sealed class FinalApproval
 {
     public const int MaxArtifactPathLength = 1024;
     public const int MaxApproverLabelLength = 120;
+    public const int MaxDecisionNoteLength = 2000;
 
     private FinalApproval()
     {
@@ -28,6 +29,8 @@ public sealed class FinalApproval
         string destination,
         string? notes,
         string? approverLabel,
+        FinalApprovalDecision decision,
+        string? decisionNote,
         DateTimeOffset approvedAt)
     {
         Id = id;
@@ -39,8 +42,11 @@ public sealed class FinalApproval
         Destination = destination;
         Notes = notes;
         ApproverLabel = approverLabel;
+        Decision = decision;
+        DecisionNote = decisionNote;
         Revision = 1;
         ApprovedAt = approvedAt;
+        DecidedAt = approvedAt;
         CreatedAt = approvedAt;
         UpdatedAt = approvedAt;
     }
@@ -68,12 +74,33 @@ public sealed class FinalApproval
     public string? ApproverLabel { get; private set; }
 
     /// <summary>
+    /// Two-way A3 review decision. Only <see cref="FinalApprovalDecision.Approved"/>
+    /// may satisfy the readiness/publication gate; <see cref="FinalApprovalDecision.ChangesRequested"/>
+    /// records an operator rejection.
+    /// </summary>
+    public FinalApprovalDecision Decision { get; private set; }
+
+    /// <summary>Required for <see cref="FinalApprovalDecision.ChangesRequested"/>, at most 2000 characters.</summary>
+    public string? DecisionNote { get; private set; }
+
+    /// <summary>
+    /// When the current decision (decision or note) was recorded. Unlike the legacy
+    /// <see cref="ApprovedAt"/>, this does not move when only the destination, the
+    /// approval notes, or the approver label change.
+    /// </summary>
+    public DateTimeOffset DecidedAt { get; private set; }
+
+    /// <summary>
     /// Increments only when the approval binding changes (render/QA artifact or the
-    /// consequential metadata destination/notes/approver). Re-approving the same
-    /// artifact with the same metadata is idempotent and keeps the revision.
+    /// consequential metadata destination/notes/approver/decision/decision note).
+    /// Repeating the same payload is idempotent and keeps the revision.
     /// </summary>
     public int Revision { get; private set; }
 
+    /// <summary>
+    /// Legacy timestamp retained for compatibility; it tracks the last decision write.
+    /// <see cref="DecidedAt"/> is authoritative for the review decision.
+    /// </summary>
     public DateTimeOffset ApprovedAt { get; private set; }
 
     public DateTimeOffset CreatedAt { get; private set; }
@@ -90,7 +117,9 @@ public sealed class FinalApproval
         string? notes,
         string? approverLabel,
         DateTimeOffset utcNow,
-        Guid? id = null)
+        Guid? id = null,
+        FinalApprovalDecision decision = FinalApprovalDecision.Approved,
+        string? decisionNote = null)
     {
         RequireIdentifier(contentProjectId, nameof(contentProjectId));
         RequireIdentifier(sourceRenderJobId, nameof(sourceRenderJobId));
@@ -108,12 +137,15 @@ public sealed class FinalApproval
             PublicationRules.NormalizePlatform(destination),
             PublicationRules.OptionalNotes(notes, nameof(notes)),
             OptionalApproverLabel(approverLabel),
+            decision,
+            RequireDecisionNote(decision, decisionNote, nameof(decisionNote)),
             utcNow.ToUniversalTime());
     }
 
     /// <summary>
-    /// Rebinds this project's approval. Returns <c>false</c> when the complete binding
-    /// is unchanged, so an idempotent re-approval does not add a revision.
+    /// Rebinds this project's approval. Returns <c>false</c> when the complete payload
+    /// (binding, destination, notes, approver, decision, decision note) is unchanged, so
+    /// an idempotent repeat does not add a revision.
     /// </summary>
     public bool Apply(
         Guid sourceRenderJobId,
@@ -123,7 +155,9 @@ public sealed class FinalApproval
         string destination,
         string? notes,
         string? approverLabel,
-        DateTimeOffset utcNow)
+        DateTimeOffset utcNow,
+        FinalApprovalDecision decision = FinalApprovalDecision.Approved,
+        string? decisionNote = null)
     {
         RequireIdentifier(sourceRenderJobId, nameof(sourceRenderJobId));
 
@@ -135,6 +169,12 @@ public sealed class FinalApproval
         var normalizedDestination = PublicationRules.NormalizePlatform(destination);
         var normalizedNotes = PublicationRules.OptionalNotes(notes, nameof(notes));
         var normalizedApprover = OptionalApproverLabel(approverLabel);
+        var normalizedDecisionNote = RequireDecisionNote(
+            decision,
+            decisionNote,
+            nameof(decisionNote));
+        var decisionChanged = Decision != decision
+            || !string.Equals(DecisionNote, normalizedDecisionNote, StringComparison.Ordinal);
 
         if (SourceRenderJobId == sourceRenderJobId
             && string.Equals(ArtifactPath, normalizedPath, StringComparison.Ordinal)
@@ -142,7 +182,8 @@ public sealed class FinalApproval
             && ArtifactByteSize == normalizedSize
             && string.Equals(Destination, normalizedDestination, StringComparison.Ordinal)
             && string.Equals(Notes, normalizedNotes, StringComparison.Ordinal)
-            && string.Equals(ApproverLabel, normalizedApprover, StringComparison.Ordinal))
+            && string.Equals(ApproverLabel, normalizedApprover, StringComparison.Ordinal)
+            && !decisionChanged)
         {
             return false;
         }
@@ -154,9 +195,17 @@ public sealed class FinalApproval
         Destination = normalizedDestination;
         Notes = normalizedNotes;
         ApproverLabel = normalizedApprover;
+        Decision = decision;
+        DecisionNote = normalizedDecisionNote;
         Revision++;
-        ApprovedAt = NormalizeUpdateTime(utcNow);
-        UpdatedAt = ApprovedAt;
+        var updatedAt = NormalizeUpdateTime(utcNow);
+        if (decisionChanged)
+        {
+            DecidedAt = updatedAt;
+        }
+
+        ApprovedAt = updatedAt;
+        UpdatedAt = updatedAt;
         return true;
     }
 
@@ -216,6 +265,43 @@ public sealed class FinalApproval
             ? throw new ArgumentException(
                 $"Approver label must contain at most {MaxApproverLabelLength} characters.",
                 nameof(value))
+            : normalized;
+    }
+
+    /// <summary>
+    /// Applies the canonical decision-note rule: optional for an approval, mandatory and
+    /// at most <see cref="MaxDecisionNoteLength"/> characters for a change request.
+    /// Exposed so other layers (for example project transfer) validate against the same
+    /// rule instead of duplicating it.
+    /// </summary>
+    public static string? NormalizeDecisionNote(
+        FinalApprovalDecision decision,
+        string? decisionNote) =>
+        RequireDecisionNote(decision, decisionNote, nameof(decisionNote));
+
+    /// <summary>
+    /// A change request is only actionable when it says what must change, so the note is
+    /// mandatory for that decision. An approval keeps the note optional.
+    /// </summary>
+    private static string? RequireDecisionNote(
+        FinalApprovalDecision decision,
+        string? value,
+        string parameterName)
+    {
+        _ = FinalApprovalDecisionTokens.ToToken(decision);
+
+        var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        if (decision == FinalApprovalDecision.ChangesRequested && normalized is null)
+        {
+            throw new ArgumentException(
+                "A decision note is required when requesting changes.",
+                parameterName);
+        }
+
+        return normalized is { Length: > MaxDecisionNoteLength }
+            ? throw new ArgumentException(
+                $"Decision note must contain at most {MaxDecisionNoteLength} characters.",
+                parameterName)
             : normalized;
     }
 

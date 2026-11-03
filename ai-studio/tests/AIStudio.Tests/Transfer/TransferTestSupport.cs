@@ -1,6 +1,7 @@
 using Xunit;
 using System.IO.Compression;
 using System.Security.Cryptography;
+using System.Text.Json;
 using AIStudio.Application.Transfer;
 using AIStudio.Domain.Approvals;
 using AIStudio.Domain.Assets;
@@ -175,6 +176,66 @@ internal static class TransferTestData
             entries);
     }
 
+    /// <summary>
+    /// Minimal manifest that carries a valid final approval bound to one succeeded
+    /// RenderVideo job and one packaged artifact. Used to exercise the decision contract.
+    /// </summary>
+    public static ProjectTransferManifest ManifestWithApproval(
+        int schemaVersion,
+        string? decision,
+        string? decisionNote = null,
+        bool withDecidedAt = true)
+    {
+        var projectId = Guid.NewGuid();
+        var renderJobId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var manifest = Manifest(projectId, [(RenderPath, RenderBytes)], schemaVersion);
+
+        return manifest with
+        {
+            SourceJobs =
+            [
+                new ProjectManifestJob(
+                    renderJobId,
+                    projectId,
+                    JobType.RenderVideo,
+                    JobStatus.Succeeded,
+                    "render-hash",
+                    0,
+                    0,
+                    Json("{}"),
+                    Json("{}"),
+                    now.AddMinutes(-10),
+                    now.AddMinutes(-8),
+                    now.AddMinutes(-9),
+                    now.AddMinutes(-8))
+            ],
+            FinalApproval = new ProjectManifestFinalApproval(
+                Guid.NewGuid(),
+                projectId,
+                renderJobId,
+                RenderPath,
+                Sha256(RenderBytes),
+                RenderBytes.Length,
+                "youtube",
+                null,
+                "operator",
+                1,
+                now.AddMinutes(-8),
+                now.AddMinutes(-8),
+                now.AddMinutes(-8),
+                decision,
+                decisionNote,
+                withDecidedAt ? now.AddMinutes(-8) : null)
+        };
+    }
+
+    public static JsonElement Json(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.Clone();
+    }
+
     public static byte[] Build(
         ProjectTransferManifest manifest,
         IReadOnlyList<(string Path, byte[] Bytes)>? files = null)
@@ -218,7 +279,9 @@ internal static class TransferTestData
         out byte[] renderBytes,
         out byte[] sceneBytes,
         out byte[] narrationBytes,
-        out byte[] subtitleBytes)
+        out byte[] subtitleBytes,
+        FinalApprovalDecision decision = FinalApprovalDecision.Approved,
+        string? decisionNote = null)
     {
         var now = DateTimeOffset.UtcNow;
         renderBytes = [10, 20, 30, 40];
@@ -357,7 +420,9 @@ internal static class TransferTestData
             "youtube",
             "manual upload prepared",
             "operator-transfer",
-            now.AddMinutes(-50));
+            now.AddMinutes(-50),
+            decision: decision,
+            decisionNote: decisionNote);
         var publication = PublicationRecord.Create(
             project.Id,
             approval.Id,

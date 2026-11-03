@@ -1,6 +1,7 @@
 using AIStudio.Application.Approvals;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs;
+using AIStudio.Domain.Approvals;
 using AIStudio.Domain.Content;
 using AIStudio.Domain.Jobs;
 using AIStudio.Tests.Approvals;
@@ -196,6 +197,19 @@ internal sealed class ContentProjectFixture
             ProjectId,
             RenderJobId,
             destination);
+        return this;
+    }
+
+    public ContentProjectFixture SeedChangesRequested(
+        string destination = "youtube",
+        string note = "Fix the ending before publishing")
+    {
+        Approvals.Approval = ApprovalTestData.CreateApproval(
+            ProjectId,
+            RenderJobId,
+            destination,
+            decision: FinalApprovalDecision.ChangesRequested,
+            decisionNote: note);
         return this;
     }
 }

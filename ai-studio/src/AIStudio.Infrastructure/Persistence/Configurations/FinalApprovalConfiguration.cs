@@ -21,6 +21,9 @@ internal sealed class FinalApprovalConfiguration : IEntityTypeConfiguration<Fina
                 table.HasCheckConstraint(
                     "ck_final_approvals_artifact_content_hash",
                     "char_length(artifact_content_hash) = 64");
+                table.HasCheckConstraint(
+                    "ck_final_approvals_decision",
+                    "decision in ('approved', 'changes_requested')");
             });
 
         builder.HasKey(approval => approval.Id);
@@ -63,6 +66,24 @@ internal sealed class FinalApprovalConfiguration : IEntityTypeConfiguration<Fina
         builder.Property(approval => approval.ApproverLabel)
             .HasColumnName("approver_label")
             .HasMaxLength(FinalApproval.MaxApproverLabelLength);
+
+        builder.Property(approval => approval.Decision)
+            .HasColumnName("decision")
+            .HasMaxLength(FinalApprovalDecisionTokens.MaxTokenLength)
+            .HasConversion(
+                decision => FinalApprovalDecisionTokens.ToToken(decision),
+                token => FinalApprovalDecisionTokens.Parse(token))
+            .HasDefaultValue(FinalApprovalDecision.Approved)
+            .IsRequired();
+
+        builder.Property(approval => approval.DecisionNote)
+            .HasColumnName("decision_note")
+            .HasMaxLength(FinalApproval.MaxDecisionNoteLength);
+
+        builder.Property(approval => approval.DecidedAt)
+            .HasColumnName("decided_at")
+            .HasColumnType("timestamp with time zone")
+            .IsRequired();
 
         builder.Property(approval => approval.Revision)
             .HasColumnName("revision")

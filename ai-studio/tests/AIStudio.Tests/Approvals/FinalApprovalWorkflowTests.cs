@@ -1,6 +1,7 @@
 using AIStudio.Application.Approvals;
 using AIStudio.Application.Assets;
 using AIStudio.Application.Content;
+using AIStudio.Domain.Approvals;
 using AIStudio.Domain.Jobs;
 using Xunit;
 
@@ -374,6 +375,202 @@ public sealed class FinalApprovalWorkflowTests
         Assert.Null(await fixture.Workflow.EvaluateAsync(
             fixture.ProjectId,
             TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task RequestChanges_RecordsDecisionWithoutRequiringPassingQa()
+    {
+        var fixture = new Fixture();
+        fixture.Repository.QaEvidence = null;
+
+        var result = await fixture.Workflow.RequestChangesAsync(
+            fixture.ProjectId,
+            fixture.RenderJobId,
+            "youtube",
+            "  Subtitles are cut off in scene 3  ",
+            "operator-1",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.True(result.Created);
+        Assert.Equal(FinalApprovalDecision.ChangesRequested, result.Approval.Decision);
+        Assert.Equal("Subtitles are cut off in scene 3", result.Approval.DecisionNote);
+        Assert.Equal(1, result.Approval.Revision);
+        Assert.Equal(Now, result.Approval.DecidedAt);
+        Assert.Equal(1, fixture.Repository.SaveCount);
+    }
+
+    [Fact]
+    public async Task RequestChanges_DoesNotReadTheArtifact()
+    {
+        var fixture = new Fixture();
+        fixture.Store.Files.Clear();
+
+        var result = await fixture.Workflow.RequestChangesAsync(
+            fixture.ProjectId,
+            fixture.RenderJobId,
+            "youtube",
+            "The ending is wrong",
+            null,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal(ApprovalTestData.RenderPath, result.Approval.ArtifactPath);
+        Assert.Equal(ApprovalTestData.RenderHash, result.Approval.ArtifactContentHash);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task RequestChanges_RejectsBlankNote(string note)
+    {
+        var fixture = new Fixture();
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(
+            () => fixture.Workflow.RequestChangesAsync(
+                fixture.ProjectId,
+                fixture.RenderJobId,
+                "youtube",
+                note,
+                null,
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("decisionNote", exception.ParamName);
+        Assert.Null(fixture.Repository.Approval);
+        Assert.Equal(0, fixture.Repository.SaveCount);
+    }
+
+    [Fact]
+    public async Task RequestChanges_RequiresAnExistingRenderJob()
+    {
+        var fixture = new Fixture();
+        fixture.Jobs.Jobs.Clear();
+
+        var exception = await Assert.ThrowsAsync<FinalApprovalException>(
+            () => fixture.Workflow.RequestChangesAsync(
+                fixture.ProjectId,
+                fixture.RenderJobId,
+                "youtube",
+                "Reject the result",
+                null,
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("final_approval_render_missing", exception.ErrorCode);
+        Assert.Null(fixture.Repository.Approval);
+    }
+
+    [Fact]
+    public async Task RequestChanges_IsIdempotentForTheSamePayload()
+    {
+        var fixture = new Fixture();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var first = await fixture.Workflow.RequestChangesAsync(
+            fixture.ProjectId,
+            fixture.RenderJobId,
+            "youtube",
+            "Fix the ending",
+            "operator-1",
+            cancellationToken);
+        fixture.Time.UtcNow = Now.AddMinutes(5);
+
+        var repeated = await fixture.Workflow.RequestChangesAsync(
+            fixture.ProjectId,
+            fixture.RenderJobId,
+            "youtube",
+            "Fix the ending",
+            "operator-1",
+            cancellationToken);
+
+        Assert.NotNull(first);
+        Assert.NotNull(repeated);
+        Assert.False(repeated.Created);
+        Assert.Equal(first.Approval.Id, repeated.Approval.Id);
+        Assert.Equal(1, repeated.Approval.Revision);
+        Assert.Equal(Now, repeated.Approval.DecidedAt);
+        Assert.Equal(1, fixture.Repository.SaveCount);
+    }
+
+    [Fact]
+    public async Task Evaluate_ReportsChangesRequestedEvenWhenQaFailed()
+    {
+        var fixture = new Fixture();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await fixture.Workflow.RequestChangesAsync(
+            fixture.ProjectId,
+            fixture.RenderJobId,
+            "youtube",
+            "QA failed; fix the render",
+            null,
+            cancellationToken);
+        fixture.Repository.QaEvidence = null;
+
+        var status = await fixture.Workflow.EvaluateAsync(
+            fixture.ProjectId,
+            cancellationToken);
+
+        Assert.NotNull(status);
+        Assert.Equal(FinalApprovalState.ChangesRequested, status.State);
+        Assert.True(status.IsChangesRequested);
+        Assert.Null(status.Reason);
+        Assert.NotNull(status.Approval);
+        Assert.Equal(
+            FinalApprovalDecision.ChangesRequested,
+            status.Approval.Decision);
+    }
+
+    [Fact]
+    public async Task ApproveAfterChanges_IncrementsRevisionAndRestoresApproval()
+    {
+        var fixture = new Fixture();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var changes = await fixture.Workflow.RequestChangesAsync(
+            fixture.ProjectId,
+            fixture.RenderJobId,
+            "youtube",
+            "Fix the ending",
+            "operator-1",
+            cancellationToken);
+        fixture.Time.UtcNow = Now.AddMinutes(9);
+
+        var approved = await fixture.Workflow.ApproveAsync(
+            fixture.ProjectId,
+            fixture.RenderJobId,
+            "youtube",
+            null,
+            "operator-1",
+            cancellationToken);
+
+        Assert.NotNull(changes);
+        Assert.NotNull(approved);
+        Assert.Equal(2, approved.Approval.Revision);
+        Assert.Equal(FinalApprovalDecision.Approved, approved.Approval.Decision);
+        Assert.Null(approved.Approval.DecisionNote);
+        Assert.Equal(Now.AddMinutes(9), approved.Approval.DecidedAt);
+
+        var status = await fixture.Workflow.EvaluateAsync(
+            fixture.ProjectId,
+            cancellationToken);
+        Assert.NotNull(status);
+        Assert.Equal(FinalApprovalState.Approved, status.State);
+    }
+
+    [Fact]
+    public async Task Approve_IsStillRejectedWhenQaHasNotPassed()
+    {
+        var fixture = new Fixture();
+        fixture.Repository.QaEvidence = null;
+
+        var exception = await Assert.ThrowsAsync<FinalApprovalException>(
+            () => fixture.Workflow.ApproveAsync(
+                fixture.ProjectId,
+                fixture.RenderJobId,
+                "youtube",
+                null,
+                null,
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("final_approval_qa_required", exception.ErrorCode);
+        Assert.Null(fixture.Repository.Approval);
     }
 
     private sealed class Fixture

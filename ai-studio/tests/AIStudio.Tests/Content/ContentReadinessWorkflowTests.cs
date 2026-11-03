@@ -288,5 +288,82 @@ public sealed class ContentReadinessWorkflowTests
         Assert.Null(result);
     }
 
+    [Fact]
+    public async Task Evaluate_Blocked_WhenFinalApprovalRequestedChanges()
+    {
+        var fixture = new ContentProjectFixture()
+            .SeedSucceededRender()
+            .SeedQaFailure()
+            .SeedChangesRequested();
+
+        var readiness = await fixture.ReadinessWorkflow.EvaluateAsync(
+            fixture.ProjectId,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(readiness);
+        Assert.Equal(ContentReadinessStatus.Blocked, readiness.Status);
+        Assert.False(readiness.IsReadyToPublish);
+        var reason = Assert.Single(readiness.Reasons);
+        Assert.Equal(
+            ContentReadinessCodes.FinalApprovalChangesRequested,
+            reason.Code);
+        Assert.True(reason.Blocking);
+        Assert.Equal(
+            new[] { ContentReadinessCodes.FinalApprovalChangesRequested },
+            readiness.BlockingReasonCodes);
+    }
+
+    [Fact]
+    public async Task MarkReadyToPublish_RejectsChangesRequestedProject()
+    {
+        var fixture = new ContentProjectFixture()
+            .SeedSucceededRender()
+            .SeedPassingQa()
+            .SeedChangesRequested();
+
+        var exception = await Assert.ThrowsAsync<ContentProjectException>(
+            () => fixture.ReadinessWorkflow.MarkReadyToPublishAsync(
+                fixture.ProjectId,
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("content_project_not_ready", exception.ErrorCode);
+        Assert.Equal(
+            new[] { ContentReadinessCodes.FinalApprovalChangesRequested },
+            exception.ReasonCodes);
+        Assert.Equal(ContentStatus.Draft, fixture.Project.Status);
+        Assert.Equal(0, fixture.Projects.SaveCount);
+    }
+
+    [Fact]
+    public async Task Evaluate_ReadyToPublish_AfterChangesAreApproved()
+    {
+        var fixture = new ContentProjectFixture()
+            .SeedSucceededRender()
+            .SeedPassingQa()
+            .SeedChangesRequested();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        fixture.Time.UtcNow = Now().AddMinutes(4);
+
+        var approved = await fixture.ApprovalWorkflow.ApproveAsync(
+            fixture.ProjectId,
+            fixture.RenderJobId,
+            "youtube",
+            null,
+            "operator-1",
+            cancellationToken);
+        var readiness = await fixture.ReadinessWorkflow.EvaluateAsync(
+            fixture.ProjectId,
+            cancellationToken);
+
+        Assert.NotNull(approved);
+        Assert.Equal(2, approved.Approval.Revision);
+        Assert.Equal(
+            FinalApprovalDecision.Approved,
+            approved.Approval.Decision);
+        Assert.NotNull(readiness);
+        Assert.Equal(ContentReadinessStatus.ReadyToPublish, readiness.Status);
+        Assert.DoesNotContain(readiness.Reasons, reason => reason.Blocking);
+    }
+
     private static DateTimeOffset Now() => ContentProjectFixture.Now;
 }

@@ -68,6 +68,26 @@ public sealed class ContentReadinessWorkflow(
                     blocking: true));
         }
 
+        var approval = await approvals.EvaluateAsync(contentProjectId, cancellationToken);
+        if (approval is null)
+        {
+            return null;
+        }
+
+        // A change request is a deliberate operator rejection. It blocks readiness even
+        // when the newest QA failed (that failure is exactly why changes were requested),
+        // so it is checked before the QA verdict instead of after it.
+        if (approval.IsChangesRequested)
+        {
+            return Project(
+                project,
+                ContentReadinessStatus.Blocked,
+                Reason(
+                    ContentReadinessCodes.FinalApprovalChangesRequested,
+                    "The A3 review requested changes; update the production and approve a new render.",
+                    blocking: true));
+        }
+
         var qaVerdict = await approvals.EvaluateQaAsync(
             contentProjectId,
             latestRender.Id,
@@ -94,12 +114,6 @@ public sealed class ContentReadinessWorkflow(
                         ? "No terminal FinalVideoQa job has evaluated the current render."
                         : "The newest FinalVideoQa job did not pass for the current render.",
                     blocking: true));
-        }
-
-        var approval = await approvals.EvaluateAsync(contentProjectId, cancellationToken);
-        if (approval is null)
-        {
-            return null;
         }
 
         if (!approval.IsApproved)

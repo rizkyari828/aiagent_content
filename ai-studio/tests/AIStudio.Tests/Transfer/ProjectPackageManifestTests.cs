@@ -47,6 +47,11 @@ public sealed class ProjectPackageManifestTests
         Assert.Equal(manifest.NarrationTrack, restored.NarrationTrack);
         Assert.Equal(manifest.SubtitleTrack, restored.SubtitleTrack);
         Assert.Equal(manifest.FinalApproval, restored.FinalApproval);
+        Assert.Equal("changes_requested", restored.FinalApproval!.Decision);
+        Assert.Equal("Fix the ending", restored.FinalApproval.DecisionNote);
+        Assert.Equal(
+            FinalApprovalDecision.ChangesRequested,
+            restored.FinalApproval.ResolveDecision());
         Assert.Equal(manifest.PublicationRecord, restored.PublicationRecord);
         Assert.Equal(manifest.MetricSnapshots.ToArray(), restored.MetricSnapshots.ToArray());
         Assert.Equal(manifest.TimeEntries.ToArray(), restored.TimeEntries.ToArray());
@@ -55,11 +60,46 @@ public sealed class ProjectPackageManifestTests
 
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
-        Assert.Equal(1, root.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(
+            ProjectPackageSerializer.CurrentSchemaVersion,
+            root.GetProperty("schemaVersion").GetInt32());
         Assert.Equal("Draft", root.GetProperty("project").GetProperty("status").GetString());
         Assert.Equal("RenderVideo", root.GetProperty("sourceJobs")[0].GetProperty("type").GetString());
         Assert.Equal("human", root.GetProperty("timeEntries")[0]
             .GetProperty("kind").GetString()!.ToLowerInvariant());
+        Assert.Equal(
+            "changes_requested",
+            root.GetProperty("finalApproval").GetProperty("decision").GetString());
+        Assert.Equal(
+            "Fix the ending",
+            root.GetProperty("finalApproval").GetProperty("decisionNote").GetString());
+    }
+
+    [Fact]
+    public void Deserialize_V1ManifestWithoutDecision_RestoresLegacyApproval()
+    {
+        var json = ProjectPackageSerializer.Serialize(FullManifest());
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+        node["schemaVersion"] = ProjectPackageSerializer.MinimumSchemaVersion;
+        var approval = node["finalApproval"]!.AsObject();
+        approval.Remove("decision");
+        approval.Remove("decisionNote");
+        approval.Remove("decidedAt");
+
+        var restored = ProjectPackageSerializer.Deserialize(
+            System.Text.Encoding.UTF8.GetBytes(node.ToJsonString()));
+
+        Assert.Equal(ProjectPackageSerializer.MinimumSchemaVersion, restored.SchemaVersion);
+        Assert.NotNull(restored.FinalApproval);
+        Assert.Null(restored.FinalApproval.Decision);
+        Assert.Null(restored.FinalApproval.DecisionNote);
+        Assert.Null(restored.FinalApproval.DecidedAt);
+        Assert.Equal(
+            FinalApprovalDecision.Approved,
+            restored.FinalApproval.ResolveDecision());
+        Assert.Equal(
+            restored.FinalApproval.ApprovedAt,
+            restored.FinalApproval.ResolveDecidedAt());
     }
 
     [Fact]
@@ -67,9 +107,11 @@ public sealed class ProjectPackageManifestTests
     {
         var json = ProjectPackageSerializer.Serialize(FullManifest());
         var text = System.Text.Encoding.UTF8.GetString(json);
+        var versionLine =
+            $"\"schemaVersion\": {ProjectPackageSerializer.CurrentSchemaVersion}";
         var withUnknown = text.Replace(
-            "\"schemaVersion\": 1",
-            "\"schemaVersion\": 1,\n  \"hostPath\": \"/Users/example\"",
+            versionLine,
+            versionLine + ",\n  \"hostPath\": \"/Users/example\"",
             StringComparison.Ordinal);
 
         var error = Assert.Throws<ProjectTransferException>(
@@ -108,7 +150,7 @@ public sealed class ProjectPackageManifestTests
         var artifactPath = "renders/video.mp4";
 
         return new ProjectTransferManifest(
-            1,
+            ProjectPackageSerializer.CurrentSchemaVersion,
             now,
             "manifest-test",
             new ProjectManifestProject(
@@ -200,6 +242,9 @@ public sealed class ProjectPackageManifestTests
                 1,
                 now.AddHours(-1),
                 now.AddHours(-1),
+                now.AddHours(-1),
+                "changes_requested",
+                "Fix the ending",
                 now.AddHours(-1)),
             new ProjectManifestPublication(
                 publicationId,

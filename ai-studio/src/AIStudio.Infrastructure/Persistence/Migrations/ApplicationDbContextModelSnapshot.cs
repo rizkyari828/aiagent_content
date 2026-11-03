@@ -61,6 +61,23 @@ namespace AIStudio.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<DateTimeOffset>("DecidedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at");
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("approved")
+                        .HasColumnName("decision");
+
+                    b.Property<string>("DecisionNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("decision_note");
+
                     b.Property<string>("Destination")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -98,6 +115,8 @@ namespace AIStudio.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_final_approvals_artifact_byte_size", "artifact_byte_size > 0");
 
                             t.HasCheckConstraint("ck_final_approvals_artifact_content_hash", "char_length(artifact_content_hash) = 64");
+
+                            t.HasCheckConstraint("ck_final_approvals_decision", "decision in ('approved', 'changes_requested')");
 
                             t.HasCheckConstraint("ck_final_approvals_revision", "revision >= 1");
                         });

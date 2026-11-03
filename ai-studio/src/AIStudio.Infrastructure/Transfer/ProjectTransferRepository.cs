@@ -338,8 +338,11 @@ public sealed class ProjectTransferRepository(ApplicationDbContext dbContext)
             source.Notes,
             source.ApproverLabel,
             source.ApprovedAt,
-            source.Id);
+            source.Id,
+            source.ResolveDecision(),
+            source.DecisionNote);
         Set(approval, nameof(FinalApproval.Revision), source.Revision);
+        Set(approval, nameof(FinalApproval.DecidedAt), source.ResolveDecidedAt());
         Set(approval, nameof(FinalApproval.CreatedAt), source.CreatedAt);
         Set(approval, nameof(FinalApproval.UpdatedAt), source.UpdatedAt);
         return approval;

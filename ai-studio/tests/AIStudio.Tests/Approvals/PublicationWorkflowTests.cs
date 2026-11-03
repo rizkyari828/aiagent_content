@@ -276,6 +276,32 @@ public sealed class PublicationWorkflowTests
         Assert.Equal(VideoId, record.VideoId);
     }
 
+    [Fact]
+    public async Task Create_RejectsWhenTheReviewRequestedChanges()
+    {
+        var fixture = new Fixture();
+        fixture.Approvals.Approval = ApprovalTestData.CreateApproval(
+            fixture.ProjectId,
+            fixture.RenderJobId,
+            decision: FinalApprovalDecision.ChangesRequested,
+            decisionNote: "Fix the ending");
+
+        var exception = await Assert.ThrowsAsync<PublicationException>(
+            () => fixture.Workflow.CreateAsync(
+                fixture.ProjectId,
+                "youtube",
+                VideoUrl,
+                VideoId,
+                ApprovalTestData.Now.AddHours(-2),
+                null,
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("publication_approval_required", exception.ErrorCode);
+        Assert.Contains("changes", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(fixture.Publications.Record);
+        Assert.Equal(0, fixture.Publications.SaveCount);
+    }
+
     private sealed class Fixture
     {
         public Fixture(bool projectExists = true)

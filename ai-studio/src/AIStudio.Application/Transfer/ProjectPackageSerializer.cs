@@ -10,7 +10,13 @@ namespace AIStudio.Application.Transfer;
 /// </summary>
 public static class ProjectPackageSerializer
 {
-    public const int CurrentSchemaVersion = 1;
+    /// <summary>
+    /// Current package contract: v2 adds the A3 review decision (token, note, timestamp)
+    /// to the final approval. v1 packages stay importable and restore the legacy approval.
+    /// </summary>
+    public const int CurrentSchemaVersion = 2;
+
+    public const int MinimumSchemaVersion = 1;
     public const string ManifestEntryName = "manifest.json";
     public const string FilesEntryPrefix = "files/";
 
@@ -43,7 +49,7 @@ public static class ProjectPackageSerializer
         catch (JsonException exception)
         {
             throw InvalidManifest(
-                "The package manifest is not valid JSON for schema version 1.",
+                "The package manifest is not valid JSON for a supported schema version.",
                 exception);
         }
 
