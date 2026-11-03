@@ -22,6 +22,13 @@ public static class CapabilityIds
 
     public static readonly CapabilityId VisualThreeD = new("visual.three_d");
 
+    /// <summary>
+    /// Image-to-video character animation. This id is the documented "valid data, no
+    /// provider yet" example (D-036) and keeps that name; the scaffold provider is
+    /// disabled by default and not selected by any production path in v1.
+    /// </summary>
+    public static readonly CapabilityId VisualCharacterAnimation = new("visual.character_animation");
+
     public static readonly CapabilityId MediaCompose = new("media.compose");
 
     public static readonly CapabilityId SubtitleBurned = new("subtitle.burned");

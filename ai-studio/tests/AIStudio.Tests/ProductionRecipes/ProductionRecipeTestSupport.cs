@@ -35,7 +35,8 @@ internal static class ProductionRecipeTestSupport
         bool musicEnabled = true,
         bool manimEnabled = true,
         bool imageEnabled = true,
-        bool threeDEnabled = true) =>
+        bool threeDEnabled = true,
+        bool videoEnabled = true) =>
         new(
             ProductionCapabilityCatalog.Capabilities,
             ProductionCapabilityCatalog.CreateProviders(
@@ -43,7 +44,8 @@ internal static class ProductionRecipeTestSupport
                 musicEnabled,
                 manimEnabled,
                 imageEnabled,
-                threeDEnabled));
+                threeDEnabled,
+                videoEnabled));
 }
 
 /// <summary>

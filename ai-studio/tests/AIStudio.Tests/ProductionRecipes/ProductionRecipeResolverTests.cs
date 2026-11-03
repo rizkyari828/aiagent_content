@@ -135,7 +135,10 @@ public sealed class ProductionRecipeResolverTests
     [Fact]
     public void FutureCapabilityIsValidDataButUnresolved()
     {
-        var future = new CapabilityId("visual.character_animation");
+        // `visual.character_animation` became an implemented capability in D-046 (I2V
+        // scaffold), so this "not implemented yet" fixture uses a capability that the
+        // production catalog deliberately does not provide.
+        var future = new CapabilityId("visual.lip_sync");
         var recipe = ProductionRecipeTestSupport.Recipe(
             "character-format",
             1,
