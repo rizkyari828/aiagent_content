@@ -28,6 +28,7 @@ using AIStudio.Application.Stories;
 using AIStudio.Application.StoryContext;
 using AIStudio.Application.Subtitles;
 using AIStudio.Application.Tracking;
+using AIStudio.Application.Transfer;
 using AIStudio.Infrastructure.AI;
 using AIStudio.Infrastructure.Approvals;
 using AIStudio.Infrastructure.Assets;
@@ -43,6 +44,7 @@ using AIStudio.Infrastructure.Rendering.AudioProduction;
 using AIStudio.Infrastructure.Scripts;
 using AIStudio.Infrastructure.Subtitles;
 using AIStudio.Infrastructure.Tracking;
+using AIStudio.Infrastructure.Transfer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -80,6 +82,7 @@ public static class DependencyInjection
         AddStoryDirector(services, configuration);
         AddBibles(services);
         AddStoryContext(services);
+        AddProjectTransfer(services, configuration);
 
         return services;
     }
@@ -126,7 +129,9 @@ public static class DependencyInjection
         services.AddScoped<IPublicationReferenceLookup, PublicationReferenceLookup>();
         services.AddScoped<INarrationRepository, NarrationRepository>();
         services.AddScoped<ISubtitleRepository, SubtitleRepository>();
-        services.AddSingleton<IAssetFileStore, LocalAssetFileStore>();
+        services.AddSingleton<LocalAssetFileStore>();
+        services.AddSingleton<IAssetFileStore>(
+            serviceProvider => serviceProvider.GetRequiredService<LocalAssetFileStore>());
         services.AddSingleton<IIdentityAssetStore, LocalIdentityAssetStore>();
         services.AddSingleton<IProcessRunner, SystemProcessRunner>();
         services.AddSingleton<IMediaInspector, FfprobeMediaInspector>();
@@ -204,6 +209,37 @@ public static class DependencyInjection
                     UriKind.Absolute);
                 client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
             });
+    }
+
+    private static void AddProjectTransfer(
+        IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services
+            .AddOptions<ProjectTransferOptions>()
+            .Bind(configuration.GetSection(ProjectTransferOptions.SectionName))
+            .Validate(
+                options => ProjectPackagePath.TryNormalize(options.RootPath, out _),
+                "ProjectTransfer:RootPath must be a safe path relative to the asset root.")
+            .Validate(
+                options => options.MaxFileBytes > 0,
+                "ProjectTransfer:MaxFileBytes must be positive.")
+            .Validate(
+                options => options.MaxPackageBytes >= options.MaxFileBytes,
+                "ProjectTransfer:MaxPackageBytes cannot be smaller than MaxFileBytes.")
+            .Validate(
+                options => options.MaxManifestBytes > 0
+                    && options.MaxManifestBytes <= options.MaxPackageBytes,
+                "ProjectTransfer:MaxManifestBytes must be positive and not exceed MaxPackageBytes.")
+            .Validate(
+                options => options.MaxFileCount > 0,
+                "ProjectTransfer:MaxFileCount must be positive.")
+            .ValidateOnStart();
+
+        services.AddSingleton<IProjectTransferStore, LocalProjectTransferStore>();
+        services.AddScoped<IProjectTransferRepository, ProjectTransferRepository>();
+        services.AddScoped<ProjectExportWorkflow>();
+        services.AddScoped<ProjectImportWorkflow>();
     }
 
     private static void AddAssetStorage(

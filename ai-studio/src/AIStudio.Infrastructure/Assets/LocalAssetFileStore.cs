@@ -15,6 +15,12 @@ public sealed class LocalAssetFileStore : IAssetFileStore
             Path.GetFullPath(options.Value.RootPath));
     }
 
+    /// <summary>
+    /// The resolved approved root. Internal so the project-transfer adapter can enforce
+    /// the exact same containment/symlink rules without duplicating them.
+    /// </summary>
+    internal string RootPath => rootPath;
+
     public AssetFileInfo Register(string requestedPath)
     {
         var (relativePath, absolutePath) = Resolve(requestedPath);
@@ -104,7 +110,7 @@ public sealed class LocalAssetFileStore : IAssetFileStore
         return string.Equals(hash, expectedHash, StringComparison.Ordinal);
     }
 
-    private (string RelativePath, string AbsolutePath) Resolve(string requestedPath)
+    internal (string RelativePath, string AbsolutePath) Resolve(string requestedPath)
     {
         if (string.IsNullOrWhiteSpace(requestedPath))
         {

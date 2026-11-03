@@ -4,9 +4,21 @@ using AIStudio.Api.Health;
 using AIStudio.Infrastructure;
 using AIStudio.Infrastructure.Health;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// One bounded upload surface. Import is the only route that accepts a package, so the
+// process-wide request-body limit is raised to the configured package bound plus
+// multipart overhead instead of relying on Kestrel's 30 MB development default.
+var maxTransferBytes = builder.Configuration.GetValue<long?>(
+    "ProjectTransfer:MaxPackageBytes") ?? 2L * 1024 * 1024 * 1024;
+var maxRequestBytes = maxTransferBytes + (1024 * 1024);
+builder.Services.Configure<FormOptions>(options =>
+    options.MultipartBodyLengthLimit = maxRequestBytes);
+builder.WebHost.ConfigureKestrel(options =>
+    options.Limits.MaxRequestBodySize = maxRequestBytes);
 
 builder.Logging.ClearProviders();
 builder.Logging.AddJsonConsole(options =>
@@ -74,6 +86,7 @@ app.MapIdentityAssetApi();
 app.MapFinalApprovalApi();
 app.MapPublicationApi();
 app.MapTrackingApi();
+app.MapProjectTransferApi();
 
 app.Run();
 
