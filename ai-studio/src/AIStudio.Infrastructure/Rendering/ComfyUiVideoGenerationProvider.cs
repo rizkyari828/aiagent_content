@@ -8,6 +8,7 @@ using AIStudio.Application.Assets;
 using AIStudio.Application.IdentityAssets;
 using AIStudio.Application.Rendering;
 using AIStudio.Application.Rendering.Visuals;
+using AIStudio.Infrastructure.Rendering.ComfyUI;
 using Microsoft.Extensions.Options;
 
 namespace AIStudio.Infrastructure.Rendering;
@@ -24,6 +25,10 @@ namespace AIStudio.Infrastructure.Rendering;
 /// window and released before the CPU-only persist and <c>IMediaInspector</c> probe.
 /// The probe is the artifact authority: a clip is accepted only when it has a video
 /// stream, a plausible duration, and exactly the requested dimensions.
+///
+/// Every workflow file is checked by <see cref="ComfyUiWorkflowValidator"/> before any
+/// HTTP call: a missing file, malformed JSON, a placeholder mismatch, or an unsafe
+/// (path/URL/shell) value reports <c>video_not_configured</c> instead of submitting.
 ///
 /// TODO(verify-on-home): the repository-owned I2V workflow file does not exist yet.
 /// The graph, its output node, and the produced container must be verified on the GPU
@@ -45,15 +50,12 @@ public sealed class ComfyUiVideoGenerationProvider : IVideoGenerationProvider
     private const double MinimumDurationToleranceSeconds = 0.25;
     private const double DurationToleranceRatio = 0.05;
 
+    // Quoted forms are exactly what BuildGraph substitutes; the token names are the
+    // canonical contract shared with ComfyUiWorkflowValidator.
     private static readonly string[] RequiredPlaceholders =
-    [
-        "\"__PROMPT__\"",
-        "\"__WIDTH__\"",
-        "\"__HEIGHT__\"",
-        "\"__FPS__\"",
-        "\"__DURATION_SECONDS__\"",
-        "\"__SEED__\""
-    ];
+        ComfyUiWorkflowValidator.TextOnlyTokens
+            .Select(token => $"\"{token}\"")
+            .ToArray();
 
     private readonly HttpClient httpClient;
     private readonly ComfyUiVideoOptions options;
@@ -114,6 +116,20 @@ public sealed class ComfyUiVideoGenerationProvider : IVideoGenerationProvider
 
         try
         {
+            // Local workflow validation happens before any HTTP call (including the
+            // first-frame upload), so a bad trusted file never reaches ComfyUI.
+            var template = await File.ReadAllTextAsync(workflowPath, timeout.Token);
+            var mode = request.FirstFrame is null
+                ? ComfyUiWorkflowMode.TextOnly
+                : ComfyUiWorkflowMode.FirstFrame;
+            var validation = ComfyUiWorkflowValidator.Validate(template, mode);
+            if (!validation.IsValid)
+            {
+                throw new VideoGenerationException(
+                    VideoGenerationException.NotConfigured,
+                    $"The ComfyUI video workflow '{configuredWorkflowPath}' is invalid. {validation.Summary}");
+            }
+
             string? uploadedReference = null;
             if (request.FirstFrame is not null)
             {
@@ -122,10 +138,7 @@ public sealed class ComfyUiVideoGenerationProvider : IVideoGenerationProvider
                     timeout.Token);
             }
 
-            var graph = BuildGraph(
-                await File.ReadAllTextAsync(workflowPath, timeout.Token),
-                request,
-                uploadedReference);
+            var graph = BuildGraph(template, request, uploadedReference);
             var clientId = Guid.NewGuid().ToString("N");
 
             byte[] artifact;

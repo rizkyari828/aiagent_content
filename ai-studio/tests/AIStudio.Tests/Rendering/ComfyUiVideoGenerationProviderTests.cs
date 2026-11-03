@@ -243,6 +243,66 @@ public sealed class ComfyUiVideoGenerationProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task GenerateAsync_MapsMalformedWorkflowToNotConfiguredBeforeHttp()
+    {
+        var malformed = Path.Combine(root, "malformed-workflow.json");
+        File.WriteAllText(malformed, "{ \"1\": ", Encoding.UTF8);
+        var provider = CreateProvider(
+            new StubHttpMessageHandler((_, _) =>
+                throw new InvalidOperationException("HTTP must not be called")),
+            enabled: true,
+            workflow: malformed);
+
+        var exception = await Assert.ThrowsAsync<VideoGenerationException>(() => provider.GenerateAsync(
+            Request(),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(VideoGenerationException.NotConfigured, exception.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_MapsUnsafeWorkflowValueToNotConfiguredBeforeHttp()
+    {
+        var unsafeWorkflow = Path.Combine(root, "unsafe-workflow.json");
+        File.WriteAllText(
+            unsafeWorkflow,
+            Template.Replace(
+                "\"seed\": \"__SEED__\"",
+                "\"seed\": \"__SEED__\", \"checkpoint\": \"/home/tama/models/x.safetensors\"",
+                StringComparison.Ordinal),
+            Encoding.UTF8);
+        var provider = CreateProvider(
+            new StubHttpMessageHandler((_, _) =>
+                throw new InvalidOperationException("HTTP must not be called")),
+            enabled: true,
+            workflow: unsafeWorkflow);
+
+        var exception = await Assert.ThrowsAsync<VideoGenerationException>(() => provider.GenerateAsync(
+            Request(),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(VideoGenerationException.NotConfigured, exception.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_RequiresFirstFrameWorkflowToCarryReferencePlaceholder()
+    {
+        var provider = CreateProvider(
+            new StubHttpMessageHandler((_, _) =>
+                throw new InvalidOperationException("HTTP must not be called")),
+            enabled: true,
+            firstFrameWorkflow: workflowPath);
+
+        var exception = await Assert.ThrowsAsync<VideoGenerationException>(() => provider.GenerateAsync(
+            Request(firstFrame: new PinnedIdentityAsset(
+                new AssetReferenceId("student-reference"),
+                new IdentityAssetVersion(1))),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(VideoGenerationException.NotConfigured, exception.ErrorCode);
+    }
+
+    [Fact]
     public async Task GenerateAsync_MapsUnreachableServerToGenerationFailed()
     {
         var provider = CreateProvider(
