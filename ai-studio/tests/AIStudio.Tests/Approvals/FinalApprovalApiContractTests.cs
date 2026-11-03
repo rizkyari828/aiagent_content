@@ -13,6 +13,51 @@ namespace AIStudio.Tests.Approvals;
 public sealed class FinalApprovalApiContractTests
 {
     [Fact]
+    public void Request_BindsDecisionAndNoteFromTheWireFormat()
+    {
+        var renderJobId = Guid.NewGuid();
+        var body = $$"""
+            {
+              "renderJobId": "{{renderJobId}}",
+              "destination": "youtube",
+              "notes": "legacy note",
+              "approverLabel": "operator-1",
+              "decision": "changes_requested",
+              "note": "Fix the ending"
+            }
+            """;
+
+        var request = JsonSerializer.Deserialize<ApproveFinalApprovalRequest>(
+            body,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.NotNull(request);
+        Assert.Equal(renderJobId, request.RenderJobId);
+        Assert.Equal("changes_requested", request.Decision);
+        Assert.Equal("Fix the ending", request.Note);
+        Assert.Equal("legacy note", request.Notes);
+    }
+
+    [Fact]
+    public void Request_OmittingDecisionAndNoteKeepsLegacyDefaults()
+    {
+        var body = $$"""
+            {
+              "renderJobId": "{{Guid.NewGuid()}}",
+              "destination": "youtube"
+            }
+            """;
+
+        var request = JsonSerializer.Deserialize<ApproveFinalApprovalRequest>(
+            body,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.NotNull(request);
+        Assert.Null(request.Decision);
+        Assert.Null(request.Note);
+    }
+
+    [Fact]
     public async Task Approve_ReturnsCreatedWithoutWorkerInternals()
     {
         var fixture = new ApiFixture();
@@ -243,6 +288,206 @@ public sealed class FinalApprovalApiContractTests
         Assert.Equal(
             "publication_video_id_invalid",
             problem.ProblemDetails.Extensions["code"]);
+    }
+
+    [Fact]
+    public async Task Approve_OmittingDecisionKeepsApprovedCompatibility()
+    {
+        var fixture = new ApiFixture();
+
+        var result = await FinalApprovalEndpoints.ApproveAsync(
+            fixture.ProjectId.ToString(),
+            new ApproveFinalApprovalRequest(
+                fixture.RenderJobId,
+                "youtube",
+                "legacy body",
+                "operator-1"),
+            fixture.ApprovalWorkflow,
+            TestContext.Current.CancellationToken);
+
+        var created = Assert.IsType<Created<FinalApprovalResponse>>(result);
+        Assert.Equal("approved", created.Value!.Decision);
+        Assert.Null(created.Value.DecisionNote);
+        Assert.Equal(ApprovalTestData.Now, created.Value.DecidedAt);
+        Assert.Equal(1, created.Value.Revision);
+    }
+
+    [Fact]
+    public async Task Approve_RecordsChangesRequestedDecisionWithoutQa()
+    {
+        var fixture = new ApiFixture();
+        fixture.Approvals.QaEvidence = null;
+
+        var result = await FinalApprovalEndpoints.ApproveAsync(
+            fixture.ProjectId.ToString(),
+            new ApproveFinalApprovalRequest(
+                fixture.RenderJobId,
+                "youtube",
+                null,
+                "operator-1",
+                "changes_requested",
+                "  Subtitles are cut off in scene 3  "),
+            fixture.ApprovalWorkflow,
+            TestContext.Current.CancellationToken);
+
+        var created = Assert.IsType<Created<FinalApprovalResponse>>(result);
+        Assert.NotNull(created.Value);
+        Assert.Equal("changes_requested", created.Value.Decision);
+        Assert.Equal("Subtitles are cut off in scene 3", created.Value.DecisionNote);
+        Assert.Equal(1, created.Value.Revision);
+        Assert.Equal(ApprovalTestData.Now, created.Value.DecidedAt);
+
+        var json = JsonSerializer.SerializeToElement(
+            created.Value,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.Equal("changes_requested", json.GetProperty("decision").GetString());
+        Assert.Equal(
+            "Subtitles are cut off in scene 3",
+            json.GetProperty("decisionNote").GetString());
+        Assert.True(json.TryGetProperty("decidedAt", out _));
+        Assert.True(json.TryGetProperty("revision", out _));
+    }
+
+    [Fact]
+    public async Task Approve_ReturnsHumanReadableNoteRequiredError()
+    {
+        var fixture = new ApiFixture();
+
+        var result = await FinalApprovalEndpoints.ApproveAsync(
+            fixture.ProjectId.ToString(),
+            new ApproveFinalApprovalRequest(
+                fixture.RenderJobId,
+                "youtube",
+                null,
+                null,
+                "changes_requested",
+                "   "),
+            fixture.ApprovalWorkflow,
+            TestContext.Current.CancellationToken);
+
+        var problem = Assert.IsType<ProblemHttpResult>(result);
+        Assert.Equal(400, problem.StatusCode);
+        Assert.Equal(
+            "final_approval_note_required",
+            problem.ProblemDetails.Extensions["code"]);
+        Assert.Equal(
+            "A note is required when requesting changes.",
+            problem.ProblemDetails.Title);
+        Assert.Contains(
+            "what must change",
+            problem.ProblemDetails.Detail,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Null(fixture.Approvals.Approval);
+    }
+
+    [Fact]
+    public async Task Approve_ReturnsDecisionInvalidForUnknownDecision()
+    {
+        var fixture = new ApiFixture();
+
+        var result = await FinalApprovalEndpoints.ApproveAsync(
+            fixture.ProjectId.ToString(),
+            new ApproveFinalApprovalRequest(
+                fixture.RenderJobId,
+                "youtube",
+                null,
+                null,
+                "maybe",
+                null),
+            fixture.ApprovalWorkflow,
+            TestContext.Current.CancellationToken);
+
+        var problem = Assert.IsType<ProblemHttpResult>(result);
+        Assert.Equal(400, problem.StatusCode);
+        Assert.Equal(
+            "final_approval_decision_invalid",
+            problem.ProblemDetails.Extensions["code"]);
+        Assert.Equal(
+            "The review decision is not recognized.",
+            problem.ProblemDetails.Title);
+        Assert.Contains(
+            "changes_requested",
+            problem.ProblemDetails.Detail,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Null(fixture.Approvals.Approval);
+    }
+
+    [Fact]
+    public async Task Approve_ReturnsNoteInvalidWhenTheNoteIsTooLong()
+    {
+        var fixture = new ApiFixture();
+
+        var result = await FinalApprovalEndpoints.ApproveAsync(
+            fixture.ProjectId.ToString(),
+            new ApproveFinalApprovalRequest(
+                fixture.RenderJobId,
+                "youtube",
+                null,
+                null,
+                "changes_requested",
+                new string('x', FinalApproval.MaxDecisionNoteLength + 1)),
+            fixture.ApprovalWorkflow,
+            TestContext.Current.CancellationToken);
+
+        var problem = Assert.IsType<ProblemHttpResult>(result);
+        Assert.Equal(400, problem.StatusCode);
+        Assert.Equal(
+            "final_approval_note_invalid",
+            problem.ProblemDetails.Extensions["code"]);
+        Assert.Contains(
+            "2000",
+            problem.ProblemDetails.Detail,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Null(fixture.Approvals.Approval);
+    }
+
+    [Fact]
+    public async Task GetStatus_ReturnsChangesRequestedWithDecisionFieldsAndReasons()
+    {
+        var fixture = new ApiFixture();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await fixture.ApprovalWorkflow.RequestChangesAsync(
+            fixture.ProjectId,
+            fixture.RenderJobId,
+            "youtube",
+            "Fix the ending",
+            "operator-1",
+            cancellationToken);
+
+        var result = await FinalApprovalEndpoints.GetStatusAsync(
+            fixture.ProjectId.ToString(),
+            fixture.ApprovalWorkflow,
+            cancellationToken);
+
+        var ok = Assert.IsType<Ok<FinalApprovalStatusResponse>>(result);
+        var status = ok.Value!;
+        Assert.Equal("changes_requested", status.Status);
+        Assert.Equal("changes_requested", status.Decision);
+        Assert.Equal("Fix the ending", status.DecisionNote);
+        Assert.Equal(ApprovalTestData.Now, status.DecidedAt);
+        Assert.Empty(status.Reasons);
+        Assert.NotNull(status.Approval);
+        Assert.Equal("changes_requested", status.Approval.Decision);
+        Assert.Equal(1, status.Approval.Revision);
+
+        var json = JsonSerializer.SerializeToElement(
+            status,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.Equal(
+            "changes_requested",
+            json.GetProperty("status").GetString());
+        Assert.Equal(
+            "changes_requested",
+            json.GetProperty("decision").GetString());
+        Assert.Equal(
+            "Fix the ending",
+            json.GetProperty("decisionNote").GetString());
+        Assert.Equal(
+            JsonValueKind.Array,
+            json.GetProperty("reasons").ValueKind);
+        Assert.Equal(
+            "changes_requested",
+            json.GetProperty("approval").GetProperty("decision").GetString());
     }
 
     private sealed class ApiFixture

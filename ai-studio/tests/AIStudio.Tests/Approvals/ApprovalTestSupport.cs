@@ -90,7 +90,9 @@ internal static class ApprovalTestData
         string destination = "youtube",
         string? notes = null,
         string? approver = null,
-        DateTimeOffset? approvedAt = null) =>
+        DateTimeOffset? approvedAt = null,
+        FinalApprovalDecision decision = FinalApprovalDecision.Approved,
+        string? decisionNote = null) =>
         FinalApproval.Create(
             contentProjectId,
             renderJobId,
@@ -100,7 +102,9 @@ internal static class ApprovalTestData
             destination,
             notes,
             approver,
-            approvedAt ?? Now);
+            approvedAt ?? Now,
+            decision: decision,
+            decisionNote: decisionNote);
 }
 
 internal sealed class FakeFinalApprovalRepository : IFinalApprovalRepository
