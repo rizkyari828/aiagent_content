@@ -1,7 +1,6 @@
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.GenerateIdea;
 using AIStudio.Application.Jobs.GenerateScript;
-using AIStudio.Domain.Jobs;
 
 namespace AIStudio.Api.Endpoints;
 
@@ -244,7 +243,7 @@ public sealed record JobResponse(
             details.Id,
             details.ContentProjectId,
             details.Type.ToString(),
-            ToApiStatus(details.Status),
+            ApiStatus.ToApiStatus(details.Status),
             details.RetryCount,
             details.MaxRetries,
             details.Result,
@@ -254,15 +253,4 @@ public sealed record JobResponse(
             details.UpdatedAt,
             details.StartedAt,
             details.CompletedAt);
-
-    private static string ToApiStatus(JobStatus status) =>
-        status switch
-        {
-            JobStatus.Queued => "queued",
-            JobStatus.Running => "running",
-            JobStatus.Succeeded => "completed",
-            JobStatus.Failed => "failed",
-            JobStatus.Cancelled => "cancelled",
-            _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
-        };
 }

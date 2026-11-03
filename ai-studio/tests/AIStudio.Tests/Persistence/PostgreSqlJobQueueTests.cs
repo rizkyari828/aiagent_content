@@ -1,3 +1,4 @@
+using AIStudio.Application.Jobs;
 using AIStudio.Domain.Content;
 using AIStudio.Domain.Jobs;
 using AIStudio.Infrastructure.Jobs;
@@ -224,6 +225,187 @@ public sealed class PostgreSqlJobQueueTests
             Assert.Equal(JobStatus.Failed, failed.Status);
             Assert.Equal("lease_expired", failed.ErrorCode);
             Assert.NotNull(failed.CompletedAt);
+        }
+        finally
+        {
+            await CleanupAsync(factory, projectId, cancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task CancelQueuedJob_MarksCancelledAndIsNeverClaimed()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var (factory, queue) = CreateQueue();
+        var (projectId, jobId, now) = await SeedJobAsync(factory, maxRetries: 1, cancellationToken);
+
+        try
+        {
+            var result = await queue.CancelAsync(
+                jobId,
+                now.AddSeconds(1),
+                cancellationToken);
+
+            Assert.Equal(JobCancelOutcome.Cancelled, result.Outcome);
+            Assert.Equal(JobStatus.Cancelled, result.Status);
+
+            await using (var context = await factory.CreateDbContextAsync(cancellationToken))
+            {
+                var persisted = await context.Jobs.AsNoTracking()
+                    .SingleAsync(job => job.Id == jobId, cancellationToken);
+                Assert.Equal(JobStatus.Cancelled, persisted.Status);
+                Assert.NotNull(persisted.CompletedAt);
+                Assert.Null(persisted.LeaseExpiresAt);
+            }
+
+            var claimed = await queue.ClaimNextAsync(
+                "worker-after-cancel",
+                now.AddSeconds(2),
+                now.AddMinutes(2),
+                cancellationToken);
+            Assert.Null(claimed);
+        }
+        finally
+        {
+            await CleanupAsync(factory, projectId, cancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task CancelRunningJob_PreventsWorkerFromOverwriting()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var (factory, queue) = CreateQueue();
+        var (projectId, jobId, now) = await SeedJobAsync(factory, maxRetries: 1, cancellationToken);
+
+        try
+        {
+            var claimed = await queue.ClaimNextAsync(
+                "worker-cancelled",
+                now.AddSeconds(1),
+                now.AddMinutes(2),
+                cancellationToken);
+            Assert.NotNull(claimed);
+
+            var result = await queue.CancelAsync(
+                jobId,
+                now.AddSeconds(2),
+                cancellationToken);
+            Assert.Equal(JobCancelOutcome.Cancelled, result.Outcome);
+
+            Assert.False(await queue.CompleteAsync(
+                jobId,
+                "worker-cancelled",
+                """{"status":"done"}""",
+                now.AddSeconds(3),
+                cancellationToken));
+            Assert.Null(await queue.FailAsync(
+                jobId,
+                "worker-cancelled",
+                "late_failure",
+                "Failure after cancel.",
+                now.AddSeconds(3),
+                cancellationToken));
+            Assert.False(await queue.RenewLeaseAsync(
+                jobId,
+                "worker-cancelled",
+                now.AddSeconds(3),
+                now.AddMinutes(3),
+                cancellationToken));
+
+            await using var context = await factory.CreateDbContextAsync(cancellationToken);
+            var persisted = await context.Jobs.AsNoTracking()
+                .SingleAsync(job => job.Id == jobId, cancellationToken);
+            Assert.Equal(JobStatus.Cancelled, persisted.Status);
+            Assert.Null(persisted.Result);
+            Assert.Null(persisted.LeaseExpiresAt);
+        }
+        finally
+        {
+            await CleanupAsync(factory, projectId, cancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task CancelTerminalJob_ReturnsNotAllowed()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var (factory, queue) = CreateQueue();
+        var (projectId, jobId, now) = await SeedJobAsync(factory, maxRetries: 1, cancellationToken);
+
+        try
+        {
+            Assert.NotNull(await queue.ClaimNextAsync(
+                "worker-terminal",
+                now.AddSeconds(1),
+                now.AddMinutes(2),
+                cancellationToken));
+            Assert.True(await queue.CompleteAsync(
+                jobId,
+                "worker-terminal",
+                """{"status":"done"}""",
+                now.AddSeconds(2),
+                cancellationToken));
+
+            var succeeded = await queue.CancelAsync(
+                jobId,
+                now.AddSeconds(3),
+                cancellationToken);
+            Assert.Equal(JobCancelOutcome.NotAllowed, succeeded.Outcome);
+            Assert.Equal(JobStatus.Succeeded, succeeded.Status);
+
+            var repeated = await queue.CancelAsync(
+                jobId,
+                now.AddSeconds(4),
+                cancellationToken);
+            Assert.Equal(JobCancelOutcome.NotAllowed, repeated.Outcome);
+
+            await using var context = await factory.CreateDbContextAsync(cancellationToken);
+            var persisted = await context.Jobs.AsNoTracking()
+                .SingleAsync(job => job.Id == jobId, cancellationToken);
+            Assert.Equal(JobStatus.Succeeded, persisted.Status);
+            Assert.NotNull(persisted.Result);
+        }
+        finally
+        {
+            await CleanupAsync(factory, projectId, cancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task CancelUnknownJob_ReturnsNotFound()
+    {
+        var (_, queue) = CreateQueue();
+
+        var result = await queue.CancelAsync(
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(JobCancelOutcome.NotFound, result.Outcome);
+        Assert.Null(result.Status);
+    }
+
+    [Fact]
+    public async Task CancelAlreadyCancelledJob_ReturnsNotAllowed()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var (factory, queue) = CreateQueue();
+        var (projectId, jobId, now) = await SeedJobAsync(factory, maxRetries: 1, cancellationToken);
+
+        try
+        {
+            Assert.Equal(
+                JobCancelOutcome.Cancelled,
+                (await queue.CancelAsync(jobId, now.AddSeconds(1), cancellationToken)).Outcome);
+
+            var repeated = await queue.CancelAsync(
+                jobId,
+                now.AddSeconds(2),
+                cancellationToken);
+
+            Assert.Equal(JobCancelOutcome.NotAllowed, repeated.Outcome);
+            Assert.Equal(JobStatus.Cancelled, repeated.Status);
         }
         finally
         {

@@ -235,6 +235,49 @@ public sealed class FinalApprovalWorkflow(
         return FinalApprovalStatus.Approved(snapshot);
     }
 
+    /// <summary>
+    /// Read-only QA verdict for a render without requiring an approval row. This exists
+    /// so readiness can report "render exists but QA has not passed" using the same
+    /// evidence rules as A3 instead of a second interpretation of QA results.
+    /// </summary>
+    public async Task<FinalVideoQaVerdict> EvaluateQaAsync(
+        Guid contentProjectId,
+        Guid renderJobId,
+        CancellationToken cancellationToken)
+    {
+        RequireIdentifier(contentProjectId, nameof(contentProjectId));
+        RequireIdentifier(renderJobId, nameof(renderJobId));
+
+        var renderJob = await jobs.FindByIdAsync(renderJobId, cancellationToken);
+        if (renderJob is null || renderJob.ContentProjectId != contentProjectId)
+        {
+            return FinalVideoQaVerdict.RenderNotSucceeded;
+        }
+
+        RenderVideoResult renderResult;
+        try
+        {
+            renderResult = ReadRenderResult(renderJob);
+        }
+        catch (FinalApprovalException)
+        {
+            return FinalVideoQaVerdict.RenderNotSucceeded;
+        }
+
+        var qaEvidence = await approvals.FindLatestQaAsync(
+            contentProjectId,
+            renderJobId,
+            cancellationToken);
+        if (qaEvidence is null)
+        {
+            return FinalVideoQaVerdict.Missing;
+        }
+
+        return IsPassingQa(qaEvidence, renderResult.ContentHash)
+            ? FinalVideoQaVerdict.Passed
+            : FinalVideoQaVerdict.Failed;
+    }
+
     internal static FinalApprovalSnapshot ToSnapshot(FinalApproval approval) =>
         new(
             approval.Id,

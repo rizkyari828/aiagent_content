@@ -69,6 +69,53 @@ public sealed class ContentProject
         UpdatedAt = NormalizeUpdateTime(utcNow);
     }
 
+    /// <summary>
+    /// Updates the operator-editable fields only. Status is never writable through this
+    /// path, and an unchanged request leaves <see cref="UpdatedAt"/> untouched so a
+    /// no-op update cannot reorder project lists.
+    /// </summary>
+    /// <returns><c>true</c> when a field actually changed.</returns>
+    public bool UpdateDetails(string title, string? brief, DateTimeOffset utcNow)
+    {
+        var normalizedTitle = RequireText(title, MaxTitleLength, nameof(title));
+        var normalizedBrief = OptionalText(brief, MaxBriefLength, nameof(brief));
+
+        if (string.Equals(Title, normalizedTitle, StringComparison.Ordinal)
+            && string.Equals(Brief, normalizedBrief, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        Title = normalizedTitle;
+        Brief = normalizedBrief;
+        UpdatedAt = NormalizeUpdateTime(utcNow);
+        return true;
+    }
+
+    /// <summary>
+    /// The single explicit, readiness-guarded publishing transition. It deliberately
+    /// does not route through <see cref="TransitionTo"/>: the P1 production path is
+    /// evidence-based (a currently valid A3 approval plus passing QA), the intermediate
+    /// review statuses are not driven by any production code yet, and no generic status
+    /// setter is exposed. Published/Archived projects are terminal for this transition.
+    /// </summary>
+    public void MarkReadyToPublish(DateTimeOffset utcNow)
+    {
+        if (Status == ContentStatus.ReadyToPublish)
+        {
+            return;
+        }
+
+        if (Status is ContentStatus.Published or ContentStatus.Archived)
+        {
+            throw new InvalidOperationException(
+                $"Content project cannot become ReadyToPublish from {Status}.");
+        }
+
+        Status = ContentStatus.ReadyToPublish;
+        UpdatedAt = NormalizeUpdateTime(utcNow);
+    }
+
     private static bool CanTransition(ContentStatus current, ContentStatus next) =>
         (current, next) switch
         {

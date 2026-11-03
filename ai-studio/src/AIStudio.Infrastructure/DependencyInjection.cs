@@ -113,7 +113,9 @@ public static class DependencyInjection
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<IJobQueue, PostgreSqlJobQueue>();
         services.AddScoped<IContentProjectReader, ContentProjectReader>();
+        services.AddScoped<IContentProjectRepository, ContentProjectRepository>();
         services.AddScoped<IJobReader, JobReader>();
+        services.AddScoped<IProjectJobReader, ProjectJobReader>();
         services.AddScoped<IScriptReviewRepository, ScriptReviewRepository>();
         services.AddScoped<IAssetRepository, AssetRepository>();
         services.AddScoped<IFinalApprovalRepository, FinalApprovalRepository>();
@@ -138,6 +140,9 @@ public static class DependencyInjection
         services.AddScoped<GenerateScriptWorkflow>();
         services.AddScoped<GenerateStoryboardWorkflow>();
         services.AddScoped<ScriptReviewWorkflow>();
+        services.AddScoped<ContentProjectWorkflow>();
+        services.AddScoped<ContentReadinessWorkflow>();
+        services.AddScoped<CancelJobWorkflow>();
         services.AddScoped<FinalApprovalWorkflow>();
         services.AddScoped<PublicationWorkflow>();
         services.AddScoped<AssetCollectionWorkflow>();

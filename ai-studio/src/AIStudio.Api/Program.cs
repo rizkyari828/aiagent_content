@@ -59,6 +59,8 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 });
 
 app.MapGenerateIdeaApi();
+app.MapContentProjectApi();
+app.MapJobCancelApi();
 app.MapScriptReviewApi();
 app.MapStoryboardApi();
 app.MapAssetApi();

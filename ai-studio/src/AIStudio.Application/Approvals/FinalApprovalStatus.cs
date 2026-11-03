@@ -49,3 +49,15 @@ public sealed record FinalApprovalSnapshot(
 public sealed record FinalApprovalApproveResult(
     bool Created,
     FinalApprovalSnapshot Approval);
+
+/// <summary>
+/// Read-only QA verdict for one render, using the exact A3 pass rules. Readiness reuses
+/// this instead of duplicating QA evidence interpretation.
+/// </summary>
+public enum FinalVideoQaVerdict
+{
+    Passed = 0,
+    Failed = 1,
+    Missing = 2,
+    RenderNotSucceeded = 3
+}

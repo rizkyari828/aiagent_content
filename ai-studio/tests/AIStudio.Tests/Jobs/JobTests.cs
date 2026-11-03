@@ -77,6 +77,59 @@ public sealed class JobTests
                 Now));
     }
 
+    [Fact]
+    public void Cancel_QueuedJobBecomesCancelled()
+    {
+        var job = CreateJob();
+
+        job.Cancel(Now.AddMinutes(1));
+
+        Assert.Equal(JobStatus.Cancelled, job.Status);
+        Assert.Equal(Now.AddMinutes(1), job.CompletedAt);
+        Assert.Null(job.LeaseExpiresAt);
+        Assert.Null(job.Result);
+    }
+
+    [Fact]
+    public void Cancel_RunningJobBecomesCancelledAndClearsLease()
+    {
+        var job = CreateJob();
+        job.Start("worker-1", Now.AddMinutes(5), Now.AddMinutes(1));
+
+        job.Cancel(Now.AddMinutes(2));
+
+        Assert.Equal(JobStatus.Cancelled, job.Status);
+        Assert.Null(job.LeaseExpiresAt);
+        Assert.Equal("worker-1", job.WorkerId);
+        Assert.Equal(Now.AddMinutes(2), job.CompletedAt);
+    }
+
+    [Theory]
+    [InlineData("succeeded")]
+    [InlineData("failed")]
+    [InlineData("cancelled")]
+    public void Cancel_RejectsTerminalJobs(string terminal)
+    {
+        var job = CreateJob();
+        job.Start("worker-1", Now.AddMinutes(5), Now.AddMinutes(1));
+
+        switch (terminal)
+        {
+            case "succeeded":
+                job.Succeed("""{"output":"idea"}""", Now.AddMinutes(2));
+                break;
+            case "failed":
+                job.Fail("permanent", "Permanent failure.", Now.AddMinutes(2));
+                break;
+            default:
+                job.Cancel(Now.AddMinutes(2));
+                break;
+        }
+
+        Assert.Throws<InvalidOperationException>(
+            () => job.Cancel(Now.AddMinutes(3)));
+    }
+
     private static Job CreateJob(int maxRetries = 2) =>
         Job.Create(
             Guid.NewGuid(),

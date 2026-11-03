@@ -29,4 +29,15 @@ public interface IJobQueue
         DateTimeOffset utcNow,
         DateTimeOffset leaseExpiresAt,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Operator cancel: <c>Queued</c> and <c>Running</c> jobs become <c>Cancelled</c>;
+    /// terminal jobs are rejected and unknown jobs report <see cref="JobCancelOutcome.NotFound"/>.
+    /// Cancelling clears the lease, so the job is never claimed again, and the existing
+    /// ownership-guarded completion/failure/renewal updates can no longer write it.
+    /// </summary>
+    Task<JobCancelResult> CancelAsync(
+        Guid jobId,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken);
 }

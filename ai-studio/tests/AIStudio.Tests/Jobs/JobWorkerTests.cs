@@ -103,6 +103,28 @@ public sealed class JobWorkerTests
         Assert.True(queue.ClaimObserved.Task.IsCompleted);
     }
 
+    [Fact]
+    public async Task Processor_StopsExecutionWhenLeaseOwnershipIsLost()
+    {
+        var queue = new LeaseLostJobQueue(CreateClaimedJob());
+        var handler = new CancellationObservingHandler();
+        var processor = new JobProcessor(
+            queue,
+            [handler],
+            TimeProvider.System,
+            NullLogger<JobProcessor>.Instance);
+
+        var processed = await processor.ProcessNextAsync(
+            "worker-lease-lost",
+            TimeSpan.FromSeconds(3),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(processed);
+        Assert.True(handler.Cancelled);
+        Assert.False(queue.Completed);
+        Assert.False(queue.Failed);
+    }
+
     private static ClaimedJob CreateClaimedJob() =>
         new(
             Guid.NewGuid(),
@@ -132,6 +154,87 @@ public sealed class JobWorkerTests
             ClaimedJob job,
             CancellationToken cancellationToken) =>
             throw new JobExecutionException("ai_timeout", "Expected timeout.");
+    }
+
+    private sealed class CancellationObservingHandler : IJobHandler
+    {
+        public bool Cancelled { get; private set; }
+
+        public bool CanHandle(JobType type) => true;
+
+        public async Task<string> ExecuteAsync(
+            ClaimedJob job,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                return "{}";
+            }
+            catch (OperationCanceledException)
+            {
+                Cancelled = true;
+                throw;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Simulates a cancelled/expired lease: the claim succeeds once, but every ownership
+    /// renewal fails, exactly like a job cancelled from another process.
+    /// </summary>
+    private sealed class LeaseLostJobQueue(ClaimedJob job) : IJobQueue
+    {
+        private int claimCount;
+
+        public bool Completed { get; private set; }
+
+        public bool Failed { get; private set; }
+
+        public Task<ClaimedJob?> ClaimNextAsync(
+            string workerId,
+            DateTimeOffset utcNow,
+            DateTimeOffset leaseExpiresAt,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(
+                Interlocked.Increment(ref claimCount) == 1 ? job : (ClaimedJob?)null);
+
+        public Task<bool> CompleteAsync(
+            Guid jobId,
+            string workerId,
+            string result,
+            DateTimeOffset utcNow,
+            CancellationToken cancellationToken)
+        {
+            Completed = true;
+            return Task.FromResult(false);
+        }
+
+        public Task<JobFailureResult?> FailAsync(
+            Guid jobId,
+            string workerId,
+            string errorCode,
+            string errorSummary,
+            DateTimeOffset utcNow,
+            CancellationToken cancellationToken)
+        {
+            Failed = true;
+            return Task.FromResult<JobFailureResult?>(null);
+        }
+
+        public Task<bool> RenewLeaseAsync(
+            Guid jobId,
+            string workerId,
+            DateTimeOffset utcNow,
+            DateTimeOffset leaseExpiresAt,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(false);
+
+        public Task<JobCancelResult> CancelAsync(
+            Guid jobId,
+            DateTimeOffset utcNow,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new JobCancelResult(JobCancelOutcome.NotFound, null));
     }
 
     private sealed class RecordingJobQueue(ClaimedJob? job) : IJobQueue
@@ -190,5 +293,11 @@ public sealed class JobWorkerTests
             DateTimeOffset leaseExpiresAt,
             CancellationToken cancellationToken) =>
             Task.FromResult(true);
+
+        public Task<JobCancelResult> CancelAsync(
+            Guid jobId,
+            DateTimeOffset utcNow,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new JobCancelResult(JobCancelOutcome.NotFound, null));
     }
 }
