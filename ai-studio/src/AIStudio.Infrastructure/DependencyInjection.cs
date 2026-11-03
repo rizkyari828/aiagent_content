@@ -1,5 +1,6 @@
 using AIStudio.Application.Abstractions.Persistence;
 using AIStudio.Application.AI;
+using AIStudio.Application.Approvals;
 using AIStudio.Application.Assets;
 using AIStudio.Application.Bibles;
 using AIStudio.Application.Capabilities;
@@ -27,6 +28,7 @@ using AIStudio.Application.Stories;
 using AIStudio.Application.StoryContext;
 using AIStudio.Application.Subtitles;
 using AIStudio.Infrastructure.AI;
+using AIStudio.Infrastructure.Approvals;
 using AIStudio.Infrastructure.Assets;
 using AIStudio.Infrastructure.Content;
 using AIStudio.Infrastructure.Gpu;
@@ -114,6 +116,8 @@ public static class DependencyInjection
         services.AddScoped<IJobReader, JobReader>();
         services.AddScoped<IScriptReviewRepository, ScriptReviewRepository>();
         services.AddScoped<IAssetRepository, AssetRepository>();
+        services.AddScoped<IFinalApprovalRepository, FinalApprovalRepository>();
+        services.AddScoped<IPublicationRepository, PublicationRepository>();
         services.AddScoped<INarrationRepository, NarrationRepository>();
         services.AddScoped<ISubtitleRepository, SubtitleRepository>();
         services.AddSingleton<IAssetFileStore, LocalAssetFileStore>();
@@ -134,6 +138,8 @@ public static class DependencyInjection
         services.AddScoped<GenerateScriptWorkflow>();
         services.AddScoped<GenerateStoryboardWorkflow>();
         services.AddScoped<ScriptReviewWorkflow>();
+        services.AddScoped<FinalApprovalWorkflow>();
+        services.AddScoped<PublicationWorkflow>();
         services.AddScoped<AssetCollectionWorkflow>();
         services.AddScoped<NarrationWorkflow>();
         services.AddScoped<SubtitleWorkflow>();
