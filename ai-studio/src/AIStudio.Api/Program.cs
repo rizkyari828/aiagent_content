@@ -1,6 +1,7 @@
 using AIStudio.Api.ErrorHandling;
 using AIStudio.Api.Endpoints;
 using AIStudio.Api.Health;
+using AIStudio.Api.UploadLimits;
 using AIStudio.Infrastructure;
 using AIStudio.Infrastructure.Health;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -34,6 +35,10 @@ builder.Services
 var app = builder.Build();
 
 app.UseExceptionHandler();
+
+// Kestrel's MaxRequestBodySize and FormOptions stay at their process defaults. Only the
+// project-package import request raises its own body and multipart bounds.
+app.UseImportRequestBodyLimit();
 
 app.MapGet("/", () => Results.Ok(new
 {
@@ -74,6 +79,7 @@ app.MapIdentityAssetApi();
 app.MapFinalApprovalApi();
 app.MapPublicationApi();
 app.MapTrackingApi();
+app.MapProjectTransferApi();
 
 app.Run();
 
