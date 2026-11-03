@@ -1,6 +1,7 @@
 using AIStudio.Application.Abstractions.Persistence;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs;
+using AIStudio.Application.Jobs.FinalVideoQa;
 using AIStudio.Application.Jobs.GenerateIdea;
 using AIStudio.Application.Jobs.GenerateSceneVisuals;
 using AIStudio.Application.Jobs.GenerateStoryboard;
@@ -251,6 +252,96 @@ public sealed class GenerateIdeaWorkflowTests
         Assert.Equal(1, visual.SkippedCount);
         Assert.Equal("AnimatedSvg", visual.Visuals[0].Engine);
         Assert.Equal(2, visual.Routing!.Count);
+    }
+
+    [Fact]
+    public async Task FindJob_DeserializesCompletedFinalVideoQaResult()
+    {
+        var jobId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
+        var result = new FinalVideoQaResult(
+            "renders/project/storyboard.mp4",
+            new string('b', 64),
+            DurationSeconds: 24,
+            Width: 1280,
+            Height: 720,
+            HasVideo: true,
+            HasAudio: true,
+            HasSubtitle: false);
+        var snapshot = new JobSnapshot(
+            jobId,
+            projectId,
+            JobType.FinalVideoQa,
+            JobStatus.Succeeded,
+            0,
+            2,
+            result.Serialize(),
+            null,
+            null,
+            Now,
+            Now,
+            Now,
+            Now);
+        var workflow = CreateWorkflow(
+            new RecordingDbContext(),
+            jobSnapshot: snapshot);
+
+        var job = await workflow.FindJobAsync(
+            jobId,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(job);
+        Assert.Equal(JobStatus.Succeeded, job.Status);
+        var qa = Assert.IsType<FinalVideoQaResult>(job.Result);
+        Assert.Equal("renders/project/storyboard.mp4", qa.OutputPath);
+        Assert.Equal(24, qa.DurationSeconds);
+        Assert.Equal(1280, qa.Width);
+        Assert.Equal(720, qa.Height);
+        Assert.True(qa.HasVideo);
+        Assert.True(qa.HasAudio);
+        Assert.False(qa.HasSubtitle);
+    }
+
+    [Fact]
+    public async Task FindJob_ReturnsNullFinalVideoQaResultWhenJobNotSucceeded()
+    {
+        var jobId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
+        var result = new FinalVideoQaResult(
+            "renders/project/storyboard.mp4",
+            new string('b', 64),
+            DurationSeconds: 24,
+            Width: 1280,
+            Height: 720,
+            HasVideo: true,
+            HasAudio: true,
+            HasSubtitle: false);
+        var snapshot = new JobSnapshot(
+            jobId,
+            projectId,
+            JobType.FinalVideoQa,
+            JobStatus.Failed,
+            0,
+            2,
+            result.Serialize(),
+            "qa_probe_failed",
+            "Probe failed.",
+            Now,
+            Now,
+            Now,
+            Now);
+        var workflow = CreateWorkflow(
+            new RecordingDbContext(),
+            jobSnapshot: snapshot);
+
+        var job = await workflow.FindJobAsync(
+            jobId,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(job);
+        Assert.Equal(JobStatus.Failed, job.Status);
+        Assert.Null(job.Result);
+        Assert.Equal("qa_probe_failed", job.ErrorCode);
     }
 
     [Fact]

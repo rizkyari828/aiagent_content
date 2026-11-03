@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using AIStudio.Application.Abstractions.Persistence;
 using AIStudio.Application.Content;
+using AIStudio.Application.Jobs.FinalVideoQa;
 using AIStudio.Application.Jobs.GenerateScript;
 using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Application.Jobs.GenerateAudio;
@@ -103,6 +104,7 @@ public sealed class GenerateIdeaWorkflow(
                 JobType.GenerateScript => GenerateScriptResult.Deserialize(job.Result),
                 JobType.GenerateStoryboard => GenerateStoryboardResult.Deserialize(job.Result),
                 JobType.RenderVideo => RenderVideoResult.Deserialize(job.Result),
+                JobType.FinalVideoQa => FinalVideoQaResult.Deserialize(job.Result),
                 JobType.GenerateAudio => GenerateAudioResult.Deserialize(job.Result),
                 JobType.GenerateSceneVisuals => GenerateSceneVisualsResult.Deserialize(job.Result),
                 _ => null
