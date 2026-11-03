@@ -226,6 +226,16 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `src/AIStudio.Api/Endpoints/FinalApprovalEndpoints.cs`, `PublicationEndpoints.cs` — `POST|GET /api/content-projects/{id}/final-approvals` and `POST|GET /api/content-projects/{id}/publications` with stable `code` extensions; transport only.
 - `tests/AIStudio.Tests/Approvals/`, `Persistence/FinalApprovalModelTests.cs`, `Persistence/FinalApprovalVerticalSliceTests.cs` — domain, workflow, API contract, EF mapping, and DB-gated round-trip/invalidation coverage.
 
+## Tracking (metrics, human/machine time, money)
+
+- `src/AIStudio.Domain/Tracking/MetricSnapshot.cs`, `TimeEntry.cs`, `CostEntry.cs`, `TimeEntryKind.cs`, `CostEntryKind.cs`, `TrackingKinds.cs`, `TrackingRules.cs` — one cumulative metric observation per (project, captured_at) with an optional publication binding, append-only time entries split by `human`/`machine`, append-only cash entries with currency + `actual`/`estimated`/`refunded`, and the shared closed validation/token rules (null-vs-zero, CTR 0..1, UTC instants, currency shape).
+- `src/AIStudio.Application/Tracking/TrackingRepository.cs` — tracking-owned persistence port (`ITrackingRepository`) plus per-kind time and per-currency/kind cost aggregates and the narrow `IPublicationReferenceLookup` read contract.
+- `MetricSnapshotWorkflow.cs`, `TimeEntryWorkflow.cs`, `CostEntryWorkflow.cs`, `TrackingSummaryWorkflow.cs`, `TrackingViews.cs`, `TrackingException.cs` — create/list per slice, bounded `?take=` windows, and the summary that returns the LATEST snapshot (never a sum) with separate human/machine minutes and separate per-currency actual/estimated/refunded totals.
+- `src/AIStudio.Infrastructure/Tracking/TrackingRepository.cs`, `PublicationReferenceLookup.cs` — EF adapter (unique-violation → 409 mapping) and the composition over the publishing module's existing read port.
+- `src/AIStudio.Infrastructure/Persistence/Configurations/MetricSnapshotConfiguration.cs`, `TimeEntryConfiguration.cs`, `CostEntryConfiguration.cs`, migration `20261103043550_AddMetricTimeCostTracking.cs` — `metric_snapshots`, `time_entries`, `cost_entries` with FKs, project+timestamp indexes, the unique project+captured_at index, and check constraints.
+- `src/AIStudio.Api/Endpoints/TrackingEndpoints.cs` — `POST|GET /api/content-projects/{id}/metrics`, `.../time-entries`, `.../cost-entries`, and `GET .../tracking-summary` with stable `code` extensions; transport only, no external analytics.
+- `tests/AIStudio.Tests/Tracking/`, `Api/TrackingApiContractTests.cs`, `Persistence/TrackingVerticalSliceTests.cs` — domain (null vs zero, negative/CTR/currency/kind/token), workflow (latest-not-summed, human vs machine, cost per currency + refunds), API contract, and DB-gated round-trip/index/FK coverage.
+
 ## Manual Script Review/Edit
 
 - `src/AIStudio.Domain/Scripts/ReviewedScript.cs` — one canonical reviewed script per project with `Draft -> Approved` lifecycle.
