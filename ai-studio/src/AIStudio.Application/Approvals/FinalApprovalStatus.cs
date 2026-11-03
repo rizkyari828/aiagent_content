@@ -1,14 +1,19 @@
+using AIStudio.Domain.Approvals;
+
 namespace AIStudio.Application.Approvals;
 
 /// <summary>
 /// Read-time A3 status. The persisted row is never treated as sufficient on its own:
 /// render state, QA evidence, artifact hash, and render supersession are re-evaluated.
+/// <see cref="ChangesRequested"/> is a stable operator decision, so it is reported
+/// before those validity checks: a rejection stays a rejection.
 /// </summary>
 public enum FinalApprovalState
 {
     Missing = 0,
     Approved = 1,
-    Invalid = 2
+    Invalid = 2,
+    ChangesRequested = 3
 }
 
 public sealed record FinalApprovalStatus(
@@ -17,6 +22,8 @@ public sealed record FinalApprovalStatus(
     FinalApprovalSnapshot? Approval)
 {
     public bool IsApproved => State == FinalApprovalState.Approved;
+
+    public bool IsChangesRequested => State == FinalApprovalState.ChangesRequested;
 
     public static FinalApprovalStatus Missing() =>
         new(FinalApprovalState.Missing, null, null);
@@ -28,6 +35,9 @@ public sealed record FinalApprovalStatus(
         string reason,
         FinalApprovalSnapshot approval) =>
         new(FinalApprovalState.Invalid, reason, approval);
+
+    public static FinalApprovalStatus ChangesRequested(FinalApprovalSnapshot approval) =>
+        new(FinalApprovalState.ChangesRequested, null, approval);
 }
 
 /// <summary>Canonical A3 projection: no worker, lease, or path-resolution internals.</summary>
@@ -41,6 +51,9 @@ public sealed record FinalApprovalSnapshot(
     string Destination,
     string? Notes,
     string? ApproverLabel,
+    FinalApprovalDecision Decision,
+    string? DecisionNote,
+    DateTimeOffset DecidedAt,
     int Revision,
     DateTimeOffset ApprovedAt,
     DateTimeOffset CreatedAt,

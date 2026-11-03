@@ -19,6 +19,8 @@ public static class ContentReadinessCodes
     public const string QaFailed = "readiness_qa_failed";
     public const string FinalApprovalMissing = "readiness_final_approval_missing";
     public const string FinalApprovalInvalid = "readiness_final_approval_invalid";
+    public const string FinalApprovalChangesRequested =
+        "readiness_final_approval_changes_requested";
     public const string PublicationMissing = "readiness_publication_missing";
 }
 
