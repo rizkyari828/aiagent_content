@@ -1,6 +1,6 @@
 # I2V Character Animation — Execution Plan / Cross-Machine Handoff
 
-Status: active plan, created 2026-11-02. Operator-owned.
+Status: active plan, created 2026-11-02; office code-only P3.1/P3.2 refresh 2026-11-03. Operator-owned.
 
 This file is the single entry point for the next milestone (real character animation). A fresh
 session on either machine should be able to start from here without a briefing: read this file,
@@ -31,8 +31,10 @@ Verified in this checkout (2026-11-02, office Mac):
 - The real workflow JSON files (`i2v_workflow.json`, `i2v_workflow_first_frame.json`) do not
   exist by design. `ComfyUiVideo:WorkflowPath` points at them, so enabling the engine without
   authoring them fails with `video_not_configured` instead of inventing a graph.
-- Artifact verification is still an MP4/WebM signature check; replace it with `IMediaInspector`
-  once the real output format is confirmed (P3.1).
+- Artifact verification now probes the persisted clip with `IMediaInspector` after the GPU lease is
+  released (duration tolerance `max(0.25 s, 5%)`, exact dimensions, `video_artifact_invalid`), and
+  trusted workflow JSON is checked by `ComfyUiWorkflowValidator` before any HTTP call (P3.1/P3.2,
+  office code-only 2026-11-03). The real output format is still confirmed on the home machine.
 
 Reported from the 2026-10-01 home session — NOT verifiable in this checkout (code and
 artifacts are absent):
@@ -113,9 +115,15 @@ Each item states owner, deliverable, and how to verify it. Do not check an item 
 
 ### P3 — implementation
 
-- [ ] **P3.1** `ComfyUiVideoGenerationProvider`: upload first frame, inject prompt/seed/length,
+- [x] **P3.1** `ComfyUiVideoGenerationProvider`: upload first frame, inject prompt/seed/length,
       poll, download, verify with `IMediaInspector`, persist through `IAssetFileStore`.
-- [ ] **P3.2** `IGpuResourceGate` held across submit → poll → download; released before CPU work.
+      Done in code on the office Mac 2026-11-03 (partial until the real workflow/output format is
+      verified on the home machine): probe runs after lease release, requires a video stream,
+      duration within `max(0.25 s, 5% of request)`, and exact requested dimensions; missing/malformed
+      trusted workflows and probe failures map to `video_not_configured` / `video_artifact_invalid`.
+- [x] **P3.2** `IGpuResourceGate` held across submit → poll → download; released before CPU work.
+      Verified in code on the office Mac 2026-11-03: the lease closes before persist and the
+      `IMediaInspector` probe, asserted by fake-probe and recording-gate tests.
 - [ ] **P3.3** Durable wiring: hero scenes become video clips, others keep Ken Burns; `SceneAsset.Type=Video`;
       `Creator` fingerprint includes engine + prompt + seed + first-frame identity.
 - [ ] **P3.4** Render fit: clip trimmed/looped to the `SceneTiming` scene duration; audio, subtitles,
