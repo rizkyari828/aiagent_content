@@ -6,9 +6,9 @@ Lingkup: hanya audit; tidak ada fitur, endpoint, skema, migrasi, paket, atau tes
 
 ## 1. Ringkasan
 
-1. **P1 belum selesai**: hanya 2 dari 12 kriteria traceability berstatus Done (AC-02, AC-12), 6 Partial, 3 Missing (AC-08 export + video ID, AC-09 metrics/waktu/biaya, AC-10 portability), dan 1 Unverified (AC-11).
+1. **P1 belum selesai**: audit awal menemukan 2 dari 12 kriteria traceability Done (AC-02, AC-12), 6 Partial, 3 Missing (AC-08 export + video ID, AC-09 metrics/waktu/biaya, AC-10 portability), dan 1 Unverified (AC-11). Setelah A3 + publication record v1 (2026-11-03) statusnya menjadi **2 Done, 7 Partial, 2 Missing, 1 Unverified**: AC-08 berpindah Missing -> Partial, AC-07 tetap Partial karena UI dan readiness gate belum ada.
 2. Backend pipeline inti (idea → script → review → storyboard → asset → narration/subtitle → render → QA) nyata, teruji, dan bisa dibangun ulang: 1246 tes, 1245 lulus, 0 gagal, 1 skip.
-3. Yang paling menentukan kegagalan P1 bukan bug, melainkan **tidak adanya lapisan penyelesaian**: A3 final approval, publication record/video ID, metrics, dan export/import tidak ada sama sekali; `src/AIStudio.Web` masih halaman placeholder tanpa satu pun panggilan API.
+3. Yang paling menentukan kegagalan P1 bukan bug, melainkan **tidak adanya lapisan penyelesaian**: saat audit, A3 final approval, publication record/video ID, metrics, dan export/import tidak ada sama sekali; `src/AIStudio.Web` masih halaman placeholder tanpa satu pun panggilan API. Sejak 2026-11-03 backend A3 + publication record ada; metrics, export/import, dan UI tetap belum.
 4. Dua klaim "selesai" di dokumen tidak sesuai kode: DEV-01 menyebut project "create/read/update" padahal hanya `POST /api/content-projects` yang ada, dan DEV-04 menyebut cancel "verified" padahal `Job.Cancel` tidak punya pemanggil, endpoint, atau tes.
 5. I2V masih scaffold: port + adapter + capability terdaftar di DI, tetapi tidak ada job type, handler, route, atau pemakaian di renderer; belum menjadi penghalang P1 karena memang deferred.
 
@@ -35,7 +35,9 @@ Dijalankan dari `ai-studio/` pada 2026-11-03, mesin tanpa GPU/Ollama/ComfyUI/Ble
 
 Verifikasi DB dijalankan lewat `docker exec aistudio-dev-postgres-1 psql -U postgres -d aistudio`.
 
-### 2.1 Inventaris endpoint (21 route produk)
+**Status update 2026-11-03 (A3 + publication record v1).** Angka audit di atas adalah baseline saat audit. Setelah slice A3 + publication: `dotnet build AIStudio.slnx -c Release` 0 warning / 0 error; `dotnet test AIStudio.slnx -c Release` dengan `ConnectionStrings__DefaultConnection` -> **1301 total, 1300 pass, 0 fail, 1 skip**; 164 file `*Tests.cs`; 13 file endpoint; **25 route produk**; **6 migrasi**; **8 tabel bisnis** (`final_approvals`, `publication_records` baru); `__EFMigrationsHistory` 6 baris. Tidak ada route, tabel, atau paket lama yang diubah.
+
+### 2.1 Inventaris endpoint (21 route produk saat audit; 25 setelah A3 + publication)
 
 | # | Method + route | File |
 | --- | --- | --- |
@@ -60,10 +62,14 @@ Verifikasi DB dijalankan lewat `docker exec aistudio-dev-postgres-1 psql -U post
 | 19 | `POST /api/content-projects/{id}/storyboard-jobs/{storyboardJobId}/audio-jobs` | `src/AIStudio.Api/Endpoints/AudioEndpoints.cs:14` |
 | 20 | `POST /api/identity-assets` | `src/AIStudio.Api/Endpoints/IdentityAssetEndpoints.cs:29` |
 | 21 | `POST /api/identity-assets/{assetId}/versions/{version}/approve` | `IdentityAssetEndpoints.cs:36` |
+| 22 | `POST /api/content-projects/{id}/final-approvals` | `src/AIStudio.Api/Endpoints/FinalApprovalEndpoints.cs:18` |
+| 23 | `GET /api/content-projects/{id}/final-approvals` | `FinalApprovalEndpoints.cs:26` |
+| 24 | `POST /api/content-projects/{id}/publications` | `src/AIStudio.Api/Endpoints/PublicationEndpoints.cs:17` |
+| 25 | `GET /api/content-projects/{id}/publications` | `PublicationEndpoints.cs:25` |
 
-Yang **tidak** ada di permukaan HTTP: baca/daftar/ubah project, cancel job, export, import, approval final (A3), publication record, metrics, preview/render artifact serving.
+Yang **tidak** ada di permukaan HTTP: baca/daftar/ubah project, cancel job, export, import, metrics, preview/render artifact serving. A3 final approval dan publication record kini ada (route 22-25).
 
-### 2.2 Migrasi dan tabel
+### 2.2 Migrasi dan tabel (5 migrasi saat audit; 6 setelah A3 + publication)
 
 | MigrationId | Tabel |
 | --- | --- |
@@ -72,6 +78,7 @@ Yang **tidak** ada di permukaan HTTP: baca/daftar/ubah project, cancel job, expo
 | `20260918041620_AddSceneAssets` | `scene_assets` |
 | `20260918042508_AddNarrationTracks` | `narration_tracks` |
 | `20260918081522_AddSubtitleTracks` | `subtitle_tracks` |
+| `20261103041001_AddFinalApprovalsAndPublications` | `final_approvals`, `publication_records` |
 
 Tidak ada tabel untuk approval final, publikasi, metrik, sumber/evidence, atau export. Itu bukti struktural, bukan sekadar belum di-wire.
 
@@ -89,14 +96,14 @@ Status: **Done** = ada kode + tes yang membuktikan; **Partial** = sebagian jalur
 | AC-04 | Media/rights/subtitles | **Partial** | `SceneAsset` mewajibkan `Source`+`License` untuk origin External (`src/AIStudio.Domain/Assets/SceneAsset.cs:136-154`); path safety + symlink (`LocalAssetFileStoreTests.Register_RejectsSymbolicLinkEscapingRoot`); narasi & subtitle bergerbang storyboard; `SceneAssetVerticalSliceTests.Register_PersistsAndReloadsSceneAssetMetadata`, `SubtitleTrackModelTests`; 3 migrasi aset | Rights hanya "string wajib ada", tidak ada status eligibility/resolusi; tidak ada gate QA publikasi yang memblokir rights belum selesai; subtitle hanya register+read, **tidak bisa edit**; tidak ada UI |
 | AC-05 | Validated render | **Partial (kode) / Unverified (hasil nyata)** | `RenderVideoJobHandler` + `FfmpegVideoRenderer` + `FinalVideoQa`; tes `RenderVideoJobHandlerTests.Handler_RendersWhenInputsMatchRecordedHashes`, `Handler_RejectsChangedAssetHash`, `FinalVideoQaJobHandlerTests.Handler_PassesForValidArtifactWithSubtitle`, `Handler_RejectsMissingExpectedSubtitleStream`; hasil render & QA diekspos `GET /api/jobs/{jobId}` (`GenerateIdeaWorkflow.cs:107`, `FinalVideoQaContractsTests.JobResponse_ExposesCompletedFinalVideoQaResult`) | Artefak Video #1 **tidak ada** di checkout ini (`src/AIStudio.Api/assets/renders` tidak ada; aset gitignored) dan tidak bisa dirender ulang tanpa model; tidak ada preview/export (DEV-05 mensyaratkan "preview/export works") |
 | AC-06 | Job recovery | **Partial** | `PostgreSqlJobQueueTests.ExpiredLease_IsRecoveredAndConsumesRetry`, `ExpiredLease_WithNoRetriesRemaining_BecomesFailed`, `ConcurrentClaims_ReturnTheJobToExactlyOneWorker`, `Failure_RetriesOnceThenEndsFailed`; klaim `FOR UPDATE SKIP LOCKED` (D-014) | **Cancel tidak terverifikasi**: `Job.Cancel` (`src/AIStudio.Domain/Jobs/Job.cs:165`) tidak dipanggil siapa pun, `IJobQueue` tidak punya method cancel, tidak ada endpoint, tidak ada tes (hanya `JobStatus.Cancelled` di pemetaan status API). DEV-04 menuntut "restart/lease recovery and cancel verified" |
-| AC-07 | QA + current A3 | **Partial** | `FinalVideoQaJobHandler` deterministik (`qa_artifact_missing`, `qa_hash_mismatch`, `qa_probe_failed`, `qa_duration_invalid`, `qa_video_stream_missing`, `qa_audio_stream_missing`, `qa_subtitle_stream_missing`); tes `FinalVideoQaJobHandlerTests` (11 kasus); enqueue `POST .../qa-jobs` | **A3 tidak ada**: tidak ada entitas/tabel/endpoint approval final; PUBLISHING/§43 "approval binds to artifact version + destination" tidak diimplementasikan; "stale A3 blocks readiness" tidak mungkin karena readiness/publish tidak ada; `ContentStatus.ReadyToPublish/Published` hanya enum tanpa endpoint transisi |
-| AC-08 | Export and real video ID | **Missing** | Grep `videoId`/`VideoId` di `src/` = 0 hasil; tidak ada tipe/route export; tidak ada tabel publication; hanya 5 migrasi (§2.2) | Kedua bagian hilang: export package dan publication record + video ID. PRD §43 menuntut approval mengikat artifact+destination. |
+| AC-07 | QA + current A3 | **Partial (backend A3 done)** | Deterministic FinalVideoQa tetap ada (`qa_artifact_missing`, `qa_hash_mismatch`, `qa_probe_failed`, `qa_duration_invalid`, `qa_video_stream_missing`, `qa_audio_stream_missing`, `qa_subtitle_stream_missing`; 11 tes). Sejak 2026-11-03: `FinalApproval` (satu row per project, artifact SHA-256/size + destination + revision), `FinalApprovalWorkflow` (render Succeeded, newest terminal FinalVideoQa pass, artifact re-read via `IAssetFileStore`, newer-render invalidation), `GET`/`POST .../final-approvals`, migration `20261103041001_AddFinalApprovalsAndPublications`; tes `FinalApprovalWorkflowTests`, `FinalApprovalApiContractTests`, `FinalApprovalVerticalSliceTests`. | Belum ada UI approval; belum ada transisi `ContentStatus.ReadyToPublish`/readiness endpoint; belum ada export/report. Invalidasi dihitung saat dibaca (bukan flag tersimpan) dan tidak memblokir render — memang manual. |
+| AC-08 | Export and real video ID | **Partial** | Sejak 2026-11-03: `PublicationRecord` (platform, https URL, opaque `videoId`, `PublishedAt`, notes, approval id/revision/artifact hash), `PublicationWorkflow` (hanya bila A3 valid untuk destination yang sama; idempotent; tanpa upload), route `POST` dan `GET .../publications`, tabel `publication_records`; tes `PublicationWorkflowTests`, `FinalApprovalApiContractTests`, `FinalApprovalVerticalSliceTests`. | Export package/import/restore **belum ada** (AC-10); UI belum ada; publikasi tetap manual dan satu record immutable per project. |
 | AC-09 | Time/cost/metrics | **Missing** | Grep `metrics|revenue|human time|cost` di `src/` = 0 hasil produk; tidak ada tabel metrik; yang ada hanya timestamp job (`CreatedAt`/`StartedAt`/`CompletedAt`) | Semua yang diminta `parts/06` §31 hilang: null-vs-zero, cumulative snapshots, actual vs estimated cash, fees/refunds, human hours, elapsed/rework time |
 | AC-10 | Project portability | **Missing** | Tidak ada route export/import, tidak ada workflow, tidak ada runbook, tidak ada tes fresh-location restore | DEV-07 utuh: export/import project, restore DB + file, licensed omission, offline cached-input |
 | AC-11 | Offline cached-input production | **Unverified** | Semua provider lokal (Ollama `127.0.0.1`, ComfyUI/Blender/VoxCPM/ACE-Step lokal, FFmpeg lokal) dan tidak ada panggilan cloud di kode | Tidak ada tes/runbook yang menjalankan render dengan jaringan dimatikan dan input cache; tidak bisa dijalankan di sini (tanpa model/GPU) |
 | AC-12 | No required new payments | **Done (statis) / Unverified (biaya nyata)** | Tidak ada SDK/payment gateway, tidak ada endpoint eksternal selain provider lokal; `Ai:Provider` divalidasi hanya `Ollama`; tidak ada API key di konfigurasi | Biaya model nyata tidak bisa diukur di sini; sifat "tidak butuh pembayaran baru" hanya bisa dibuktikan struktural |
 
-Rekap 12 kriteria: **Done 2** (AC-02, AC-12 — keduanya dengan catatan Unverified runtime), **Partial 6** (AC-01, AC-03, AC-04, AC-05, AC-06, AC-07), **Missing 3** (AC-08, AC-09, AC-10), **Unverified 1** (AC-11).
+Rekap 12 kriteria (setelah A3 + publication, 2026-11-03): **Done 2** (AC-02, AC-12 — keduanya dengan catatan Unverified runtime), **Partial 7** (AC-01, AC-03, AC-04, AC-05, AC-06, AC-07, AC-08), **Missing 2** (AC-09, AC-10), **Unverified 1** (AC-11). Rekap audit awal: Done 2, Partial 6, Missing 3, Unverified 1.
 
 ## 4. Celah lintas-kriteria
 
@@ -107,16 +114,17 @@ Rekap 12 kriteria: **Done 2** (AC-02, AC-12 — keduanya dengan catatan Unverifi
 - Tidak ada tes UI sama sekali (157 file tes semuanya backend).
 - Akibat: AC-01/03/04/05/07/09 yang mensyaratkan `+ UI-01` tidak bisa lulus; "persistent browser project" tidak ada di browser. `docs/design/FIGMA-HANDOFF.md` menyatakan desain belum diterima, jadi kecocokan visual juga tidak bisa dinilai (Unverified, bukan salah kode).
 
-### 4.2 A3 final approval
+### 4.2 A3 final approval (backend resolved 2026-11-03)
 
-- Hanya ada approval script (`ReviewedScript.Approve`) dan approval identity asset. Tidak ada approval untuk final video/publikasi.
-- PRD §43/§44 A3 mensyaratkan approval mengikat artifact version + destination dan menjadi invalid bila artifact berubah. Tidak ada entitas, tabel, endpoint, atau tes untuk itu.
-- `ContentProject.Status` punya `ReadyToPublish`/`Published`, tetapi tidak ada operasi yang mengubahnya di produksi; `TransitionTo` tidak dipanggil dari Application/API.
+- Saat audit hanya ada approval script (`ReviewedScript.Approve`) dan approval identity asset; tidak ada approval final video/publikasi.
+- Kini `FinalApproval` mengikat source RenderVideo job + artifact SHA-256/size + destination + revision, dan invalid bila artifact berubah, QA terbaru gagal, atau render baru dibuat. Read model mengembalikan approved/invalid/missing + alasan.
+- Sisa celah: `ContentProject.Status` masih punya `ReadyToPublish`/`Published` tanpa operasi transisi di Application/API, dan belum ada UI approval.
 
-### 4.3 Publishing record dan video ID
+### 4.3 Publishing record dan video ID (backend resolved 2026-11-03)
 
-- Tidak ada `videoId`/`VideoId` di `src/`; tidak ada URL/destination, tanggal publikasi, atau metadata publikasi.
-- Akibat langsung: AC-08 tidak bisa dinilai "partial" — memang belum ada. Ini juga memblokir pilot P0-05 (manual publication/logs) secara perangkat lunak, meski pilot boleh manual.
+- Saat audit tidak ada `videoId`/`VideoId`, URL/destination, tanggal publikasi, atau metadata publikasi di `src/`.
+- Kini `PublicationRecord` menyimpan platform, https URL, opaque `videoId`, `PublishedAt`, notes, `CreatedAt`, dan binding approval; create hanya bila A3 valid dan destination cocok; tidak ada upload/API eksternal.
+- Sisa celah: export package/import/restore belum ada; UI publikasi belum ada; record immutable satu per project.
 
 ### 4.4 Metrics / waktu / biaya
 
@@ -152,8 +160,8 @@ Urutan menurut rasio "membuka kriteria" vs biaya. S ≤ 1 hari, M 2–4 hari, L 
 
 | # | Pekerjaan | Effort | Alasan singkat |
 | --- | --- | --- | --- |
-| 1 | A3: entitas approval final (artifact hash + destination), tabel, endpoint approve/revoke, invalidasi saat artifact berubah; gate `ReadyToPublish` | **M** | Membuka AC-07 dan menjadi prasyarat AC-08; tanpa ini "readiness" tidak punya arti |
-| 2 | Publication record + `videoId` + destination + waktu; endpoint catat/lihat | **S–M** | Melengkapi AC-08; kecil karena menumpang approval A3 |
+| 1 | A3: entitas approval final (artifact hash + destination), tabel, endpoint approve/revoke, invalidasi saat artifact berubah; gate `ReadyToPublish` | **M** | **Backend DONE 2026-11-03** (tanpa revoke/readiness transition); membuka AC-07 dan menjadi prasyarat AC-08 |
+| 2 | Publication record + `videoId` + destination + waktu; endpoint catat/lihat | **S–M** | **Backend DONE 2026-11-03** (manual, tanpa upload); melengkapi separuh AC-08 |
 | 3 | `GET`/`PUT`/list content project + transisi status yang diekspos | **S** | Menutup separuh AC-01; murah dan langsung terpakai UI |
 | 4 | Cancel job: method `IJobQueue`, endpoint, tes retry/lease | **S** | Menutup celah DEV-04/AC-06 yang sudah lama diklaim "verified" |
 | 5 | Metrics/time/cost model + endpoint (null-vs-zero, actual/estimated, human hours) | **M** | AC-09 hilang total; skema harus benar sejak awal agar tidak migrasi ulang |
@@ -176,7 +184,7 @@ Semua item di bawah **tidak** dinilai gagal; statusnya Unverified karena lingkun
 4. I2V nyata dan benchmark (P1.6/P2 masih `TODO(verify-on-home)`) → AC-05, I2V.
 5. Artefak Video #1 dan demo render (tidak ada di checkout; `assets/` gitignored) → AC-05/AC-07.
 6. Kecocokan layar dengan Figma (frame belum diterima) → UI-01.
-7. Database produksi/status publikasi nyata (tidak ada; DB lokal kosong) → AC-08.
+7. Database produksi/video yang benar-benar terbit (belum ada; DB lokal kosong saat audit). Publication record lokal kini bisa ditulis, tetapi publikasi nyata dan metriknya tidak bisa dibuktikan → AC-08/AC-09.
 8. Biaya, revenue, dan human hours nyata (belum ada video terbit) → AC-09.
 9. Restore di lokasi/DB baru (butuh host kedua; belum ada alatnya) → AC-10.
 10. Render dengan jaringan dimatikan (belum ada tes/runbook) → AC-11.
@@ -199,4 +207,4 @@ Tidak ada yang diperbaiki diam-diam; semuanya dicatat di sini.
 
 ## 8. Kesimpulan audit
 
-Jawaban atas "development AI Studio sudah selesai atau belum?": **belum**. Backend produksi konten sudah jauh melampaui fondasi dan lolos 1245 tes, tetapi P1 didefinisikan sebagai 12 kriteria untuk satu proyek nyata; empat di antaranya (export, video ID, metrics, portability) tidak punya kode sama sekali, A3 tidak ada, dan antarmuka browser belum dibangun. Pekerjaan berikutnya yang paling efisien adalah A3 + publication record + project read/update + cancel (semua kecil), lalu metrics dan export/import sebelum UI-01.
+Jawaban atas "development AI Studio sudah selesai atau belum?": **belum**. Backend produksi konten sudah jauh melampaui fondasi dan lolos 1300 tes, tetapi P1 didefinisikan sebagai 12 kriteria untuk satu proyek nyata. Setelah A3 + publication record (2026-11-03), AC-07 punya backend dan AC-08 setengah tertutup (publication/video ID), tetapi export, metrics, portability, dan antarmuka browser belum ada. Pekerjaan berikutnya yang paling efisien adalah project read/update/list + cancel, lalu metrics dan export/import sebelum UI-01.

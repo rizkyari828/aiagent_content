@@ -203,6 +203,18 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `FinalVideoQaResult.cs`, `FinalVideoQaJobPayload.cs`, `FinalVideoQaWorkflow.cs`, `FinalVideoQaException.cs` — canonical `Job.Result` evidence, enqueue contract/gating, and enqueue errors.
 - `src/AIStudio.Api/Endpoints/FinalVideoQaEndpoints.cs` — minimal QA enqueue HTTP surface.
 
+## Final Approval (A3) + Publication Record
+
+- `src/AIStudio.Domain/Approvals/FinalApproval.cs` — one canonical A3 approval per project: source RenderVideo job, artifact relative path/SHA-256/byte size, destination platform, optional notes/approver, `ApprovedAt`, monotonic `Revision`; `Apply` is idempotent for the same full binding and increments the revision only on a consequential change.
+- `PublicationRecord.cs`, `PublicationRules.cs` — one manual publication record per project (platform, https URL, opaque `videoId`, `PublishedAt`, notes, approval id/revision/artifact hash) plus the shared closed validation rules for platform tokens, URL hosts, video ids, notes, and hashes.
+- `src/AIStudio.Application/Approvals/IFinalApprovalRepository.cs` content lives in `FinalApprovalRepository.cs` (`IFinalApprovalRepository`, `IPublicationRepository`, `FinalVideoQaEvidence`, snapshots) — approval-owned persistence boundaries; QA/render evidence is read-only.
+- `FinalApprovalWorkflow.cs` — enumerate/validate the Succeeded RenderVideo job, newest terminal FinalVideoQa pass, artifact re-read through `IAssetFileStore`, newer-render supersession, and create/update the approval; `EvaluateAsync` returns approved/invalid/missing plus a stable reason.
+- `FinalApprovalStatus.cs`, `FinalApprovalException.cs`, `PublicationWorkflow.cs`, `PublicationException.cs` — read model, transport-neutral errors, and the approval-gated idempotent publication create/find workflow.
+- `src/AIStudio.Infrastructure/Approvals/FinalApprovalRepository.cs`, `PublicationRepository.cs` — EF persistence; the QA lookup reads jobs without mutating them and treats the newest terminal QA as authoritative.
+- `src/AIStudio.Infrastructure/Persistence/Configurations/FinalApprovalConfiguration.cs`, `PublicationRecordConfiguration.cs`, migration `20261103041001_AddFinalApprovalsAndPublications.cs` — `final_approvals` and `publication_records` tables with unique project indexes and FKs to projects/jobs/approval.
+- `src/AIStudio.Api/Endpoints/FinalApprovalEndpoints.cs`, `PublicationEndpoints.cs` — `POST|GET /api/content-projects/{id}/final-approvals` and `POST|GET /api/content-projects/{id}/publications` with stable `code` extensions; transport only.
+- `tests/AIStudio.Tests/Approvals/`, `Persistence/FinalApprovalModelTests.cs`, `Persistence/FinalApprovalVerticalSliceTests.cs` — domain, workflow, API contract, EF mapping, and DB-gated round-trip/invalidation coverage.
+
 ## Manual Script Review/Edit
 
 - `src/AIStudio.Domain/Scripts/ReviewedScript.cs` — one canonical reviewed script per project with `Draft -> Approved` lifecycle.
