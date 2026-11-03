@@ -9,6 +9,17 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `src/AIStudio.Application/Jobs/GenerateIdea/GenerateIdeaWorkflow.cs` — enqueue workflow plus `FindJobAsync` result mapping for every completed job type (including `FinalVideoQa` -> `FinalVideoQaResult`).
 - `GenerateIdeaJobHandler.cs`, `GenerateIdeaJobPayload.cs`, `GenerateIdeaPrompt.cs`, `GenerateIdeaResult.cs` — execution contract, prompt, and structured result.
 
+## Content project lifecycle (read/list/update + readiness)
+
+- `src/AIStudio.Application/Content/ContentProjectWorkflow.cs` — list (bounded, deterministic), detail (+ last-job summary), and title/brief update; status is not writable.
+- `ContentProjectSummary.cs`, `ContentProjectDetails.cs`, `IContentProjectRepository.cs`, `ContentProjectException.cs` — read projections, content-owned repository port, and stable lifecycle errors.
+- `src/AIStudio.Application/Content/ContentReadiness.cs`, `ContentReadinessWorkflow.cs` — computed `not_started|in_progress|qa_passed|ready_to_publish|blocked` readiness with stable reason codes, plus the single `ready_to_publish` transition.
+- `src/AIStudio.Application/Jobs/IProjectJobReader.cs` — narrow project-scoped job summary (no payload/result/worker data).
+- `src/AIStudio.Domain/Content/ContentProject.cs` — `UpdateDetails` (editable fields only) and the explicit readiness-gated `MarkReadyToPublish`; `TransitionTo`/`ContentStatus` unchanged.
+- `src/AIStudio.Infrastructure/Content/ContentProjectRepository.cs`, `src/AIStudio.Infrastructure/Jobs/ProjectJobReader.cs` — EF read/write adapters (`updatedAt desc` then `id`).
+- `src/AIStudio.Api/Endpoints/ContentProjectEndpoints.cs` — `GET|PUT /api/content-projects/{id}`, `GET /api/content-projects`, `GET .../readiness`, `POST .../transitions` with stable `code` extensions.
+- `tests/AIStudio.Tests/Content/`, `tests/AIStudio.Tests/Api/ContentProjectApiContractTests.cs`, `tests/AIStudio.Tests/Persistence/ContentProjectLifecycleVerticalSliceTests.cs` — workflow, readiness, API contract, and DB-gated slice coverage.
+
 ## GenerateScript
 
 - `src/AIStudio.Application/Jobs/GenerateScript/GenerateScriptWorkflow.cs` — enqueue selected idea as a durable script job.
@@ -224,9 +235,12 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 
 ## Durable jobs and worker
 
-- `src/AIStudio.Domain/Jobs/Job.cs`, `JobStatus.cs`, `JobType.cs` — durable job domain.
-- `src/AIStudio.Infrastructure/Jobs/PostgreSqlJobQueue.cs` — PostgreSQL queue authority.
-- `JobWorker.cs`, `JobProcessor.cs`, `JobReader.cs` — worker execution and retrieval.
+- `src/AIStudio.Domain/Jobs/Job.cs`, `JobStatus.cs`, `JobType.cs` — durable job domain (including the `Cancel` Queued/Running rule).
+- `src/AIStudio.Infrastructure/Jobs/PostgreSqlJobQueue.cs` — PostgreSQL queue authority: claim/complete/fail/renew plus the row-locked operator `CancelAsync`.
+- `JobWorker.cs`, `JobProcessor.cs`, `JobReader.cs`, `ProjectJobReader.cs` — worker execution, retrieval, and the project-scoped job summary.
+- `src/AIStudio.Application/Jobs/CancelJobWorkflow.cs`, `JobCancelResult.cs`, `IJobQueue.cs` — operator cancel workflow and outcome (`Cancelled`/`NotFound`/`NotAllowed`).
+- `src/AIStudio.Api/Endpoints/JobCancelEndpoints.cs` — `POST /api/jobs/{jobId}/cancel` with stable `code` extensions.
+- `tests/AIStudio.Tests/Jobs/JobWorkerTests.cs`, `tests/AIStudio.Tests/Persistence/PostgreSqlJobQueueTests.cs`, `tests/AIStudio.Tests/Api/JobCancelApiContractTests.cs` — lease-loss cancellation, queued/running/terminal/unknown cancel, and API contracts.
 
 ## HTTP API
 
