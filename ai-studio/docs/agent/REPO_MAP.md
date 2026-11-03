@@ -29,7 +29,8 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `IProjectTransferStore.cs`, `IProjectTransferRepository.cs`, `ProjectTransferSnapshot.cs`, `ProjectTransferException.cs`, `ProjectTransferLimits.cs` — application-owned ports/contracts with stable `code`s.
 - `src/AIStudio.Infrastructure/Transfer/LocalProjectTransferStore.cs` — approved-root ZIP/filesystem adapter (temporary package + atomic promote, exclusive import writes, list without reading contents, hashed copies).
 - `src/AIStudio.Infrastructure/Transfer/ProjectTransferRepository.cs`, `ProjectTransferOptions.cs` — EF read snapshot and single-transaction exact-restore insert (ids/statuses/revisions/timestamps via the domain factories plus private-setter restore), plus `ProjectTransfer:RootPath`/size-limit options.
-- `src/AIStudio.Api/Endpoints/ProjectTransferEndpoints.cs` — `POST|GET /api/content-projects/{id}/exports` and `POST /api/projects/imports` (multipart) with stable `code` extensions.
+- `src/AIStudio.Api/Endpoints/ProjectTransferEndpoints.cs` — `POST|GET /api/content-projects/{id}/exports` and `POST /api/projects/imports` (multipart) with stable `code` extensions; `ImportRoute` is the shared route constant.
+- `src/AIStudio.Api/UploadLimits/ImportRequestBodyLimit.cs`, `ImportRequestBodyLimitMiddleware.cs` — per-request `IHttpMaxRequestBodySizeFeature` plus a per-request `FormFeature` multipart bound for `POST /api/projects/imports` only (`ProjectTransfer:MaxPackageBytes + 1 MiB`); Kestrel and global `FormOptions` stay at process defaults for every other endpoint. `tests/AIStudio.Tests/Api/ImportRequestBodyLimitTests.cs` covers the path/method gating and both bounds.
 - `tests/AIStudio.Tests/Transfer/`, `tests/AIStudio.Tests/Persistence/ProjectTransferVerticalSliceTests.cs` — manifest/path/hash/limit/reader/import/export/API tests plus the DB-gated export -> delete -> import round-trip and identifier-conflict rollback.
 
 ## GenerateScript

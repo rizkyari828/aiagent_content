@@ -10,6 +10,13 @@ namespace AIStudio.Api.Endpoints;
 /// </summary>
 public static class ProjectTransferEndpoints
 {
+    /// <summary>
+    /// The only route that accepts a package. The per-request body bound in
+    /// <c>ImportRequestBodyLimit</c> targets this exact path, so the route stays here as
+    /// the single source of truth.
+    /// </summary>
+    public const string ImportRoute = "/api/projects/imports";
+
     public static IEndpointRouteBuilder MapProjectTransferApi(
         this IEndpointRouteBuilder endpoints)
     {
@@ -30,7 +37,7 @@ public static class ProjectTransferEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesValidationProblem();
 
-        var imports = endpoints.MapGroup("/api/projects/imports");
+        var imports = endpoints.MapGroup(ImportRoute);
         imports.MapPost("", ImportAsync)
             .WithName("ImportContentProject")
             .DisableAntiforgery()
