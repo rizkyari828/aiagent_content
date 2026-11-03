@@ -45,10 +45,10 @@ PostgreSQL development uses the root Compose file with official PostgreSQL 18.6 
 ## Data and lifecycle
 
 - Add entities per slice. ContentProject and Job are the initial roots; ReviewedScript now stores the separate canonical human-reviewed script required before Storyboard. Other ContentItem/artifact entities remain deferred until their slices require them.
-- EF Core and Npgsql are isolated in Infrastructure. ApplicationDbContext exposes ContentProject, Job, and ReviewedScript; migration `20260917113100_AddReviewedScripts` adds only the review table, provenance relationships, and constraints.
+- EF Core and Npgsql are isolated in Infrastructure. ApplicationDbContext exposes ContentProject, Job, and ReviewedScript, plus the SceneAsset, NarrationTrack, and SubtitleTrack slices; five migrations apply these tables (latest `20260918081522_AddSubtitleTracks`).
 - Store media on disk using paths relative to a configured root. Database holds metadata/references and selected JSONB fields; no media blobs.
 - Content lifecycle: Draft → Researching → IdeaReview → Scripting → ScriptReview → Producing → FinalReview → ReadyToPublish → Published; Archived is separate. Define allowed transitions and revisions as implemented; do not assume a generic status setter is sufficient.
-- Jobs: Queued, Running, Succeeded, Failed, Cancelled. The persistent model includes input hashes, bounded retry, JSONB input/output, and minimal worker/lease fields. Atomic claiming, lease reconciliation, execution, output reuse, and cancellation remain the next milestone.
+- Jobs: Queued, Running, Succeeded, Failed, Cancelled. Atomic claiming, lease reconciliation, execution, and output reuse are implemented; `Job.Cancel` exists in the domain but no queue method, endpoint, or test wires it yet.
 - A1 references brief/angle; A2 script/claims; A3 rendered artifact and publication metadata. Material edits invalidate affected approvals/outputs. Retry alone does not invalidate unchanged inputs.
 - Unknown metrics are null with reason, not zero. Snapshots are not summed. Money has explicit currency and actual/estimated/refunded distinctions; human and machine time stay separate.
 
