@@ -1,3 +1,4 @@
+using AIStudio.Application.Content;
 using AIStudio.Domain.Content;
 using AIStudio.Domain.Jobs;
 
@@ -33,6 +34,17 @@ internal static class ApiStatus
             ContentStatus.ReadyToPublish => "ready_to_publish",
             ContentStatus.Published => "published",
             ContentStatus.Archived => "archived",
+            _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
+        };
+
+    public static string ToApiStatus(ContentReadinessStatus status) =>
+        status switch
+        {
+            ContentReadinessStatus.NotStarted => "not_started",
+            ContentReadinessStatus.InProgress => "in_progress",
+            ContentReadinessStatus.QaPassed => "qa_passed",
+            ContentReadinessStatus.ReadyToPublish => "ready_to_publish",
+            ContentReadinessStatus.Blocked => "blocked",
             _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
         };
 }

@@ -43,4 +43,90 @@ public sealed class ContentProjectTests
         Assert.Throws<InvalidOperationException>(
             () => project.TransitionTo(ContentStatus.Published, Now.AddMinutes(1)));
     }
+
+    [Fact]
+    public void UpdateDetails_NormalizesTextAndBumpsUpdatedAt()
+    {
+        var project = ContentProject.Create("Local AI pilot", null, Now);
+
+        var changed = project.UpdateDetails(
+            "  Updated title  ",
+            "  New brief  ",
+            Now.AddMinutes(1));
+
+        Assert.True(changed);
+        Assert.Equal("Updated title", project.Title);
+        Assert.Equal("New brief", project.Brief);
+        Assert.Equal(Now.AddMinutes(1), project.UpdatedAt);
+        Assert.Equal(ContentStatus.Draft, project.Status);
+    }
+
+    [Fact]
+    public void UpdateDetails_NoOpKeepsUpdatedAt()
+    {
+        var project = ContentProject.Create("Local AI pilot", "Brief", Now);
+
+        var changed = project.UpdateDetails("Local AI pilot", "Brief", Now.AddHours(1));
+
+        Assert.False(changed);
+        Assert.Equal(Now, project.UpdatedAt);
+    }
+
+    [Fact]
+    public void UpdateDetails_ClearsBlankBrief()
+    {
+        var project = ContentProject.Create("Local AI pilot", "Brief", Now);
+
+        var changed = project.UpdateDetails("Local AI pilot", "   ", Now.AddMinutes(1));
+
+        Assert.True(changed);
+        Assert.Null(project.Brief);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void UpdateDetails_RejectsBlankTitle(string title)
+    {
+        var project = ContentProject.Create("Local AI pilot", null, Now);
+
+        Assert.Throws<ArgumentException>(
+            () => project.UpdateDetails(title, null, Now.AddMinutes(1)));
+    }
+
+    [Fact]
+    public void MarkReadyToPublish_SetsStatusAndTimestampFromAnyLiveStatus()
+    {
+        var project = ContentProject.Create("Local AI pilot", null, Now);
+
+        project.MarkReadyToPublish(Now.AddMinutes(1));
+
+        Assert.Equal(ContentStatus.ReadyToPublish, project.Status);
+        Assert.Equal(Now.AddMinutes(1), project.UpdatedAt);
+    }
+
+    [Fact]
+    public void MarkReadyToPublish_IsIdempotent()
+    {
+        var project = ContentProject.Create("Local AI pilot", null, Now);
+        project.MarkReadyToPublish(Now.AddMinutes(1));
+
+        project.MarkReadyToPublish(Now.AddMinutes(2));
+
+        Assert.Equal(ContentStatus.ReadyToPublish, project.Status);
+        Assert.Equal(Now.AddMinutes(1), project.UpdatedAt);
+    }
+
+    [Theory]
+    [InlineData(ContentStatus.Published)]
+    [InlineData(ContentStatus.Archived)]
+    public void MarkReadyToPublish_RejectsTerminalStatuses(ContentStatus terminal)
+    {
+        var project = ContentProject.Create("Local AI pilot", null, Now);
+        project.MarkReadyToPublish(Now.AddMinutes(1));
+        project.TransitionTo(terminal, Now.AddMinutes(2));
+
+        Assert.Throws<InvalidOperationException>(
+            () => project.MarkReadyToPublish(Now.AddMinutes(3)));
+    }
 }
