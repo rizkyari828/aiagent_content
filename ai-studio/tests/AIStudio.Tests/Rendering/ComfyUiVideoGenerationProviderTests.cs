@@ -341,18 +341,127 @@ public sealed class ComfyUiVideoGenerationProviderTests : IDisposable
         Assert.Equal(VideoGenerationException.Timeout, exception.ErrorCode);
     }
 
-    [Fact]
-    public async Task GenerateAsync_MapsNonVideoArtifactToArtifactInvalid()
+    [Theory]
+    [InlineData(false, 3.0, 1280, 720)]
+    [InlineData(true, 0.0, 1280, 720)]
+    [InlineData(true, 3.0, 640, 720)]
+    [InlineData(true, 3.0, 1280, 360)]
+    [InlineData(true, 4.0, 1280, 720)]
+    public async Task GenerateAsync_MapsUnusableProbeResultToArtifactInvalid(
+        bool hasVideo,
+        double durationSeconds,
+        int width,
+        int height)
     {
-        var handler = SuccessHandler(artifact: Png);
-        var provider = CreateProvider(handler, enabled: true);
+        var inspector = new StubMediaInspector
+        {
+            Result = new MediaInspection(
+                durationSeconds,
+                hasVideo,
+                HasAudio: false,
+                HasSubtitle: false,
+                width,
+                height)
+        };
+        var provider = CreateProvider(
+            SuccessHandler(),
+            enabled: true,
+            mediaInspector: inspector);
 
         var exception = await Assert.ThrowsAsync<VideoGenerationException>(() => provider.GenerateAsync(
             Request(),
             TestContext.Current.CancellationToken));
 
         Assert.Equal(VideoGenerationException.ArtifactInvalid, exception.ErrorCode);
-        Assert.Empty(Directory.GetFiles(root, "*.mp4", SearchOption.AllDirectories));
+        Assert.Equal(1, inspector.Calls);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_AcceptsProbeDurationWithinTolerance()
+    {
+        // max(0.25 s, 5% of 3 s) = 0.25 s, so 3.2 s is accepted.
+        var inspector = new StubMediaInspector
+        {
+            Result = new MediaInspection(
+                DurationSeconds: 3.2,
+                HasVideo: true,
+                HasAudio: false,
+                HasSubtitle: false,
+                Width: 1280,
+                Height: 720)
+        };
+        var provider = CreateProvider(
+            SuccessHandler(),
+            enabled: true,
+            mediaInspector: inspector);
+
+        var result = await provider.GenerateAsync(
+            Request(),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(3.2, result.DurationSeconds);
+        Assert.Equal(1, inspector.Calls);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_MapsProbeFailureToArtifactInvalid()
+    {
+        var inspector = new StubMediaInspector
+        {
+            Failure = new ProcessExecutionException(
+                ProcessExecutionException.MediaProbeFailed,
+                "ffprobe failed.")
+        };
+        var provider = CreateProvider(
+            SuccessHandler(),
+            enabled: true,
+            mediaInspector: inspector);
+
+        var exception = await Assert.ThrowsAsync<VideoGenerationException>(() => provider.GenerateAsync(
+            Request(),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(VideoGenerationException.ArtifactInvalid, exception.ErrorCode);
+        Assert.Equal(1, inspector.Calls);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_MapsEmptyArtifactToArtifactInvalidWithoutProbing()
+    {
+        var inspector = new StubMediaInspector();
+        var provider = CreateProvider(
+            SuccessHandler(artifact: []),
+            enabled: true,
+            mediaInspector: inspector);
+
+        var exception = await Assert.ThrowsAsync<VideoGenerationException>(() => provider.GenerateAsync(
+            Request(),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(VideoGenerationException.ArtifactInvalid, exception.ErrorCode);
+        Assert.Equal(0, inspector.Calls);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_ProbesAfterGpuLeaseIsReleased()
+    {
+        var gate = new RecordingGpuResourceGate();
+        var leasesAtProbe = -1;
+        var inspector = new StubMediaInspector
+        {
+            BeforeInspect = () => leasesAtProbe = gate.ActiveLeases
+        };
+        var provider = CreateProvider(
+            SuccessHandler(),
+            enabled: true,
+            gpuResourceGate: gate,
+            mediaInspector: inspector);
+
+        await provider.GenerateAsync(Request(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, leasesAtProbe);
+        Assert.Equal(0, gate.ActiveLeases);
+        Assert.Equal(1, inspector.Calls);
     }
 
     [Fact]
@@ -416,7 +525,8 @@ public sealed class ComfyUiVideoGenerationProviderTests : IDisposable
         int timeoutSeconds = 600,
         IGpuResourceGate? gpuResourceGate = null,
         IIdentityAssetRegistry? registry = null,
-        IIdentityAssetStore? store = null) =>
+        IIdentityAssetStore? store = null,
+        IMediaInspector? mediaInspector = null) =>
         new(
             new HttpClient(handler) { BaseAddress = new Uri("http://127.0.0.1:8188/") },
             Options.Create(new ComfyUiVideoOptions
@@ -435,7 +545,8 @@ public sealed class ComfyUiVideoGenerationProviderTests : IDisposable
             gpuResourceGate ?? NoopGpuResourceGate.Instance,
             registry ?? new IdentityAssetRegistry(),
             store ?? new FakeIdentityAssetStore(),
-            new LocalAssetFileStore(Options.Create(new AssetStorageOptions { RootPath = root })));
+            new LocalAssetFileStore(Options.Create(new AssetStorageOptions { RootPath = root })),
+            mediaInspector ?? new StubMediaInspector());
 
     private static StubHttpMessageHandler SuccessHandler(
         Func<HttpRequestMessage, CancellationToken, Task>? inspect = null,
@@ -609,6 +720,35 @@ public sealed class ComfyUiVideoGenerationProviderTests : IDisposable
 
         public bool Exists(AssetReferenceId id, IdentityAssetVersion version) =>
             bytes.ContainsKey((id, version));
+    }
+
+    private sealed class StubMediaInspector : IMediaInspector
+    {
+        public MediaInspection Result { get; set; } = new(
+            DurationSeconds: 3,
+            HasVideo: true,
+            HasAudio: false,
+            HasSubtitle: false,
+            Width: 1280,
+            Height: 720);
+
+        public Exception? Failure { get; set; }
+
+        public Action? BeforeInspect { get; set; }
+
+        public int Calls { get; private set; }
+
+        public Task<MediaInspection> InspectAsync(
+            string absolutePath,
+            CancellationToken cancellationToken)
+        {
+            Calls++;
+            BeforeInspect?.Invoke();
+
+            return Failure is null
+                ? Task.FromResult(Result)
+                : Task.FromException<MediaInspection>(Failure);
+        }
     }
 
     private sealed class StubHttpMessageHandler(

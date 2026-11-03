@@ -21,20 +21,29 @@ namespace AIStudio.Infrastructure.Rendering;
 /// node, path, or URL.
 ///
 /// The exclusive GPU lease is held across the complete submit -> poll -> download
-/// window and released before the CPU-only persist step.
+/// window and released before the CPU-only persist and <c>IMediaInspector</c> probe.
+/// The probe is the artifact authority: a clip is accepted only when it has a video
+/// stream, a plausible duration, and exactly the requested dimensions.
 ///
 /// TODO(verify-on-home): the repository-owned I2V workflow file does not exist yet.
 /// The graph, its output node, and the produced container must be verified on the GPU
 /// machine before <see cref="ComfyUiVideoOptions.WorkflowPath"/> points at a real file.
 /// Until then a missing file reports <c>video_not_configured</c>; no node or model name
-/// is invented here. Clip metadata is reported from the request; probing the artifact
-/// with <c>IMediaInspector</c> is part of P3.1.
+/// is invented here.
 /// </summary>
 public sealed class ComfyUiVideoGenerationProvider : IVideoGenerationProvider
 {
     private const string SupportedReferenceKind = "reference-image";
     private const string SupportedReferenceMediaType = "image/png";
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// Duration tolerance: <c>max(0.25 s, 5% of the requested duration)</c>. Encoders
+    /// commonly emit frame-aligned durations that differ slightly from the requested
+    /// floating-point length, so an exact duration match would be brittle.
+    /// </summary>
+    private const double MinimumDurationToleranceSeconds = 0.25;
+    private const double DurationToleranceRatio = 0.05;
 
     private static readonly string[] RequiredPlaceholders =
     [
@@ -52,6 +61,7 @@ public sealed class ComfyUiVideoGenerationProvider : IVideoGenerationProvider
     private readonly IIdentityAssetRegistry identityAssetRegistry;
     private readonly IIdentityAssetStore identityAssetStore;
     private readonly IAssetFileStore assetFileStore;
+    private readonly IMediaInspector mediaInspector;
 
     public ComfyUiVideoGenerationProvider(
         HttpClient httpClient,
@@ -59,7 +69,8 @@ public sealed class ComfyUiVideoGenerationProvider : IVideoGenerationProvider
         IGpuResourceGate gpuResourceGate,
         IIdentityAssetRegistry identityAssetRegistry,
         IIdentityAssetStore identityAssetStore,
-        IAssetFileStore assetFileStore)
+        IAssetFileStore assetFileStore,
+        IMediaInspector mediaInspector)
     {
         this.httpClient = httpClient;
         this.options = options.Value;
@@ -67,6 +78,7 @@ public sealed class ComfyUiVideoGenerationProvider : IVideoGenerationProvider
         this.identityAssetRegistry = identityAssetRegistry;
         this.identityAssetStore = identityAssetStore;
         this.assetFileStore = assetFileStore;
+        this.mediaInspector = mediaInspector;
     }
 
     public bool IsEnabled => options.Enabled;
@@ -126,21 +138,25 @@ public sealed class ComfyUiVideoGenerationProvider : IVideoGenerationProvider
                 artifact = await DownloadAsync(video, timeout.Token);
             }
 
-            ValidateArtifact(artifact);
+            ValidateArtifactNotEmpty(artifact);
 
-            // CPU-only persist happens after the lease is released.
+            // CPU-only from here: the lease above is already released, so persisting
+            // and probing never hold the GPU gate.
             var file = await assetFileStore.WriteAsync(
                 BuildRelativeOutputPath(request, artifact),
                 artifact,
                 cancellationToken);
 
+            var inspection = await InspectAsync(file.AbsolutePath, cancellationToken);
+            ValidateInspection(request, inspection);
+
             return new VideoGenerationResult(
                 file.RelativePath,
                 file.ContentHash,
                 file.ByteSize,
-                request.DurationSeconds,
-                request.Width,
-                request.Height,
+                inspection.DurationSeconds,
+                inspection.Width,
+                inspection.Height,
                 request.FramesPerSecond);
         }
         catch (OperationCanceledException exception)
@@ -501,12 +517,7 @@ public sealed class ComfyUiVideoGenerationProvider : IVideoGenerationProvider
         return await response.Content.ReadAsByteArrayAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// TODO(verify-on-home): replace this container check with an <c>IMediaInspector</c>
-    /// probe of the verified output format. Only the MP4 and WebM signatures are
-    /// accepted today.
-    /// </summary>
-    private static void ValidateArtifact(byte[] artifact)
+    private static void ValidateArtifactNotEmpty(byte[] artifact)
     {
         if (artifact.Length == 0)
         {
@@ -514,12 +525,68 @@ public sealed class ComfyUiVideoGenerationProvider : IVideoGenerationProvider
                 VideoGenerationException.ArtifactInvalid,
                 "ComfyUI returned an empty video artifact.");
         }
+    }
 
-        if (!IsMp4(artifact) && !IsWebM(artifact))
+    private async Task<MediaInspection> InspectAsync(
+        string absolutePath,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await mediaInspector.InspectAsync(absolutePath, cancellationToken);
+        }
+        catch (ProcessExecutionException exception)
+        {
+            // A probe that cannot run or fails to parse is not a usable artifact; the
+            // closed I2V error contract has no separate probe code.
+            throw new VideoGenerationException(
+                VideoGenerationException.ArtifactInvalid,
+                "ComfyUI returned a video artifact that could not be probed.",
+                exception);
+        }
+    }
+
+    /// <summary>
+    /// The probe is the single artifact authority (no container-signature check is kept).
+    /// It requires a real video stream, a duration within
+    /// <c>max(0.25 s, 5% of the request)</c>, and exactly the requested dimensions. Fps
+    /// is intentionally not compared: <see cref="IMediaInspector"/> does not report it
+    /// and frame-rate values drift with encoder rounding; the request fps is already
+    /// validated against the trusted upper bound.
+    /// </summary>
+    private static void ValidateInspection(
+        VideoGenerationRequest request,
+        MediaInspection inspection)
+    {
+        if (!inspection.HasVideo)
         {
             throw new VideoGenerationException(
                 VideoGenerationException.ArtifactInvalid,
-                "ComfyUI did not return a usable video container.");
+                "ComfyUI returned an artifact without a video stream.");
+        }
+
+        if (inspection.DurationSeconds <= 0)
+        {
+            throw new VideoGenerationException(
+                VideoGenerationException.ArtifactInvalid,
+                "ComfyUI returned a video artifact with no duration.");
+        }
+
+        var durationTolerance = Math.Max(
+            MinimumDurationToleranceSeconds,
+            request.DurationSeconds * DurationToleranceRatio);
+        if (Math.Abs(inspection.DurationSeconds - request.DurationSeconds) > durationTolerance)
+        {
+            throw new VideoGenerationException(
+                VideoGenerationException.ArtifactInvalid,
+                "ComfyUI returned a video artifact whose duration does not match the request.");
+        }
+
+        if (inspection.Width != request.Width || inspection.Height != request.Height)
+        {
+            throw new VideoGenerationException(
+                VideoGenerationException.ArtifactInvalid,
+                "ComfyUI returned a video artifact with unexpected dimensions.");
         }
     }
 
@@ -539,6 +606,8 @@ public sealed class ComfyUiVideoGenerationProvider : IVideoGenerationProvider
                     request.FirstFrame?.Version.Value.ToString(CultureInfo.InvariantCulture) ?? "none"))))
             .ToLowerInvariant()[..16];
 
+        // Naming hint only, never a gate: the probe above decides whether the artifact
+        // is accepted, so a WebM container keeps a truthful extension.
         var extension = IsWebM(artifact) ? "webm" : "mp4";
         return $"{options.OutputDirectory.TrimEnd('/')}/i2v-{fingerprint}.{extension}";
     }
@@ -593,13 +662,6 @@ public sealed class ComfyUiVideoGenerationProvider : IVideoGenerationProvider
         && bytes[5] == 0x0A
         && bytes[6] == 0x1A
         && bytes[7] == 0x0A;
-
-    private static bool IsMp4(ReadOnlySpan<byte> bytes) =>
-        bytes.Length >= 12
-        && bytes[4] == 0x66
-        && bytes[5] == 0x74
-        && bytes[6] == 0x79
-        && bytes[7] == 0x70;
 
     private static bool IsWebM(ReadOnlySpan<byte> bytes) =>
         bytes.Length >= 4

@@ -37,16 +37,28 @@ public sealed class ComfyUiVideoOptions
     /// </summary>
     public string OutputDirectory { get; set; } = "renders/i2v";
 
-    /// <summary>Trusted upper bound for request width.</summary>
+    /// <summary>
+    /// Trusted request MAXIMUM, not an exact value: any even request width up to this
+    /// bound is accepted.
+    /// </summary>
     public int Width { get; set; } = 1280;
 
-    /// <summary>Trusted upper bound for request height.</summary>
+    /// <summary>
+    /// Trusted request MAXIMUM, not an exact value: any even request height up to this
+    /// bound is accepted.
+    /// </summary>
     public int Height { get; set; } = 720;
 
-    /// <summary>Trusted upper bound for request frame rate.</summary>
+    /// <summary>
+    /// Trusted request MAXIMUM, not an exact value: any positive request fps up to this
+    /// bound is accepted.
+    /// </summary>
     public int Fps { get; set; } = 24;
 
-    /// <summary>Trusted upper bound for request clip length.</summary>
+    /// <summary>
+    /// Trusted request MAXIMUM, not an exact value: any request clip length from 1 second
+    /// up to this bound is accepted.
+    /// </summary>
     public int MaxSeconds { get; set; } = 5;
 
     public int TimeoutSeconds { get; set; } = 1800;
