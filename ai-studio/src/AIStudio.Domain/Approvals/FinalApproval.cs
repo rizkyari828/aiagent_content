@@ -269,6 +269,17 @@ public sealed class FinalApproval
     }
 
     /// <summary>
+    /// Applies the canonical decision-note rule: optional for an approval, mandatory and
+    /// at most <see cref="MaxDecisionNoteLength"/> characters for a change request.
+    /// Exposed so other layers (for example project transfer) validate against the same
+    /// rule instead of duplicating it.
+    /// </summary>
+    public static string? NormalizeDecisionNote(
+        FinalApprovalDecision decision,
+        string? decisionNote) =>
+        RequireDecisionNote(decision, decisionNote, nameof(decisionNote));
+
+    /// <summary>
     /// A change request is only actionable when it says what must change, so the note is
     /// mandatory for that decision. An approval keeps the note optional.
     /// </summary>

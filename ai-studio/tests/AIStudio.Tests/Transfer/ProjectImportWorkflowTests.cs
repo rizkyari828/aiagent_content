@@ -1,6 +1,7 @@
 using Xunit;
 using System.Security.Cryptography;
 using AIStudio.Application.Transfer;
+using AIStudio.Domain.Approvals;
 
 namespace AIStudio.Tests.Transfer;
 
@@ -28,6 +29,57 @@ public sealed class ProjectImportWorkflowTests
         Assert.Equal(bytes, File.ReadAllBytes(fixture.AssetPath("scenes/one.bin")));
         Assert.NotNull(repository.Imported);
         Assert.Equal(projectId, repository.Imported.Project.Id);
+    }
+
+    [Fact]
+    public async Task Import_V1PackageWithoutDecision_DefaultsToApproved()
+    {
+        using var fixture = TransferTestStore.Create();
+        var manifest = TransferTestData.ManifestWithApproval(
+            ProjectPackageSerializer.MinimumSchemaVersion,
+            decision: null,
+            withDecidedAt: false);
+        var package = TransferTestData.Build(
+            manifest,
+            [(TransferTestData.RenderPath, TransferTestData.RenderBytes)]);
+        var repository = new FakeProjectTransferRepository();
+        var workflow = new ProjectImportWorkflow(repository, fixture.Store);
+
+        await workflow.ImportAsync(
+            new MemoryStream(package),
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(repository.Imported);
+        var approval = repository.Imported!.FinalApproval;
+        Assert.NotNull(approval);
+        Assert.Equal(FinalApprovalDecision.Approved, approval!.ResolveDecision());
+        Assert.Equal(approval.ApprovedAt, approval.ResolveDecidedAt());
+        Assert.Equal(
+            TransferTestData.RenderBytes,
+            File.ReadAllBytes(fixture.AssetPath(TransferTestData.RenderPath)));
+    }
+
+    [Fact]
+    public async Task Import_UnknownDecision_IsRejectedBeforeWritingFiles()
+    {
+        using var fixture = TransferTestStore.Create();
+        var manifest = TransferTestData.ManifestWithApproval(
+            ProjectPackageSerializer.CurrentSchemaVersion,
+            "rejected");
+        var package = TransferTestData.Build(
+            manifest,
+            [(TransferTestData.RenderPath, TransferTestData.RenderBytes)]);
+        var repository = new FakeProjectTransferRepository();
+        var workflow = new ProjectImportWorkflow(repository, fixture.Store);
+
+        var error = await Assert.ThrowsAsync<ProjectTransferException>(
+            () => workflow.ImportAsync(
+                new MemoryStream(package),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("import_package_invalid", error.ErrorCode);
+        Assert.Null(repository.Imported);
+        Assert.False(File.Exists(fixture.AssetPath(TransferTestData.RenderPath)));
     }
 
     [Fact]

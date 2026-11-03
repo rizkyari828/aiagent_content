@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
+using AIStudio.Domain.Approvals;
 using AIStudio.Domain.Assets;
 using AIStudio.Domain.Jobs;
 using AIStudio.Domain.Scripts;
@@ -58,12 +59,14 @@ public sealed class ProjectPackageReader(ProjectTransferLimits limits)
             cancellationToken);
         var manifest = ProjectPackageSerializer.Deserialize(manifestBytes);
 
-        if (manifest.SchemaVersion != ProjectPackageSerializer.CurrentSchemaVersion)
+        if (manifest.SchemaVersion < ProjectPackageSerializer.MinimumSchemaVersion
+            || manifest.SchemaVersion > ProjectPackageSerializer.CurrentSchemaVersion)
         {
             throw new ProjectTransferException(
                 "import_schema_unsupported",
                 $"Package schema version {manifest.SchemaVersion} is not supported; "
-                + $"expected {ProjectPackageSerializer.CurrentSchemaVersion}.");
+                + $"expected {ProjectPackageSerializer.MinimumSchemaVersion} or "
+                + $"{ProjectPackageSerializer.CurrentSchemaVersion}.");
         }
 
         var packagedFiles = IndexFileEntries(archive);
@@ -492,6 +495,74 @@ public sealed class ProjectPackageReader(ProjectTransferLimits limits)
         {
             throw Invalid("The final approval is not valid.");
         }
+
+        ValidateApprovalDecision(manifest.SchemaVersion, approval);
+    }
+
+    /// <summary>
+    /// Schema v1 has no decision fields. Schema v2 must carry a canonical lowercase
+    /// decision, a decision timestamp inside the row timestamps, and a note that passes
+    /// the existing domain rule (mandatory for <c>changes_requested</c>, max 2000).
+    /// </summary>
+    private static void ValidateApprovalDecision(
+        int schemaVersion,
+        ProjectManifestFinalApproval approval)
+    {
+        if (schemaVersion == ProjectPackageSerializer.MinimumSchemaVersion)
+        {
+            if (approval.Decision is not null
+                || approval.DecisionNote is not null
+                || approval.DecidedAt is not null)
+            {
+                throw Invalid(
+                    "A schema version 1 final approval cannot carry a review decision.");
+            }
+
+            return;
+        }
+
+        if (approval.Decision is null)
+        {
+            throw Invalid("The final approval is missing its decision.");
+        }
+
+        if (!FinalApprovalDecisionTokens.TryParse(approval.Decision, out var decision)
+            || !string.Equals(
+                approval.Decision,
+                FinalApprovalDecisionTokens.ToToken(decision),
+                StringComparison.Ordinal))
+        {
+            throw Invalid(
+                "The final approval decision must be 'approved' or 'changes_requested'.");
+        }
+
+        if (approval.DecidedAt is not { } decidedAt || decidedAt == default)
+        {
+            throw Invalid("The final approval is missing its decision timestamp.");
+        }
+
+        if (decidedAt < approval.CreatedAt || decidedAt > approval.UpdatedAt)
+        {
+            throw Invalid(
+                "The final approval decision timestamp is inconsistent with the row timestamps.");
+        }
+
+        string? normalizedNote;
+        try
+        {
+            normalizedNote = FinalApproval.NormalizeDecisionNote(
+                decision,
+                approval.DecisionNote);
+        }
+        catch (ArgumentException exception)
+        {
+            throw Invalid(exception.Message, exception);
+        }
+
+        if (!string.Equals(normalizedNote, approval.DecisionNote, StringComparison.Ordinal))
+        {
+            throw Invalid("The final approval decision note is not normalized.");
+        }
     }
 
     private static void ValidatePublication(ProjectTransferManifest manifest)
@@ -673,6 +744,11 @@ public sealed class ProjectPackageReader(ProjectTransferLimits limits)
 
     private static ProjectTransferException Invalid(string message) =>
         new("import_package_invalid", message);
+
+    private static ProjectTransferException Invalid(
+        string message,
+        Exception innerException) =>
+        new("import_package_invalid", message, innerException);
 
     private static ProjectTransferException PathInvalid(string message) =>
         new("import_path_invalid", message);

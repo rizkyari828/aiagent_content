@@ -1,6 +1,7 @@
 using Xunit;
 using System.IO.Compression;
 using AIStudio.Application.Transfer;
+using AIStudio.Domain.Approvals;
 
 namespace AIStudio.Tests.Transfer;
 
@@ -33,6 +34,131 @@ public sealed class ProjectPackageReaderTests
         var error = await ReadErrorAsync(package);
 
         Assert.Equal("import_schema_unsupported", error.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Read_V2ChangesRequestedDecision_IsAccepted()
+    {
+        var manifest = TransferTestData.ManifestWithApproval(
+            ProjectPackageSerializer.CurrentSchemaVersion,
+            FinalApprovalDecisionTokens.ChangesRequested,
+            "Subtitles are cut off in scene 3");
+        var package = TransferTestData.Build(
+            manifest,
+            [(TransferTestData.RenderPath, TransferTestData.RenderBytes)]);
+
+        var contents = await ReadAsync(package);
+
+        Assert.NotNull(contents.Manifest.FinalApproval);
+        Assert.Equal(
+            FinalApprovalDecision.ChangesRequested,
+            contents.Manifest.FinalApproval.ResolveDecision());
+        Assert.Equal(
+            "Subtitles are cut off in scene 3",
+            contents.Manifest.FinalApproval.DecisionNote);
+    }
+
+    [Fact]
+    public async Task Read_V1PackageWithoutDecision_DefaultsToApproved()
+    {
+        var manifest = TransferTestData.ManifestWithApproval(
+            ProjectPackageSerializer.MinimumSchemaVersion,
+            decision: null,
+            withDecidedAt: false);
+        var package = TransferTestData.Build(
+            manifest,
+            [(TransferTestData.RenderPath, TransferTestData.RenderBytes)]);
+
+        var contents = await ReadAsync(package);
+
+        var approval = contents.Manifest.FinalApproval;
+        Assert.NotNull(approval);
+        Assert.Null(approval!.Decision);
+        Assert.Null(approval.DecisionNote);
+        Assert.Null(approval.DecidedAt);
+        Assert.Equal(FinalApprovalDecision.Approved, approval.ResolveDecision());
+        Assert.Equal(approval.ApprovedAt, approval.ResolveDecidedAt());
+    }
+
+    [Theory]
+    [InlineData("rejected")]
+    [InlineData("Approved")]
+    [InlineData("")]
+    public async Task Read_UnknownOrNonCanonicalDecision_IsRejected(string decision)
+    {
+        var manifest = TransferTestData.ManifestWithApproval(
+            ProjectPackageSerializer.CurrentSchemaVersion,
+            decision);
+        var package = TransferTestData.Build(
+            manifest,
+            [(TransferTestData.RenderPath, TransferTestData.RenderBytes)]);
+
+        var error = await ReadErrorAsync(package);
+
+        Assert.Equal("import_package_invalid", error.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Read_ChangesRequestedWithoutNote_IsRejected()
+    {
+        var manifest = TransferTestData.ManifestWithApproval(
+            ProjectPackageSerializer.CurrentSchemaVersion,
+            FinalApprovalDecisionTokens.ChangesRequested);
+        var package = TransferTestData.Build(
+            manifest,
+            [(TransferTestData.RenderPath, TransferTestData.RenderBytes)]);
+
+        var error = await ReadErrorAsync(package);
+
+        Assert.Equal("import_package_invalid", error.ErrorCode);
+        Assert.Contains("note", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Read_ChangesRequestedWithOversizedNote_IsRejected()
+    {
+        var manifest = TransferTestData.ManifestWithApproval(
+            ProjectPackageSerializer.CurrentSchemaVersion,
+            FinalApprovalDecisionTokens.ChangesRequested,
+            new string('x', FinalApproval.MaxDecisionNoteLength + 1));
+        var package = TransferTestData.Build(
+            manifest,
+            [(TransferTestData.RenderPath, TransferTestData.RenderBytes)]);
+
+        var error = await ReadErrorAsync(package);
+
+        Assert.Equal("import_package_invalid", error.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Read_V2ApprovalWithoutDecidedAt_IsRejected()
+    {
+        var manifest = TransferTestData.ManifestWithApproval(
+            ProjectPackageSerializer.CurrentSchemaVersion,
+            FinalApprovalDecisionTokens.Approved,
+            withDecidedAt: false);
+        var package = TransferTestData.Build(
+            manifest,
+            [(TransferTestData.RenderPath, TransferTestData.RenderBytes)]);
+
+        var error = await ReadErrorAsync(package);
+
+        Assert.Equal("import_package_invalid", error.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Read_V1ApprovalWithDecision_IsRejected()
+    {
+        var manifest = TransferTestData.ManifestWithApproval(
+            ProjectPackageSerializer.MinimumSchemaVersion,
+            FinalApprovalDecisionTokens.Approved);
+        var package = TransferTestData.Build(
+            manifest,
+            [(TransferTestData.RenderPath, TransferTestData.RenderBytes)]);
+
+        var error = await ReadErrorAsync(package);
+
+        Assert.Equal("import_package_invalid", error.ErrorCode);
     }
 
     [Theory]
