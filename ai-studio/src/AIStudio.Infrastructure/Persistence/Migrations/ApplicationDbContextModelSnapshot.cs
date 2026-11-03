@@ -22,6 +22,159 @@ namespace AIStudio.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("AIStudio.Domain.Approvals.FinalApproval", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("approved_at");
+
+                    b.Property<string>("ApproverLabel")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("approver_label");
+
+                    b.Property<long>("ArtifactByteSize")
+                        .HasColumnType("bigint")
+                        .HasColumnName("artifact_byte_size");
+
+                    b.Property<string>("ArtifactContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("artifact_content_hash");
+
+                    b.Property<string>("ArtifactPath")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("artifact_path");
+
+                    b.Property<Guid>("ContentProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("content_project_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Destination")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("destination");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("notes");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision");
+
+                    b.Property<Guid>("SourceRenderJobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_render_job_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContentProjectId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_final_approvals_content_project_id");
+
+                    b.HasIndex("SourceRenderJobId")
+                        .HasDatabaseName("ix_final_approvals_source_render_job_id");
+
+                    b.ToTable("final_approvals", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_final_approvals_artifact_byte_size", "artifact_byte_size > 0");
+
+                            t.HasCheckConstraint("ck_final_approvals_artifact_content_hash", "char_length(artifact_content_hash) = 64");
+
+                            t.HasCheckConstraint("ck_final_approvals_revision", "revision >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("AIStudio.Domain.Approvals.PublicationRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ArtifactContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("artifact_content_hash");
+
+                    b.Property<Guid>("ContentProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("content_project_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("FinalApprovalId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("final_approval_id");
+
+                    b.Property<int>("FinalApprovalRevision")
+                        .HasColumnType("integer")
+                        .HasColumnName("final_approval_revision");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("Platform")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("platform");
+
+                    b.Property<DateTimeOffset>("PublishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("published_at");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("url");
+
+                    b.Property<string>("VideoId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("video_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContentProjectId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_publication_records_content_project_id");
+
+                    b.HasIndex("FinalApprovalId")
+                        .HasDatabaseName("ix_publication_records_final_approval_id");
+
+                    b.ToTable("publication_records", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_publication_records_artifact_content_hash", "char_length(artifact_content_hash) = 64");
+
+                            t.HasCheckConstraint("ck_publication_records_final_approval_revision", "final_approval_revision >= 1");
+                        });
+                });
+
             modelBuilder.Entity("AIStudio.Domain.Assets.SceneAsset", b =>
                 {
                     b.Property<Guid>("Id")
@@ -454,6 +607,44 @@ namespace AIStudio.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_subtitle_tracks_content_hash", "char_length(content_hash) = 64");
                         });
+                });
+
+            modelBuilder.Entity("AIStudio.Domain.Approvals.FinalApproval", b =>
+                {
+                    b.HasOne("AIStudio.Domain.Content.ContentProject", "ContentProject")
+                        .WithMany()
+                        .HasForeignKey("ContentProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AIStudio.Domain.Jobs.Job", "SourceRenderJob")
+                        .WithMany()
+                        .HasForeignKey("SourceRenderJobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ContentProject");
+
+                    b.Navigation("SourceRenderJob");
+                });
+
+            modelBuilder.Entity("AIStudio.Domain.Approvals.PublicationRecord", b =>
+                {
+                    b.HasOne("AIStudio.Domain.Content.ContentProject", "ContentProject")
+                        .WithMany()
+                        .HasForeignKey("ContentProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AIStudio.Domain.Approvals.FinalApproval", "FinalApproval")
+                        .WithMany()
+                        .HasForeignKey("FinalApprovalId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ContentProject");
+
+                    b.Navigation("FinalApproval");
                 });
 
             modelBuilder.Entity("AIStudio.Domain.Assets.SceneAsset", b =>

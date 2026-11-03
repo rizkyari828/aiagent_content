@@ -1,4 +1,5 @@
 using AIStudio.Application.Abstractions.Persistence;
+using AIStudio.Domain.Approvals;
 using AIStudio.Domain.Assets;
 using AIStudio.Domain.Content;
 using AIStudio.Domain.Jobs;
@@ -23,6 +24,10 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<NarrationTrack> NarrationTracks => Set<NarrationTrack>();
 
     public DbSet<SubtitleTrack> SubtitleTracks => Set<SubtitleTrack>();
+
+    public DbSet<FinalApproval> FinalApprovals => Set<FinalApproval>();
+
+    public DbSet<PublicationRecord> PublicationRecords => Set<PublicationRecord>();
 
     public void Add(ContentProject project)
     {
