@@ -6,6 +6,7 @@
 - For Content Studio work, enter `ai-studio/` and follow `ai-studio/AGENTS.md`. Its checkpoint, project state, lessons, and repository map are authoritative for the product.
 - For reusable local runtime tooling, work in the separate sibling repository `local-ai-infra/` (resolve it with `LAI_REPO`, default `../local-ai-infra`) and follow its own `AGENTS.md`.
 - Use targeted reads and searches. Do not scan both solutions or read full specifications by default.
+- Code knowledge graph: when `graphify-out/graph.json` exists, prefer `graphify query "<question>"`, `graphify explain "<concept>"`, or `graphify god-nodes` before broad greps. After code changes run `graphify update .` (AST-only, no API cost). `graphify-out/` is generated and gitignored except `GRAPH_REPORT.md`, which is a committed architecture snapshot; regenerate locally instead of trusting it as current.
 - Communicate in Indonesian; use English code identifiers. Keep updates and handoffs concise.
 
 ## Repository boundaries

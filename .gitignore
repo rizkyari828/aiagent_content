@@ -57,3 +57,7 @@ __pycache__/
 .idea/
 .vs/
 ai-studio/.qwen/
+
+# graphify artifacts (generated; rebuild with `graphify update .`)
+graphify-out/*
+!graphify-out/GRAPH_REPORT.md
