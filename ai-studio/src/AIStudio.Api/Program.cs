@@ -69,6 +69,8 @@ app.MapFinalVideoQaApi();
 app.MapVisualApi();
 app.MapAudioApi();
 app.MapIdentityAssetApi();
+app.MapFinalApprovalApi();
+app.MapPublicationApi();
 
 app.Run();
 
