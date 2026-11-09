@@ -2,6 +2,7 @@
 
 Status: audit selesai, **P1 belum selesai**. Dokumen ini bukti, bukan rencana implementasi. Status per kriteria diperbarui 2026-11-03 setelah A3 + publication, lifecycle + cancel, metrics/waktu/biaya (AC-09 backend), project export/import (AC-10 backend), dan koreksi status AC-08: **3 Done (AC-02, AC-06, AC-12), 8 Partial (AC-01, AC-03, AC-04, AC-05, AC-07, AC-08, AC-09, AC-10), 0 Missing, 1 Unverified (AC-11)**; isi audit awal tidak ditulis ulang, hanya status dan celah yang diperbarui.
 Tanggal: 2026-11-03 (office Mac, code-only). Branch: `docs/p1-readiness` dari `main` @ `d2d887b`.
+Update 2026-11-09: UI foundation + Projects screen sudah diimplementasikan dan di-merge ke `main`; lihat §4.1 dan `docs/agent/UI_TODO.md`. Status backend/AC tidak berubah (3 Done, 8 Partial, 0 Missing, 1 Unverified).
 Lingkup: hanya audit; tidak ada fitur, endpoint, skema, migrasi, paket, atau tes produk yang diubah.
 
 ## 1. Ringkasan
