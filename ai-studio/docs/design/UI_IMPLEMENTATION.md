@@ -1,9 +1,10 @@
 # UI Implementation — Content Studio Web
 
 Status: 2026-11-09. Frontend-only: no backend, API contract, domain, job, schema,
-or provider change. Implemented on branch `feat/ui-projects` (from `main`
-`72ba50f`) and merged to `main`. Handoff, workflow, and remaining screens:
-`docs/agent/UI_TODO.md`.
+or provider change. UI foundation + Projects landed on `feat/ui-projects` (merged to
+`main`). Project detail route + header/brief/readiness landed on
+`feat/ui-project-detail`, using a same-origin Vite dev proxy (no backend CORS).
+Handoff, workflow, and remaining screens: `docs/agent/UI_TODO.md`.
 
 This document records the implemented UI foundation and the first product screen
 (`Projects`). Visual design follows the agreed direction in the UI task and
@@ -55,12 +56,13 @@ src/AIStudio.Web/
     theme/useTheme.ts             # auto/light/dark store + media-query listener
     api/client.ts                 # fetch wrapper, timeout, normalized ApiError
     api/projects.ts               # listProjects / createProject
-    routing/useHashRoute.ts       # #/projects, #/settings; no dependency
+    routing/useHashRoute.ts       # #/projects, #/projects/{id}, #/settings; no dependency
     components/                   # Button, Badge, Card, Table, EmptyState,
                                   # Skeleton, InlineError, Dialog, Toast,
                                   # Preferences (language/theme), icons
     layout/AppShell.tsx           # sidebar, topbar, breadcrumb, skip link
     screens/ProjectsScreen.tsx    # list + create flow
+    screens/ProjectDetailScreen.tsx # header, brief view/edit, readiness, last job
     screens/SettingsScreen.tsx    # theme/language/API preference shell
 ```
 
@@ -71,25 +73,26 @@ src/AIStudio.Web/
 | Projects | `#/projects` | Implemented | List, skeleton, inline error + retry, empty state, status badges, `Intl` updated-at, create dialog with title/brief validation, success toast, refresh after create. |
 | Settings | `#/settings` | Implemented (shell) | Theme, language, read-only API base URL. Production settings follow. |
 | Runs | none | Not built | Sidebar entry is disabled with a translated "Soon" hint. |
-| Project detail | none | Not built | Next UI slice (brief/script/assets/audio/production/review/publish/metrics). |
+| Project detail | `#/projects/{id}` | Partially implemented | Header (title/status/`updatedAt`/Edit), Brief view + edit via `PUT`, computed readiness with blocking reasons, last-job summary, and a "coming next" list; script/assets/production/publish/metrics actions follow. |
 
 ## Routing
 
 `src/routing/useHashRoute.ts` is a minimal hash router: internal React state is
-the source of truth and the hash (`#/projects`, `#/settings`) makes a screen
-bookmarkable and reload-safe. Unknown hashes fall back to Projects. No routing
-package was added.
+the source of truth and the hash (`#/projects`, `#/projects/{id}`, `#/settings`)
+makes a screen bookmarkable and reload-safe. A route is a typed object; unknown
+hashes fall back to Projects. No routing package was added.
 
 ## API integration
 
-- `src/api/client.ts`: base URL from `VITE_API_BASE_URL` (default
-  `http://127.0.0.1:5080`), trailing slash trimmed, 15s timeout through one
+- `src/api/client.ts`: base URL from `VITE_API_BASE_URL`; the default is an empty
+  base (same-origin) so the Vite dev server proxies `/api` to the API at
+  `http://127.0.0.1:5002`. Trailing slash trimmed, 15s timeout through one
   `AbortController`, JSON parsing, and normalization of problem+json failures to
   `{ code?, title, detail?, status }`; `errors` is preserved as `fieldErrors`.
   The stable `code` extension is read from the problem body.
-- `src/api/projects.ts`: `GET /api/content-projects?take=1..100` (clamped) and
-  `POST /api/content-projects` with `{ title, brief? }`. No other endpoint is
-  called yet.
+- `src/api/projects.ts`: `GET /api/content-projects?take=1..100` (clamped),
+  `POST /api/content-projects` with `{ title, brief? }`, `GET /api/content-projects/{id}`,
+  `PUT /api/content-projects/{id}` (title/brief), and `GET .../readiness`.
 - The Projects screen maps transport codes to human copy: `network_error`,
   `request_timeout`, other HTTP failures (with the code shown secondarily).
   Server-side field errors are mapped back to the `title`/`brief` fields.
@@ -129,6 +132,27 @@ dist/assets/index-o1gU8bMt.js   253.51 kB │ gzip:  78.39 kB
 
 The Node 20.17 warning above appears before the successful build; it is a
 warning only.
+
+### Project detail slice (2026-11-09, WSL)
+
+```text
+$ npx tsc --noEmit
+(no output)                                            exit 0
+
+$ npx vite build
+✓ 40 modules transformed.
+dist/index.html                   0.46 kB │ gzip:   0.28 kB
+dist/assets/index-BVqRurIJ.css   23.47 kB │ gzip:   4.95 kB
+dist/assets/index-CwVmJmuf.js   267.67 kB │ gzip:  81.24 kB
+✓ built in 132ms                                        exit 0
+```
+
+Run with Node 24.21.0 / npm 11.19.0 (no Vite engine warning). Dev-proxy smoke
+with an out-of-repo stub API on `127.0.0.1:5002`: `GET
+/api/content-projects/{id}` and `GET .../readiness` through `127.0.0.1:5173`
+both returned HTTP 200 with the full payload, proving the `/api` prefix is
+preserved by the proxy. A real backend needs PostgreSQL, which was unavailable
+in this WSL session.
 
 Additional headless smoke (Chrome, built `dist/` served locally, stub API on
 `127.0.0.1:5080`) covered: populated table with Indonesian `Intl` dates and
