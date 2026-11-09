@@ -8,7 +8,7 @@ import {
   type IconProps,
 } from "../components/icons";
 import { useI18n } from "../i18n/i18n";
-import type { AppRoute } from "../routing/useHashRoute";
+import { routeToHash, type AppRoute } from "../routing/useHashRoute";
 
 interface AppShellProps {
   route: AppRoute;
@@ -17,22 +17,22 @@ interface AppShellProps {
 }
 
 interface NavLinkProps {
-  route: AppRoute;
+  target: AppRoute;
   label: string;
   current: boolean;
   onNavigate: (route: AppRoute) => void;
   icon: (props: IconProps) => ReactNode;
 }
 
-function NavLink({ route, label, current, onNavigate, icon: Icon }: NavLinkProps) {
+function NavLink({ target, label, current, onNavigate, icon: Icon }: NavLinkProps) {
   return (
     <a
       className="nav-item"
-      href={`#/${route}`}
+      href={routeToHash(target)}
       aria-current={current ? "page" : undefined}
       onClick={(event) => {
         event.preventDefault();
-        onNavigate(route);
+        onNavigate(target);
       }}
     >
       <span className="nav-item__icon">
@@ -45,7 +45,8 @@ function NavLink({ route, label, current, onNavigate, icon: Icon }: NavLinkProps
 
 export function AppShell({ route, onNavigate, children }: AppShellProps) {
   const { t } = useI18n();
-  const pageTitle = t(`${route}.title`);
+  const pageTitle =
+    route.screen === "project" ? t("project.title") : t(`${route.screen}.title`);
   const mainRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -71,7 +72,7 @@ export function AppShell({ route, onNavigate, children }: AppShellProps) {
             href="#/projects"
             onClick={(event) => {
               event.preventDefault();
-              onNavigate("projects");
+              onNavigate({ screen: "projects" });
             }}
           >
             <span className="brand__mark" aria-hidden="true">
@@ -85,9 +86,9 @@ export function AppShell({ route, onNavigate, children }: AppShellProps) {
 
           <nav className="sidebar__nav" aria-label={t("nav.label")}>
             <NavLink
-              route="projects"
+              target={{ screen: "projects" }}
               label={t("nav.projects")}
-              current={route === "projects"}
+              current={route.screen === "projects" || route.screen === "project"}
               onNavigate={onNavigate}
               icon={IconProjects}
             />
@@ -104,9 +105,9 @@ export function AppShell({ route, onNavigate, children }: AppShellProps) {
               <span className="nav-item__soon">{t("nav.soon")}</span>
             </button>
             <NavLink
-              route="settings"
+              target={{ screen: "settings" }}
               label={t("nav.settings")}
-              current={route === "settings"}
+              current={route.screen === "settings"}
               onNavigate={onNavigate}
               icon={IconSettings}
             />

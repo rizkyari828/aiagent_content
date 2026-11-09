@@ -20,7 +20,8 @@ Status kriteria P1: `docs/development/P1_READINESS.md`.
 - Projects: skeleton, inline error + retry, empty state, tabel status/tanggal,
   create dialog (validasi title/brief), discard confirmation, success toast.
 - Settings: shell preferensi (tema, bahasa, alamat API).
-- Hash router minimal: `#/projects` (default) dan `#/settings`.
+- Hash router minimal: `#/projects` (default), `#/projects/{id}`, dan `#/settings`.
+- Project detail (slice 2, 2026-11-09): buka proyek dari tabel, header (judul/status/`updatedAt`/Ubah), kartu Brief (lihat/ubah lewat `PUT`), kartu Kesiapan (readiness + alasan), ringkasan job terakhir, dan daftar bagian berikutnya; skeleton, inline error + retry, dialog edit tervalidasi.
 
 ## 2. Workflow kerja (dipakai untuk slice ini)
 
@@ -88,21 +89,18 @@ npm run dev                      # Vite dev server
   `dotnet run --project src/AIStudio.Api`. `launchSettings.json` memakai
   `http://127.0.0.1:5002`, sedangkan UI default `http://127.0.0.1:5080`.
 
-### Blocker yang harus diputuskan sebelum smoke browser
+### Keputusan base URL (2026-11-09)
 
-UI memanggil `http://127.0.0.1:5080` (default dari task), sedangkan API
-`launchSettings.json` memakai `5002` dan **tidak punya kebijakan CORS**. Browser
-akan memblokir request lintas origin. Pilih satu strategi secara sadar (jangan
-diam-diam mengubah backend):
+Strategi yang dipakai: **same-origin lewat Vite dev proxy**. Browser memanggil
+origin Vite (`127.0.0.1:5173`), dan `vite.config.ts` mem-proxy `/api` apa adanya
+ke `http://127.0.0.1:5002`. Tidak ada perubahan backend dan tidak perlu CORS.
+`api/client.ts` memakai base kosong (same-origin) secara default;
+`VITE_API_BASE_URL` tetap bisa menimpa untuk build yang disajikan dari origin
+lain (mis. `dist/` di belakang reverse proxy).
 
-1. Jalankan API pada `5080` dan tambahkan CORS untuk origin web — perubahan
-   backend terpisah yang perlu izin.
-2. Set `VITE_API_BASE_URL=http://127.0.0.1:5002` dan sediakan CORS/proxy —
-   tetap butuh CORS di backend.
-3. Sajikan `dist/` dari origin yang sama dengan API — butuh keputusan hosting.
-
-Sampai salah satu dipilih, verifikasi yang bisa dilakukan tanpa backend tetap:
-`npx tsc --noEmit`, `npx vite build`, dan review statis.
+Bukti 2026-11-09: Vite dev + stub API di `5002` -> `GET /api/content-projects/{id}`
+dan `GET .../readiness` lewat `127.0.0.1:5173` mengembalikan HTTP 200 dengan
+payload utuh (prefix `/api` tidak dipotong).
 
 ## 4. Workflow produk yang harus ditampung UI
 
@@ -128,26 +126,27 @@ error manusiawi + kode sekunder, dan aksi irreversible memakai konfirmasi.
 
 ## 5. TODO UI berikutnya (urutan yang disarankan)
 
-### 5.1 Buka proyek + route detail
+### 5.1 Buka proyek + route detail (selesai 2026-11-09)
 
-- [ ] Perluas `useHashRoute` menjadi `projects | project | settings` dengan
-      `#/projects/{id}`; pertahankan `#/projects` sebagai default dan fallback.
-- [ ] Tambah aksi buka proyek pada baris tabel (link/button, label i18n,
-      fokus terlihat). Jangan ubah tabel menjadi fetch detail per baris.
-- [ ] Tambah state `loading | ready | error` + retry untuk detail, memakai pola
-      `InlineError`/`Skeleton` yang sudah ada.
-- [ ] Kembali ke daftar tanpa kehilangan bahasa/tema.
+- [x] `useHashRoute` kini bertipe `projects | project | settings` dengan
+      `#/projects/{id}`; `#/projects` tetap default dan fallback.
+- [x] Aksi "Buka" pada baris tabel (link asli + navigasi, label i18n, fokus
+      terlihat); tabel tidak melakukan fetch detail per baris.
+- [x] Detail memakai state `loading | ready | error` + retry dengan
+      `InlineError`/`Skeleton`.
+- [x] Kembali ke daftar tanpa kehilangan bahasa/tema (hash route).
 
-### 5.2 Project detail (layar terbesar)
+### 5.2 Project detail (layar terbesar; header + Brief + readiness selesai 2026-11-09)
 
 Endpoint yang sudah tersedia (lihat `docs/agent/REPO_MAP.md`): detail
 `GET /api/content-projects/{id}`, update title/brief, readiness + transition,
 script review, storyboard/visual/audio/render/QA jobs, final approval + decision,
 publication, metrics/time/cost, export/import.
 
-- [ ] Header detail: judul, status badge, `updatedAt`, aksi utama kanan atas.
-- [ ] Section/tab: Brief/Research, Reviewed script, Assets/Audio, Production,
-      Review/QA + A3 (approved / changes_requested + note), Publish, Metrics.
+- [x] Header detail: judul, status badge, `updatedAt`, aksi utama kanan atas.
+- [ ] Section/tab: Brief/Research (Brief selesai), Reviewed script, Assets/Audio,
+      Production, Review/QA + A3 (approved / changes_requested + note), Publish,
+      Metrics. `GET .../readiness` sudah tampil beserta alasan blokir.
 - [ ] Semua aksi destruktif/irreversible memakai `Dialog` konfirmasi; jangan
       menonaktifkan tombol tanpa alasan yang terlihat.
 - [ ] Pertahankan copy manusiawi; kode error hanya baris sekunder.

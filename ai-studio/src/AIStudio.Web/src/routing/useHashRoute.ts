@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 
-export type AppRoute = "projects" | "settings";
+export type AppRoute =
+  | { screen: "projects" }
+  | { screen: "project"; projectId: string }
+  | { screen: "settings" };
 
-const DEFAULT_ROUTE: AppRoute = "projects";
+const DEFAULT_ROUTE: AppRoute = { screen: "projects" };
+
+export function routeToHash(route: AppRoute): string {
+  return route.screen === "project"
+    ? `#/projects/${route.projectId}`
+    : `#/${route.screen}`;
+}
 
 function parseRoute(hash: string): AppRoute {
   const path = hash
@@ -10,33 +19,33 @@ function parseRoute(hash: string): AppRoute {
     .replace(/\/+$/, "")
     .split(/[?&]/)[0];
 
-  return path === "settings" ? "settings" : DEFAULT_ROUTE;
-}
+  if (path === "settings") {
+    return { screen: "settings" };
+  }
 
-function routeToHash(route: AppRoute): string {
-  return `#/${route}`;
+  const projectMatch = /^projects\/([0-9a-fA-F-]{36})$/.exec(path);
+
+  if (projectMatch) {
+    return { screen: "project", projectId: projectMatch[1] };
+  }
+
+  return DEFAULT_ROUTE;
 }
 
 /**
- * Minimal hash router: internal state plus `#/projects` / `#/settings` so a
- * screen can be bookmarked and survives a reload. No routing dependency.
+ * Minimal hash router: `#/projects`, `#/projects/{id}`, and `#/settings` are
+ * bookmarkable and survive a reload. No routing dependency.
  */
 export function useHashRoute(): readonly [AppRoute, (route: AppRoute) => void] {
-  const [route, setRoute] = useState<AppRoute>(() =>
+  const [route, setRouteState] = useState<AppRoute>(() =>
     parseRoute(window.location.hash),
   );
 
   useEffect(() => {
-    const sync = () => setRoute(parseRoute(window.location.hash));
+    const sync = () => setRouteState(parseRoute(window.location.hash));
 
     if (!window.location.hash) {
       window.history.replaceState(null, "", routeToHash(DEFAULT_ROUTE));
-    } else if (parseRoute(window.location.hash) === DEFAULT_ROUTE) {
-      const raw = window.location.hash.replace(/^#\/?/, "").split(/[?&]/)[0];
-
-      if (raw !== "" && raw !== DEFAULT_ROUTE && raw !== "projects/") {
-        window.history.replaceState(null, "", routeToHash(DEFAULT_ROUTE));
-      }
     }
 
     window.addEventListener("hashchange", sync);
@@ -47,7 +56,7 @@ export function useHashRoute(): readonly [AppRoute, (route: AppRoute) => void] {
     const hash = routeToHash(next);
 
     if (window.location.hash === hash) {
-      setRoute(next);
+      setRouteState(next);
       return;
     }
 

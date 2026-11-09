@@ -5,7 +5,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import { API_BASE_URL, isApiRequestError, type ApiError } from "../api/client";
+import { API_BASE_URL_LABEL, isApiRequestError, type ApiError } from "../api/client";
 import { createProject, listProjects, type ProjectSummary } from "../api/projects";
 import { StatusBadge } from "../components/Badge";
 import { Button } from "../components/Button";
@@ -18,6 +18,7 @@ import { useToast } from "../components/Toast";
 import { IconPlus } from "../components/icons";
 import { useFormatters } from "../i18n/format";
 import { useI18n, type Translate } from "../i18n/i18n";
+import { routeToHash } from "../routing/useHashRoute";
 
 const MAX_TITLE = 200;
 const MAX_BRIEF = 4_000;
@@ -53,7 +54,7 @@ function toApiError(error: unknown): ApiError {
 
 function describeLoadError(error: ApiError, t: Translate): string {
   if (error.code === "network_error") {
-    return t("projects.error.network", { url: API_BASE_URL });
+    return t("projects.error.network", { url: API_BASE_URL_LABEL });
   }
 
   if (error.code === "request_timeout") {
@@ -71,7 +72,11 @@ function errorCode(error: ApiError): string | undefined {
   return error.status > 0 ? `HTTP ${error.status}` : undefined;
 }
 
-export function ProjectsScreen() {
+interface ProjectsScreenProps {
+  onOpenProject: (projectId: string) => void;
+}
+
+export function ProjectsScreen({ onOpenProject }: ProjectsScreenProps) {
   const { t } = useI18n();
   const { dateTime } = useFormatters();
   const { showToast } = useToast();
@@ -237,6 +242,23 @@ export function ProjectsScreen() {
         <time className="table__updated" dateTime={project.updatedAt}>
           {dateTime(project.updatedAt)}
         </time>
+      ),
+    },
+    {
+      key: "open",
+      header: <span className="visually-hidden">{t("projects.table.actions")}</span>,
+      align: "end",
+      render: (project) => (
+        <a
+          className="table__link"
+          href={routeToHash({ screen: "project", projectId: project.id })}
+          onClick={(event) => {
+            event.preventDefault();
+            onOpenProject(project.id);
+          }}
+        >
+          {t("action.open")}
+        </a>
       ),
     },
   ];

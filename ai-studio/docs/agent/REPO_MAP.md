@@ -280,11 +280,11 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `src/AIStudio.Web/src/styles/tokens.css` — light/dark color, space, radius, shadow, and typography tokens (`[data-theme]` + `prefers-color-scheme`); `styles/app.css` holds shell/component/responsive styles.
 - `src/AIStudio.Web/src/i18n/` — custom i18n (`id.json` default, `en.json`, provider/hook + `t(key, params)`, persisted locale and `<html lang>`) and `format.ts` (`Intl` date/number helpers + `useFormatters`).
 - `src/AIStudio.Web/src/theme/useTheme.ts` — `auto|light|dark` external store; persists, applies `data-theme`/`color-scheme`, follows the media query in auto.
-- `src/AIStudio.Web/src/api/client.ts`, `projects.ts` — fetch wrapper (`VITE_API_BASE_URL` default `http://127.0.0.1:5080`, AbortController timeout, normalized ApiError with problem+json `code`) and the projects list/create calls.
+- `src/AIStudio.Web/src/api/client.ts`, `projects.ts` — fetch wrapper (`VITE_API_BASE_URL` override; default same-origin through the Vite `/api` dev proxy, AbortController timeout, normalized ApiError with problem+json `code`) and the projects list/create/detail/update/readiness calls.
 - `src/AIStudio.Web/src/components/` — Button, Badge/StatusBadge, Card, Table, EmptyState, Skeleton, InlineError, Dialog, Toast, Preferences (language/theme), icons.
 - `src/AIStudio.Web/src/layout/AppShell.tsx` — sidebar (Projects/Runs/Settings), sticky topbar with breadcrumb/language/theme controls, skip link.
-- `src/AIStudio.Web/src/routing/useHashRoute.ts` — minimal hash router (`#/projects`, `#/settings`).
-- `src/AIStudio.Web/src/screens/ProjectsScreen.tsx` — implemented Projects list (skeleton/error/empty/table) + create dialog with inline validation and toast; `SettingsScreen.tsx` is a preference shell.
+- `src/AIStudio.Web/src/routing/useHashRoute.ts` — minimal typed hash router (`#/projects`, `#/projects/{id}`, `#/settings`).
+- `src/AIStudio.Web/src/screens/ProjectsScreen.tsx` — implemented Projects list (skeleton/error/empty/table) + create dialog with inline validation and toast; `ProjectDetailScreen.tsx` is the detail route (header, brief view/edit, readiness, last job); `SettingsScreen.tsx` is a preference shell.
 - `docs/design/UI_IMPLEMENTATION.md` — UI conventions, folder map, screen status, toolchain and exact verification.
 - `docs/agent/UI_TODO.md` — WSL handoff: kerja workflow, quick start, blocker CORS/base URL, workflow produk, and the remaining UI screens.
 
