@@ -206,8 +206,25 @@ public static class FfmpegCommandPlan
                     $"scale={settings.Width}:{settings.Height}:force_original_aspect_ratio=increase,");
                 builder.Append(CultureInfo.InvariantCulture,
                     $"crop={settings.Width}:{settings.Height},");
+                // A still generates its whole clip from one frame (zoompan d=frames).
                 builder.Append(BuildMotion(motions[index], frames, settings));
                 builder.Append(",setsar=1,format=yuv420p");
+            }
+            else if (scenes[index].Type != AssetType.Image && motions[index] != SceneMotion.None)
+            {
+                // AiImage clip: streaming, bounded-memory Ken Burns (no zoompan).
+                // Pad/trim to the scene duration first so scene-local `t` spans the
+                // whole scene, then scale/crop with time expressions. The frame is
+                // only ever scaled up before a fixed-size crop, so no border shows.
+                builder.Append(CultureInfo.InvariantCulture,
+                    $"tpad=stop_mode=clone:stop_duration={duration},trim=duration={duration},");
+                builder.Append(CultureInfo.InvariantCulture,
+                    $"scale={settings.Width}:{settings.Height}:force_original_aspect_ratio=increase,");
+                builder.Append(CultureInfo.InvariantCulture,
+                    $"crop={settings.Width}:{settings.Height},");
+                builder.Append(BuildVideoMotion(motions[index], sceneDurations[index], settings));
+                builder.Append(CultureInfo.InvariantCulture,
+                    $",setsar=1,fps={frameRate},format=yuv420p");
             }
             else
             {
@@ -435,12 +452,22 @@ public static class FfmpegCommandPlan
         int index,
         bool enableMotion)
     {
-        if (!enableMotion || scene.Type != AssetType.Image)
+        if (!enableMotion)
         {
             return SceneMotion.None;
         }
 
-        return scene.Motion ?? DefaultMotionCycle[index % DefaultMotionCycle.Length];
+        // Explicit motion is honored for any asset the caller classified (AiImage
+        // narrative clips). Only stills fall back to the centered default cycle;
+        // other video kinds (Manim/AnimatedSvg/3D) leave Motion unset on purpose.
+        if (scene.Motion is { } explicitMotion)
+        {
+            return explicitMotion;
+        }
+
+        return scene.Type == AssetType.Image
+            ? DefaultMotionCycle[index % DefaultMotionCycle.Length]
+            : SceneMotion.None;
     }
 
     private static string BuildMotion(
@@ -474,6 +501,42 @@ public static class FfmpegCommandPlan
         };
 
         return $"zoompan=z='{zoom}':x='{x}':y='{y}':d={frames}:s={settings.Width}x{settings.Height}:fps={settings.FrameRate}";
+    }
+
+    /// <summary>
+    /// Streaming, bounded-memory Ken Burns for an encoded clip. FFmpeg 6.1.1
+    /// supports <c>scale=w=...:h=-2:eval=frame</c> with the <c>t</c> variable and
+    /// time-based <c>crop</c> x expressions, so this never needs zoompan. The frame
+    /// is only ever scaled up (&gt;= 1.0x) before a fixed-size crop, so no border
+    /// can be exposed and the output stays exactly WxH.
+    /// </summary>
+    private static string BuildVideoMotion(
+        SceneMotion motion,
+        double durationSeconds,
+        VideoRenderSettings settings)
+    {
+        var duration = Format(durationSeconds);
+        var width = settings.Width;
+        var height = settings.Height;
+        var centeredX = "(in_w-out_w)/2";
+        var centeredY = "(in_h-out_h)/2";
+
+        return motion switch
+        {
+            SceneMotion.SlowZoomIn =>
+                $"scale=w='trunc({width}*(1+0.08*min(t/{duration},1))/2)*2':h=-2:eval=frame,"
+                + $"crop={width}:{height}:x='{centeredX}':y='{centeredY}'",
+            SceneMotion.SlowZoomOut =>
+                $"scale=w='trunc({width}*(1.08-0.08*min(t/{duration},1))/2)*2':h=-2:eval=frame,"
+                + $"crop={width}:{height}:x='{centeredX}':y='{centeredY}'",
+            SceneMotion.PanRight =>
+                $"scale=w='trunc({width}*1.08/2)*2':h=-2,"
+                + $"crop={width}:{height}:x='(in_w-out_w)*min(t/{duration},1)':y='{centeredY}'",
+            SceneMotion.PanLeft =>
+                $"scale=w='trunc({width}*1.08/2)*2':h=-2,"
+                + $"crop={width}:{height}:x='(in_w-out_w)*(1-min(t/{duration},1))':y='{centeredY}'",
+            _ => $"scale={width}:{height},crop={width}:{height}:x='{centeredX}':y='{centeredY}'"
+        };
     }
 
     private static string BuildForceStyle(SubtitleStyle style)

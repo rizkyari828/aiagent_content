@@ -389,6 +389,81 @@ public sealed class FfmpegCommandPlanTests
         Assert.Equal(new[] { 3.2, 1.4 }, durations);
     }
 
+    [Theory]
+    [InlineData(0, SceneMotion.SlowZoomIn)]
+    [InlineData(1, SceneMotion.PanLeft)]
+    [InlineData(2, SceneMotion.SlowZoomOut)]
+    [InlineData(3, SceneMotion.PanRight)]
+    [InlineData(4, SceneMotion.SlowZoomIn)]
+    [InlineData(5, SceneMotion.PanLeft)]
+    public void AiImageNarrativeMotionCycle_RepeatsBySceneIndex(
+        int sceneIndex,
+        SceneMotion expected) =>
+        Assert.Equal(expected, SceneMotionCycles.ForAiImageNarrative(sceneIndex));
+
+    [Fact]
+    public void Build_AppliesBoundedStreamingMotionToVideoClips()
+    {
+        var arguments = Build(
+            [
+                new SceneMediaInput("/root/scene-0.mp4", AssetType.Video, SceneMotion.SlowZoomIn),
+                new SceneMediaInput("/root/scene-1.mp4", AssetType.Video, SceneMotion.PanLeft)
+            ],
+            narrationSeconds: 10,
+            transition: SceneTransition.Cut);
+
+        var filter = Filter(arguments);
+
+        // AiImage video motion must never use zoompan (it blew up memory).
+        Assert.DoesNotContain("zoompan=", filter);
+        // Dynamic zoom is a streaming scale re-evaluated per frame.
+        Assert.Contains("scale=w='trunc(1280*(1+0.08*min(t/", filter);
+        Assert.Contains(":h=-2:eval=frame", filter);
+        // Pan moves a fixed-size crop.
+        Assert.Contains("(in_w-out_w)*(1-min(t/", filter);
+        // Output crop is exactly the render size.
+        Assert.Contains("crop=1280:720:x=", filter);
+    }
+
+    [Fact]
+    public void Build_VideoMotionStaysWithinZoomBounds()
+    {
+        var arguments = Build(
+            [
+                new SceneMediaInput("/root/s0.mp4", AssetType.Video, SceneMotion.SlowZoomOut),
+                new SceneMediaInput("/root/s1.mp4", AssetType.Video, SceneMotion.PanRight)
+            ],
+            narrationSeconds: 10,
+            transition: SceneTransition.Cut);
+
+        var filter = Filter(arguments);
+
+        Assert.Contains("scale=w='trunc(1280*(1.08-0.08*min(t/", filter);
+        Assert.Contains("(in_w-out_w)*min(t/", filter);
+        // Zoom factor never exceeds 1.08, so it can never expose a border.
+        Assert.DoesNotContain("1.09", filter);
+        Assert.DoesNotContain("zoompan=", filter);
+    }
+
+    [Fact]
+    public void Build_LeavesVideoWithoutExplicitMotionUntouched()
+    {
+        var arguments = Build(
+            [
+                new SceneMediaInput("/root/scene-0.mp4", AssetType.Video),
+                new SceneMediaInput("/root/scene-1.mp4", AssetType.Video)
+            ],
+            narrationSeconds: 10,
+            transition: SceneTransition.Cut);
+
+        var filter = Filter(arguments);
+
+        // Future image-to-video / Manim / AnimatedSvg clips must never get Ken Burns.
+        Assert.DoesNotContain("zoompan=", filter);
+        Assert.DoesNotContain("eval=frame", filter);
+        Assert.Contains("tpad=stop_mode=clone", filter);
+    }
+
     private static IReadOnlyList<string> Build(
         IReadOnlyList<SceneMediaInput> scenes,
         double narrationSeconds,
