@@ -75,7 +75,7 @@ Each item states owner, deliverable, and how to verify it. Do not check an item 
       (gitignored) and remains REPORTED. Verify: `main` shows the Ken Burns commit; `dotnet build
       AIStudio.slnx -c Release` 0 warnings/0 errors; full suite without a database 1579 total
       (1554 pass, 24 DB-gated failures, 1 skipped), suite excluding `Persistence` 1538 total
-      (1537 pass, 0 failed, 1 skipped); `git status` clean.
+      (1537 pass, 0 failed, 1 skipped); tracked tree clean (only unrelated untracked `dmm_*.ps1` remain).
 - [x] **P0.2 [Mac] Docs reconciliation** (this branch). Canonical anime Video #1 and Ken Burns
       status recorded as reported, "Video #1" ambiguity removed, next milestone points here.
       Verify: links resolve, `git diff --check` clean.
