@@ -1,12 +1,14 @@
+import { AppShell } from "./layout/AppShell";
+import { useHashRoute } from "./routing/useHashRoute";
+import { ProjectsScreen } from "./screens/ProjectsScreen";
+import { SettingsScreen } from "./screens/SettingsScreen";
+
 export function App() {
+  const [route, navigate] = useHashRoute();
+
   return (
-    <main className="shell">
-      <p className="eyebrow">P1 Foundation</p>
-      <h1>Local AI Content Studio</h1>
-      <p>
-        The browser foundation is ready. Product screens will follow the approved
-        Figma handoff.
-      </p>
-    </main>
+    <AppShell route={route} onNavigate={navigate}>
+      {route === "settings" ? <SettingsScreen /> : <ProjectsScreen />}
+    </AppShell>
   );
 }
