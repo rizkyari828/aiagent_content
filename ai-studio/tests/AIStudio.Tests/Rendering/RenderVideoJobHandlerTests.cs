@@ -527,6 +527,114 @@ public sealed class RenderVideoJobHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task Handler_AppliesDeterministicMotionToAiImageNarrativeScenes()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateStoryboardTestData.ValidResult);
+        var scene0 = new byte[] { 1, 2, 3 };
+        var scene1 = new byte[] { 4, 5 };
+        var narrationBytes = new byte[] { 6, 7, 8, 9 };
+        WriteFile("scene-0.mp4", scene0);
+        WriteFile("scene-1.mp4", scene1);
+        WriteFile("narration.wav", narrationBytes);
+        var processRunner = FakeFfmpeg.WritingOutput([42, 42]);
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            [
+                RenderVideoTestData.SceneAsset(
+                    projectId,
+                    storyboard.Id,
+                    0,
+                    "scene-0.mp4",
+                    scene0,
+                    type: AssetType.Video,
+                    source: SceneAssetProvenance.GeneratedVisualSource,
+                    creator: "AiImage+0123456789ab"),
+                RenderVideoTestData.SceneAsset(
+                    projectId,
+                    storyboard.Id,
+                    1,
+                    "scene-1.mp4",
+                    scene1,
+                    type: AssetType.Video,
+                    source: SceneAssetProvenance.GeneratedVisualSource,
+                    creator: "AiImage+0123456789ab")
+            ],
+            RenderVideoTestData.Narration(projectId, storyboard.Id, "narration.wav", narrationBytes),
+            processRunner);
+
+        await handler.ExecuteAsync(
+            RenderVideoTestData.CreateJob(projectId, storyboard.Id),
+            TestContext.Current.CancellationToken);
+
+        var filter = Filter(processRunner);
+        // Scene 0 zooms in, scene 1 pans left: the deterministic AiImage cycle.
+        Assert.Contains("scale=w='trunc(1280*(1+0.08*min(t/", filter);
+        Assert.Contains("(in_w-out_w)*(1-min(t/", filter);
+        Assert.Contains("crop=1280:720:x=", filter);
+        // Bounded-memory: no zoompan anywhere in the AiImage video branch.
+        Assert.DoesNotContain("zoompan=", filter);
+        // AiImage narrative scenes are photographic: true crossfade, never fade-to-black.
+        Assert.Contains("xfade=transition=fade:", filter);
+        Assert.DoesNotContain("fadeblack", filter);
+    }
+
+    [Fact]
+    public async Task Handler_DoesNotApplyMotionToOtherGeneratedVideos()
+    {
+        var projectId = Guid.NewGuid();
+        var storyboard = AssetTestData.StoryboardJob(
+            projectId,
+            GenerateStoryboardTestData.ValidResult);
+        var scene0 = new byte[] { 1, 2, 3 };
+        var scene1 = new byte[] { 4, 5 };
+        var narrationBytes = new byte[] { 6, 7, 8, 9 };
+        WriteFile("scene-0.mp4", scene0);
+        WriteFile("scene-1.mp4", scene1);
+        WriteFile("narration.wav", narrationBytes);
+        var processRunner = FakeFfmpeg.WritingOutput([42, 42]);
+        var handler = CreateHandler(
+            projectId,
+            storyboard,
+            [
+                RenderVideoTestData.SceneAsset(
+                    projectId,
+                    storyboard.Id,
+                    0,
+                    "scene-0.mp4",
+                    scene0,
+                    type: AssetType.Video,
+                    source: SceneAssetProvenance.GeneratedVisualSource,
+                    creator: "ManimAnimation+0123456789ab"),
+                RenderVideoTestData.SceneAsset(
+                    projectId,
+                    storyboard.Id,
+                    1,
+                    "scene-1.mp4",
+                    scene1,
+                    type: AssetType.Video,
+                    source: SceneAssetProvenance.GeneratedVisualSource,
+                    creator: "AnimatedSvg+0123456789ab")
+            ],
+            RenderVideoTestData.Narration(projectId, storyboard.Id, "narration.wav", narrationBytes),
+            processRunner);
+
+        await handler.ExecuteAsync(
+            RenderVideoTestData.CreateJob(projectId, storyboard.Id),
+            TestContext.Current.CancellationToken);
+
+        var filter = Filter(processRunner);
+        // Technical engines keep their passthrough clip and graphic transition policy.
+        Assert.DoesNotContain("zoompan=", filter);
+        Assert.DoesNotContain("eval=frame", filter);
+        Assert.Contains("tpad=stop_mode=clone", filter);
+        Assert.Contains("xfade=transition=fadeblack", filter);
+    }
+
+    [Fact]
     public async Task Handler_KeepsCrossfadeForManualAssets()
     {
         var projectId = Guid.NewGuid();

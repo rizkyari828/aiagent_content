@@ -58,9 +58,10 @@ Never: model inference, ComfyUI generation, Blender CUDA, VoxCPM, ACE-Step, heav
 Home (RTX 4060 Ti 16 GB, WSL2, ComfyUI 0.36.0, Blender 5.2.2): model download, engine benchmark,
 real provider runs, real E2E production.
 
-Do not edit these until the home work from 2026-10-01 is pushed (it touches the same code):
-`FfmpegCommandPlan.cs`, `FfmpegVideoRenderer.cs`, `RenderingOptions.cs`, `SceneMediaInput.cs`,
-and any `scripts/` helper related to Ken Burns. New files and docs are safe.
+The home Ken Burns v2 work from 2026-10-01 is merged to `main` (2026-11-09, `471f8c9`), so this
+freeze is lifted: keep future edits to `FfmpegCommandPlan.cs`, `FfmpegVideoRenderer.cs`,
+`RenderingOptions.cs`, `SceneMediaInput.cs`, and the Ken Burns scripts compatible with the
+streaming motion path.
 
 ## 3. Checklist
 
@@ -68,10 +69,13 @@ Each item states owner, deliverable, and how to verify it. Do not check an item 
 
 ### P0 — unblock and baseline
 
-- [ ] **P0.1 [Home] Push the 2026-10-01 work.** Push/merge the Ken Burns v2 + anime Video #1
-      branch so `origin/main` contains it.
-      Verify: `git log --oneline -5` on `main` shows the Ken Burns commit; solution builds;
-      `git status` clean.
+- [x] **P0.1 [Home] Push the 2026-10-01 work.** Done 2026-11-09: the Ken Burns v2 code
+      (streaming AiImage narrative motion) was committed on `feat/ken-burns-v2` (`471f8c9`, 5
+      files, +290/-4), merged to `main`, and pushed. The anime Video #1 artifact stays local
+      (gitignored) and remains REPORTED. Verify: `main` shows the Ken Burns commit; `dotnet build
+      AIStudio.slnx -c Release` 0 warnings/0 errors; full suite without a database 1579 total
+      (1554 pass, 24 DB-gated failures, 1 skipped), suite excluding `Persistence` 1538 total
+      (1537 pass, 0 failed, 1 skipped); `git status` clean.
 - [x] **P0.2 [Mac] Docs reconciliation** (this branch). Canonical anime Video #1 and Ken Burns
       status recorded as reported, "Video #1" ambiguity removed, next milestone points here.
       Verify: links resolve, `git diff --check` clean.

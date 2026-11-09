@@ -4,7 +4,9 @@ using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Application.Narration;
 using AIStudio.Application.Rendering;
 using AIStudio.Application.Rendering.AudioProduction;
+using AIStudio.Application.Rendering.Visuals;
 using AIStudio.Application.Subtitles;
+using AIStudio.Domain.Assets;
 using AIStudio.Domain.Jobs;
 
 namespace AIStudio.Application.Jobs.RenderVideo;
@@ -177,9 +179,20 @@ public sealed class RenderVideoJobHandler(
                 "render_asset_unreadable",
                 "render_asset_hash_mismatch");
 
+            // The asset's Creator records the engine that produced it
+            // (SceneVisualFingerprint: "{Engine}+{fingerprint}"), so AiImage
+            // narrative clips are identified without a schema change.
+            var engine = SceneVisualFingerprint.EngineFromCreator(asset.Creator);
+            var isAiImage = string.Equals(
+                engine,
+                SceneVisualEngine.AiImage.ToString(),
+                StringComparison.Ordinal);
+
             // Programmatic SVG/Manim visuals are text-heavy; the transition policy
-            // fades through background for them. Manual assets stay photographic.
-            var visualKind = SceneAssetProvenance.IsGeneratedGraphic(asset.Source)
+            // fades through background for them. AiImage narrative scenes are
+            // photographic, so they keep a true crossfade. Manual assets stay
+            // photographic too.
+            var visualKind = SceneAssetProvenance.IsGeneratedGraphic(asset.Source) && !isAiImage
                 ? SceneVisualKind.Graphic
                 : SceneVisualKind.Photographic;
 
@@ -192,9 +205,17 @@ public sealed class RenderVideoJobHandler(
             var scene = storyboard.Scenes[sceneIndex];
             var weight = SceneTiming.WeightFor(scene.Heading, scene.Visual);
 
+            // Only AiImage narrative clips (already encoded mp4) receive camera
+            // motion at the final composition stage. Real video or any other engine
+            // (Manim/AnimatedSvg/3D) is never given Ken Burns motion.
+            var motion = isAiImage && asset.Type == AssetType.Video
+                ? SceneMotionCycles.ForAiImageNarrative(sceneIndex)
+                : (SceneMotion?)null;
+
             sceneInputs.Add(new SceneMediaInput(
                 assetFile.AbsolutePath,
                 asset.Type,
+                Motion: motion,
                 VisualKind: visualKind,
                 Weight: weight,
                 DurationSeconds: duration));

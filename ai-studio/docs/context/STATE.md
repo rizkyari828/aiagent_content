@@ -1,8 +1,10 @@
 # Work state
 
-Updated: 2026-11-03.
+Updated: 2026-11-09.
 
 ## Current milestone
+
+PASS (partial, home code-only, 2026-11-09) - Ken Burns v2 sync: committed on `feat/ken-burns-v2` (`471f8c9`) and merged to `main`. `dotnet build AIStudio.slnx -c Release` -> 0 warnings / 0 errors; `dotnet test AIStudio.slnx -c Release` without a database -> 1579 total, 1554 pass, 24 failed (all `AIStudio.Tests.Persistence` DB-gated for the absent `ConnectionStrings__DefaultConnection`), 1 skipped; the same suite excluding `Persistence` -> 1538 total, 1537 pass, 0 failed, 1 skipped; `dotnet format AIStudio.slnx --verify-no-changes` -> clean; `git diff --check` -> clean. Scope: streaming bounded-memory Ken Burns for AiImage narrative clips (`SceneMotionCycles`, `FfmpegCommandPlan.BuildVideoMotion`, `RenderVideoJobHandler` engine detection), +290/-4 across 5 files; no schema/migration/route/contract change; manual and other-engine assets stay photographic and motion-free. Database reconciliation was not possible on this machine (Docker Desktop engine off, no native PostgreSQL).
 
 PASS (office code-only, 2026-11-03) - decision-safe transfer: `dotnet build AIStudio.slnx -c Release` -> 0 warnings / 0 errors; `dotnet test AIStudio.slnx -c Release` + `ConnectionStrings__DefaultConnection` (PostgreSQL 18.6, port 5544) -> total 1568, succeeded 1567, failed 0, skipped 1; `dotnet format AIStudio.slnx --verify-no-changes` -> clean; `git diff --check` -> clean.
 
