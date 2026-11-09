@@ -286,6 +286,7 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `src/AIStudio.Web/src/routing/useHashRoute.ts` — minimal hash router (`#/projects`, `#/settings`).
 - `src/AIStudio.Web/src/screens/ProjectsScreen.tsx` — implemented Projects list (skeleton/error/empty/table) + create dialog with inline validation and toast; `SettingsScreen.tsx` is a preference shell.
 - `docs/design/UI_IMPLEMENTATION.md` — UI conventions, folder map, screen status, toolchain and exact verification.
+- `docs/agent/UI_TODO.md` — WSL handoff: kerja workflow, quick start, blocker CORS/base URL, workflow produk, and the remaining UI screens.
 
 ## Tests
 

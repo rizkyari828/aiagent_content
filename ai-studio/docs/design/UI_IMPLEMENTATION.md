@@ -1,7 +1,9 @@
 # UI Implementation — Content Studio Web
 
-Status: 2026-11-09, branch `feat/ui-projects` (created from `main` `72ba50f`). Frontend-only:
-no backend, API contract, domain, job, schema, or provider change.
+Status: 2026-11-09. Frontend-only: no backend, API contract, domain, job, schema,
+or provider change. Implemented on branch `feat/ui-projects` (from `main`
+`72ba50f`) and merged to `main`. Handoff, workflow, and remaining screens:
+`docs/agent/UI_TODO.md`.
 
 This document records the implemented UI foundation and the first product screen
 (`Projects`). Visual design follows the agreed direction in the UI task and

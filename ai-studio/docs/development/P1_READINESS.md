@@ -117,12 +117,12 @@ Rekap setelah koreksi status AC-08 (2026-11-03): **Done 3** (AC-02, AC-06, AC-12
 
 ## 4. Celah lintas-kriteria
 
-### 4.1 UI-01 (paling mahal)
+### 4.1 UI-01 (dimulai 2026-11-09)
 
-- `src/AIStudio.Web/src/App.tsx` hanya 14 baris: eyebrow "P1 Foundation", judul, satu paragraf. Tidak ada router, tidak ada state, tidak ada panggilan `fetch`/API, tidak ada form.
-- `src/AIStudio.Web/src/main.tsx` hanya mount React; `package.json` hanya `react`/`react-dom` (tanpa router, tanpa query client, tanpa test).
-- Tidak ada tes UI sama sekali (157 file tes semuanya backend).
-- Akibat: AC-01/03/04/05/07/09 yang mensyaratkan `+ UI-01` tidak bisa lulus; "persistent browser project" tidak ada di browser. `docs/design/FIGMA-HANDOFF.md` menyatakan desain belum diterima, jadi kecocokan visual juga tidak bisa dinilai (Unverified, bukan salah kode).
+- **Status 2026-11-09:** fondasi UI + layar Projects sudah diimplementasikan dan di-merge ke `main` (branch `feat/ui-projects`). `App.tsx` kini memakai hash router (`#/projects`, `#/settings`) dan `AppShell`; `ProjectsScreen` memanggil `GET`/`POST /api/content-projects` dengan skeleton, error + retry, empty state, tabel status/`updatedAt`, dialog create tervalidasi, dan toast. Tersedia pula `api/client.ts`, token light/dark, i18n id/en, theme Auto/Light/Dark, komponen dasar, dan Settings shell preferensi. Rincian: `docs/design/UI_IMPLEMENTATION.md`; workflow + sisa layar: `docs/agent/UI_TODO.md`.
+- **Sisa:** Project detail (brief/script/assets/audio/production/QA/A3/publish/metrics), Runs (status/cancel; belum ada endpoint daftar job), production/import-export Settings, dan pass backend/CORS di browser. `docs/design/FIGMA-HANDOFF.md` masih menyatakan desain belum diterima, jadi kecocokan visual tetap Unverified.
+- **Tes UI:** belum ada; semua tes yang ada tetap backend. Keputusan strategi tes UI (dan apakah menambah dependency) belum diambil.
+- Akibat: AC-01/03/04/05/07/09 yang mensyaratkan `+ UI-01` belum bisa lulus sampai layar detail dan aksinya tersedia; "persistent browser project" sudah bisa didemonstrasikan di level list/create, bukan seluruh lifecycle.
 
 ### 4.2 A3 final approval (backend resolved 2026-11-03)
 
