@@ -7,7 +7,7 @@
  *   stable problem+json `code` extension preserved for the UI.
  */
 
-export const DEFAULT_API_BASE_URL = "http://127.0.0.1:5080";
+export const DEFAULT_API_BASE_URL = "";
 export const DEFAULT_TIMEOUT_MS = 15_000;
 
 function normalizeBaseUrl(value: string): string {
@@ -19,6 +19,10 @@ const configuredBaseUrl = (
 )?.trim();
 
 export const API_BASE_URL = normalizeBaseUrl(configuredBaseUrl || DEFAULT_API_BASE_URL);
+
+/** Human-readable address for copy; an empty base means the browser origin. */
+export const API_BASE_URL_LABEL =
+  API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "same-origin");
 
 export interface ApiError {
   code?: string;

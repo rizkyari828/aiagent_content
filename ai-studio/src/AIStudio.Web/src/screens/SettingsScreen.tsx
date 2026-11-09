@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "../api/client";
+import { API_BASE_URL_LABEL } from "../api/client";
 import { Card } from "../components/Card";
 import { LanguageSelect, ThemePicker } from "../components/Preferences";
 import { useI18n } from "../i18n/i18n";
@@ -45,7 +45,7 @@ export function SettingsScreen() {
               <p className="preference-row__title">{t("settings.api.baseUrl")}</p>
               <p className="preference-row__hint">{t("settings.api.hint")}</p>
             </div>
-            <code className="mono">{API_BASE_URL}</code>
+            <code className="mono">{API_BASE_URL_LABEL}</code>
           </div>
         </Card>
 
