@@ -1,9 +1,12 @@
 # UI Implementation — Content Studio Web
 
-Status: 2026-11-09. Frontend-only: no backend, API contract, domain, job, schema,
+Status: 2026-11-12. Frontend-only: no backend, API contract, domain, job, schema,
 or provider change. UI foundation + Projects landed on `feat/ui-projects` (merged to
 `main`). Project detail route + header/brief/readiness landed on
-`feat/ui-project-detail`, using a same-origin Vite dev proxy (no backend CORS).
+`feat/ui-project-detail`, and all 5 interactive project detail sections
+(Reviewed Script A2, Assets & Audio, Production & Job Inspector, Publish/A3/Export,
+and Metrics/Time/Cost) landed on `feat/ui-project-detail-sections`, using a
+same-origin Vite dev proxy (no backend CORS).
 Handoff, workflow, and remaining screens: `docs/agent/UI_TODO.md`.
 
 This document records the implemented UI foundation and the first product screen
@@ -55,14 +58,20 @@ src/AIStudio.Web/
     i18n/id.json, i18n/en.json    # key-parity enforced at type level
     theme/useTheme.ts             # auto/light/dark store + media-query listener
     api/client.ts                 # fetch wrapper, timeout, normalized ApiError
-    api/projects.ts               # listProjects / createProject
+    api/projects.ts               # listProjects / createProject / getProject / updateProject / getProjectReadiness
+    api/scriptReview.ts           # getReviewedScript / startScriptReview / updateReviewedScript / approveReviewedScript
+    api/jobs.ts                   # getJob / cancelJob / enqueueGenerateIdeaJob..enqueueFinalVideoQaJob
+    api/media.ts                  # listProjectAssets / registerSceneAsset / narration / subtitle
+    api/publishing.ts             # getFinalApproval / recordFinalApproval / publication / transition / exports
+    api/tracking.ts               # metric snapshots / time entries / cost entries / tracking summary
     routing/useHashRoute.ts       # #/projects, #/projects/{id}, #/settings; no dependency
     components/                   # Button, Badge, Card, Table, EmptyState,
                                   # Skeleton, InlineError, Dialog, Toast,
                                   # Preferences (language/theme), icons
     layout/AppShell.tsx           # sidebar, topbar, breadcrumb, skip link
     screens/ProjectsScreen.tsx    # list + create flow
-    screens/ProjectDetailScreen.tsx # header, brief view/edit, readiness, last job
+    screens/ProjectDetailScreen.tsx # header, brief view/edit, readiness, last job, section tabs
+    screens/projectDetail/        # ScriptReviewSection, AssetsAudioSection, ProductionSection, PublishSection, MetricsSection
     screens/SettingsScreen.tsx    # theme/language/API preference shell
 ```
 
@@ -73,7 +82,7 @@ src/AIStudio.Web/
 | Projects | `#/projects` | Implemented | List, skeleton, inline error + retry, empty state, status badges, `Intl` updated-at, create dialog with title/brief validation, success toast, refresh after create. |
 | Settings | `#/settings` | Implemented (shell) | Theme, language, read-only API base URL. Production settings follow. |
 | Runs | none | Not built | Sidebar entry is disabled with a translated "Soon" hint. |
-| Project detail | `#/projects/{id}` | Partially implemented | Header (title/status/`updatedAt`/Edit), Brief view + edit via `PUT`, computed readiness with blocking reasons, last-job summary, and a "coming next" list; script/assets/production/publish/metrics actions follow. |
+| Project detail | `#/projects/{id}` | Implemented | Header (title/status/`updatedAt`/Edit), Brief view + edit via `PUT`, computed readiness with blocking reasons, last-job summary, and 5 interactive section tabs (`ScriptReviewSection`, `AssetsAudioSection`, `ProductionSection`, `PublishSection`, `MetricsSection`). |
 
 ## Routing
 
@@ -162,6 +171,22 @@ code and retry; dark theme + English from persisted localStorage with
 returned to the title input, `aria-invalid`); `Esc` closing the dialog; and a
 create flow that POSTed, closed the dialog, showed the success toast, and
 refreshed the row. No backend was modified; the stub lived outside the repo.
+
+### Project detail interactive sections (2026-11-12, WSL, `feat/ui-project-detail-sections`)
+
+```text
+$ npx tsc --noEmit
+(no output)                                            exit 0
+
+$ npx vite build
+✓ 50 modules transformed.
+dist/index.html                   0.46 kB │ gzip:   0.28 kB
+dist/assets/index-B249hLYx.css   24.55 kB │ gzip:   5.11 kB
+dist/assets/index-Ddi_RxOk.js   443.99 kB │ gzip: 111.14 kB
+✓ built in 162ms                                        exit 0
+```
+
+`id.json` and `en.json` carry 567 keys each with 100% key parity and 0 hardcoded UI strings in `src/**/*.tsx`.
 
 ## Human checks in the browser
 
