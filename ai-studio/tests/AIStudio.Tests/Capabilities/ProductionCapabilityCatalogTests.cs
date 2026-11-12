@@ -10,6 +10,7 @@ public sealed class ProductionCapabilityCatalogTests
     {
         var ids = ProductionCapabilityCatalog.Capabilities.Select(capability => capability.Id).ToHashSet();
 
+        Assert.Contains(CapabilityIds.TextGeneration, ids);
         Assert.Contains(CapabilityIds.SpeechNarration, ids);
         Assert.Contains(CapabilityIds.MusicInstrumental, ids);
         Assert.Contains(CapabilityIds.VisualStill, ids);
@@ -35,6 +36,7 @@ public sealed class ProductionCapabilityCatalogTests
                 threeDEnabled: true,
                 videoEnabled: true));
 
+        AssertProvider(registry, CapabilityIds.TextGeneration, "ollama");
         AssertProvider(registry, CapabilityIds.SpeechNarration, "voxcpm2");
         AssertProvider(registry, CapabilityIds.MusicInstrumental, "ace-step");
         AssertProvider(registry, CapabilityIds.VisualStill, "svg-still");
@@ -124,6 +126,188 @@ public sealed class ProductionCapabilityCatalogTests
             Assert.DoesNotContain('/', provider.ProviderId);
             Assert.DoesNotContain('/', provider.RuntimeCategory);
         });
+    }
+
+    [Fact]
+    public void RegistersMultipleProvidersPerCapabilityInPriorityOrder()
+    {
+        var registry = new CapabilityRegistry(
+            ProductionCapabilityCatalog.Capabilities,
+            ProductionCapabilityCatalog.CreateProviders(
+                speechEnabled: true,
+                musicEnabled: true,
+                manimEnabled: true,
+                imageEnabled: true,
+                threeDEnabled: true,
+                videoEnabled: true,
+                textEnabled: true,
+                geminiTextEnabled: true,
+                geminiImageEnabled: true,
+                geminiVideoEnabled: true,
+                geminiSpeechEnabled: true));
+
+        var textProviders = registry.GetProviders(CapabilityIds.TextGeneration);
+        Assert.Equal(2, textProviders.Count);
+        Assert.Equal("ollama", textProviders[0].ProviderId);
+        Assert.Equal(100, textProviders[0].Priority);
+        Assert.Equal("local_service_gpu", textProviders[0].RuntimeCategory);
+        Assert.Equal("gemini-text", textProviders[1].ProviderId);
+        Assert.Equal(50, textProviders[1].Priority);
+        Assert.Equal("cloud_api", textProviders[1].RuntimeCategory);
+
+        var speechProviders = registry.GetProviders(CapabilityIds.SpeechNarration);
+        Assert.Equal(2, speechProviders.Count);
+        Assert.Equal("voxcpm2", speechProviders[0].ProviderId);
+        Assert.Equal(100, speechProviders[0].Priority);
+        Assert.Equal("gemini-tts", speechProviders[1].ProviderId);
+        Assert.Equal(50, speechProviders[1].Priority);
+
+        var imageProviders = registry.GetProviders(CapabilityIds.VisualAiImage);
+        Assert.Equal(2, imageProviders.Count);
+        Assert.Equal("comfyui-flux", imageProviders[0].ProviderId);
+        Assert.Equal(100, imageProviders[0].Priority);
+        Assert.Equal("gemini-nanobanana", imageProviders[1].ProviderId);
+        Assert.Equal(50, imageProviders[1].Priority);
+
+        var videoProviders = registry.GetProviders(CapabilityIds.VisualCharacterAnimation);
+        Assert.Equal(2, videoProviders.Count);
+        Assert.Equal("comfyui-i2v", videoProviders[0].ProviderId);
+        Assert.Equal(100, videoProviders[0].Priority);
+        Assert.Equal("gemini-veo", videoProviders[1].ProviderId);
+        Assert.Equal(50, videoProviders[1].Priority);
+    }
+
+    [Fact]
+    public void AutomaticallyFallsBackToCloudProviderWhenLocalProviderIsDisabled()
+    {
+        var registry = new CapabilityRegistry(
+            ProductionCapabilityCatalog.Capabilities,
+            ProductionCapabilityCatalog.CreateProviders(
+                speechEnabled: false,
+                musicEnabled: false,
+                manimEnabled: false,
+                imageEnabled: false,
+                threeDEnabled: false,
+                videoEnabled: false,
+                textEnabled: false,
+                geminiTextEnabled: true,
+                geminiImageEnabled: true,
+                geminiVideoEnabled: true,
+                geminiSpeechEnabled: true));
+
+        var textResolution = registry.Resolve(CapabilityRequirement.For(CapabilityIds.TextGeneration));
+        Assert.True(textResolution.IsResolved);
+        Assert.Equal("gemini-text", textResolution.Provider!.ProviderId);
+        Assert.False(textResolution.UsedFallback);
+
+        var speechResolution = registry.Resolve(CapabilityRequirement.For(CapabilityIds.SpeechNarration));
+        Assert.True(speechResolution.IsResolved);
+        Assert.Equal("gemini-tts", speechResolution.Provider!.ProviderId);
+        Assert.False(speechResolution.UsedFallback);
+
+        var imageResolution = registry.Resolve(CapabilityRequirement.For(CapabilityIds.VisualAiImage));
+        Assert.True(imageResolution.IsResolved);
+        Assert.Equal("gemini-nanobanana", imageResolution.Provider!.ProviderId);
+        Assert.False(imageResolution.UsedFallback);
+
+        var videoResolution = registry.Resolve(CapabilityRequirement.For(CapabilityIds.VisualCharacterAnimation));
+        Assert.True(videoResolution.IsResolved);
+        Assert.Equal("gemini-veo", videoResolution.Provider!.ProviderId);
+        Assert.False(videoResolution.UsedFallback);
+    }
+
+    [Fact]
+    public void BothProvidersDisabledReportsProviderDisabledGapWithAllKnownProviders()
+    {
+        var registry = new CapabilityRegistry(
+            ProductionCapabilityCatalog.Capabilities,
+            ProductionCapabilityCatalog.CreateProviders(
+                speechEnabled: false,
+                musicEnabled: false,
+                manimEnabled: false,
+                imageEnabled: false,
+                threeDEnabled: false,
+                videoEnabled: false,
+                textEnabled: false,
+                geminiTextEnabled: false,
+                geminiImageEnabled: false,
+                geminiVideoEnabled: false,
+                geminiSpeechEnabled: false));
+
+        var resolution = registry.Resolve(CapabilityRequirement.For(CapabilityIds.TextGeneration));
+        Assert.False(resolution.IsResolved);
+        Assert.Equal(CapabilityGapReason.ProviderDisabled, resolution.Gap!.Reason);
+        Assert.Equal(CapabilityIds.TextGeneration, resolution.Gap.CapabilityId);
+        Assert.Equal(["ollama", "gemini-text"], resolution.Gap.KnownProviderIds);
+    }
+
+    [Fact]
+    public void ResolvesExplicitPreferredProviderWhenEnabled()
+    {
+        var registry = new CapabilityRegistry(
+            ProductionCapabilityCatalog.Capabilities,
+            ProductionCapabilityCatalog.CreateProviders(
+                speechEnabled: true,
+                musicEnabled: true,
+                manimEnabled: true,
+                imageEnabled: true,
+                threeDEnabled: true,
+                videoEnabled: true,
+                textEnabled: true,
+                geminiTextEnabled: true));
+
+        var requirement = CapabilityRequirement.ForProvider(CapabilityIds.TextGeneration, "gemini-text");
+        var resolution = registry.Resolve(requirement);
+
+        Assert.True(resolution.IsResolved);
+        Assert.Equal("gemini-text", resolution.Provider!.ProviderId);
+        Assert.False(resolution.UsedFallback);
+    }
+
+    [Fact]
+    public void ExplicitPreferredProviderDoesNotSilentlyFallBackWhenDisabled()
+    {
+        var registry = new CapabilityRegistry(
+            ProductionCapabilityCatalog.Capabilities,
+            ProductionCapabilityCatalog.CreateProviders(
+                speechEnabled: true,
+                musicEnabled: true,
+                manimEnabled: true,
+                imageEnabled: true,
+                threeDEnabled: true,
+                videoEnabled: true,
+                textEnabled: true,
+                geminiTextEnabled: false));
+
+        var requirement = CapabilityRequirement.ForProvider(CapabilityIds.TextGeneration, "gemini-text");
+        var resolution = registry.Resolve(requirement);
+
+        Assert.False(resolution.IsResolved);
+        Assert.Equal(CapabilityGapReason.ProviderDisabled, resolution.Gap!.Reason);
+        Assert.Equal(CapabilityIds.TextGeneration, resolution.Gap.CapabilityId);
+        Assert.Equal(["ollama", "gemini-text"], resolution.Gap.KnownProviderIds);
+    }
+
+    [Fact]
+    public void ExplicitPreferredProviderReportsNotRegisteredWhenUnknown()
+    {
+        var registry = new CapabilityRegistry(
+            ProductionCapabilityCatalog.Capabilities,
+            ProductionCapabilityCatalog.CreateProviders(
+                speechEnabled: true,
+                musicEnabled: true,
+                manimEnabled: true,
+                imageEnabled: true,
+                threeDEnabled: true,
+                videoEnabled: true));
+
+        var requirement = CapabilityRequirement.ForProvider(CapabilityIds.TextGeneration, "unknown-llm");
+        var resolution = registry.Resolve(requirement);
+
+        Assert.False(resolution.IsResolved);
+        Assert.Equal(CapabilityGapReason.ProviderNotRegistered, resolution.Gap!.Reason);
+        Assert.Equal(CapabilityIds.TextGeneration, resolution.Gap.CapabilityId);
+        Assert.Equal(["ollama", "gemini-text"], resolution.Gap.KnownProviderIds);
     }
 
     private static void AssertProvider(

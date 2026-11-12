@@ -137,7 +137,7 @@ error manusiawi + kode sekunder, dan aksi irreversible memakai konfirmasi.
       `InlineError`/`Skeleton`.
 - [x] Kembali ke daftar tanpa kehilangan bahasa/tema (hash route).
 
-### 5.2 Project detail (layar terbesar; header + Brief + readiness selesai 2026-11-09)
+### 5.2 Project detail (selesai 2026-11-12 pada `feat/ui-project-detail-sections`)
 
 Endpoint yang sudah tersedia (lihat `docs/agent/REPO_MAP.md`): detail
 `GET /api/content-projects/{id}`, update title/brief, readiness + transition,
@@ -145,13 +145,13 @@ script review, storyboard/visual/audio/render/QA jobs, final approval + decision
 publication, metrics/time/cost, export/import.
 
 - [x] Header detail: judul, status badge, `updatedAt`, aksi utama kanan atas.
-- [ ] Section/tab: Brief/Research (Brief selesai), Reviewed script, Assets/Audio,
-      Production, Review/QA + A3 (approved / changes_requested + note), Publish,
-      Metrics. `GET .../readiness` sudah tampil beserta alasan blokir.
-- [ ] Semua aksi destruktif/irreversible memakai `Dialog` konfirmasi; jangan
+- [x] Section/tab: Brief/Research, Reviewed script (`ScriptReviewSection`), Assets/Audio (`AssetsAudioSection`),
+      Production (`ProductionSection`), Review/QA + A3 (`approved` / `changes_requested` + `note`) & Publish & Export (`PublishSection`),
+      serta Metrics/Time/Cost (`MetricsSection`). `GET .../readiness` tampil beserta alasan blokir.
+- [x] Semua aksi destruktif/irreversible memakai `Dialog` konfirmasi (approve script A2, cancel job, konfirmasi keputusan A3); jangan
       menonaktifkan tombol tanpa alasan yang terlihat.
-- [ ] Pertahankan copy manusiawi; kode error hanya baris sekunder.
-- [ ] Job queued/running/failed/cancelled: status, alasan, retry/cancel sesuai
+- [x] Pertahankan copy manusiawi; kode error hanya baris sekunder (`567` key paritas 100% di `id.json` & `en.json`).
+- [x] Job queued/running/failed/cancelled: status, alasan, inspect/refresh/cancel serta enqueue 7 jenis pipeline job sesuai
       kontrak yang ada.
 
 ### 5.3 Runs

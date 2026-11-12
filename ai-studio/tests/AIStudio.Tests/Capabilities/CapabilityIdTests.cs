@@ -6,6 +6,7 @@ namespace AIStudio.Tests.Capabilities;
 public sealed class CapabilityIdTests
 {
     [Theory]
+    [InlineData("text.generation")]
     [InlineData("speech.narration")]
     [InlineData("visual.ui_motion")]
     [InlineData("visual.image_to_video")]
@@ -44,6 +45,7 @@ public sealed class CapabilityIdTests
     [Fact]
     public void KnownIdentifiersAreStable()
     {
+        Assert.Equal("text.generation", CapabilityIds.TextGeneration.Value);
         Assert.Equal("speech.narration", CapabilityIds.SpeechNarration.Value);
         Assert.Equal("music.instrumental", CapabilityIds.MusicInstrumental.Value);
         Assert.Equal("visual.still", CapabilityIds.VisualStill.Value);
@@ -51,6 +53,7 @@ public sealed class CapabilityIdTests
         Assert.Equal("visual.ui_motion", CapabilityIds.VisualUiMotion.Value);
         Assert.Equal("visual.ai_image", CapabilityIds.VisualAiImage.Value);
         Assert.Equal("visual.three_d", CapabilityIds.VisualThreeD.Value);
+        Assert.Equal("visual.character_animation", CapabilityIds.VisualCharacterAnimation.Value);
         Assert.Equal("media.compose", CapabilityIds.MediaCompose.Value);
         Assert.Equal("subtitle.burned", CapabilityIds.SubtitleBurned.Value);
     }

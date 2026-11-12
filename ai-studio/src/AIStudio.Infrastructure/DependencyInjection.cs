@@ -30,6 +30,7 @@ using AIStudio.Application.Subtitles;
 using AIStudio.Application.Tracking;
 using AIStudio.Application.Transfer;
 using AIStudio.Infrastructure.AI;
+using AIStudio.Infrastructure.AI.Gemini;
 using AIStudio.Infrastructure.Approvals;
 using AIStudio.Infrastructure.Assets;
 using AIStudio.Infrastructure.Content;
@@ -41,6 +42,7 @@ using AIStudio.Infrastructure.Rendering;
 using AIStudio.Infrastructure.Rendering.AudioGeneration;
 using AIStudio.Infrastructure.Rendering.AudioMixing;
 using AIStudio.Infrastructure.Rendering.AudioProduction;
+using AIStudio.Infrastructure.Rendering.Gemini;
 using AIStudio.Infrastructure.Scripts;
 using AIStudio.Infrastructure.Subtitles;
 using AIStudio.Infrastructure.Tracking;
@@ -178,10 +180,14 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(AiOptions.SectionName))
             .Validate(
                 options => string.Equals(
-                    options.Provider,
-                    "Ollama",
-                    StringComparison.OrdinalIgnoreCase),
-                "Ai:Provider must be 'Ollama'.")
+                        options.Provider,
+                        "Ollama",
+                        StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(
+                        options.Provider,
+                        "Gemini",
+                        StringComparison.OrdinalIgnoreCase),
+                "Ai:Provider must be 'Ollama' or 'Gemini'.")
             .ValidateOnStart();
 
         services
@@ -198,7 +204,21 @@ public static class DependencyInjection
                 "Ollama:TimeoutSeconds must be between 1 and 600.")
             .ValidateOnStart();
 
-        services.AddHttpClient<IAiTextGenerator, OllamaTextGenerator>(
+        services
+            .AddOptions<GeminiOptions>()
+            .Bind(configuration.GetSection(GeminiOptions.SectionName))
+            .Validate(
+                options => IsValidBaseUrl(options.BaseUrl),
+                "Gemini:BaseUrl must be an absolute HTTP or HTTPS URL.")
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.DefaultModel),
+                "Gemini:DefaultModel is required.")
+            .Validate(
+                options => options.TimeoutSeconds is >= 1 and <= 600,
+                "Gemini:TimeoutSeconds must be between 1 and 600.")
+            .ValidateOnStart();
+
+        services.AddHttpClient<OllamaTextGenerator>(
             (serviceProvider, client) =>
             {
                 var options = serviceProvider
@@ -209,6 +229,28 @@ public static class DependencyInjection
                     UriKind.Absolute);
                 client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
             });
+
+        services.AddHttpClient<GeminiTextGenerator>(
+            (serviceProvider, client) =>
+            {
+                var options = serviceProvider
+                    .GetRequiredService<IOptions<GeminiOptions>>()
+                    .Value;
+                client.BaseAddress = new Uri(
+                    $"{options.BaseUrl.TrimEnd('/')}/",
+                    UriKind.Absolute);
+                client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+            });
+
+        services.AddTransient<IAiTextGenerator>(serviceProvider =>
+        {
+            var aiOptions = serviceProvider
+                .GetRequiredService<IOptions<AiOptions>>()
+                .Value;
+            return string.Equals(aiOptions.Provider, "Gemini", StringComparison.OrdinalIgnoreCase)
+                ? serviceProvider.GetRequiredService<GeminiTextGenerator>()
+                : serviceProvider.GetRequiredService<OllamaTextGenerator>();
+        });
     }
 
     private static void AddProjectTransfer(
@@ -364,7 +406,21 @@ public static class DependencyInjection
                 "ComfyUi:Height must be between 16 and 16384.")
             .ValidateOnStart();
 
-        services.AddHttpClient<IImageGenerationProvider, ComfyUiImageGenerationProvider>(
+        services
+            .AddOptions<GeminiImageOptions>()
+            .Bind(configuration.GetSection(GeminiImageOptions.SectionName))
+            .Validate(
+                options => IsValidBaseUrl(options.BaseUrl),
+                "GeminiImage:BaseUrl must be an absolute HTTP or HTTPS URL.")
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.Model),
+                "GeminiImage:Model is required.")
+            .Validate(
+                options => options.TimeoutSeconds is >= 1 and <= 3600,
+                "GeminiImage:TimeoutSeconds must be between 1 and 3600.")
+            .ValidateOnStart();
+
+        services.AddHttpClient<ComfyUiImageGenerationProvider>(
             (serviceProvider, client) =>
             {
                 var options = serviceProvider
@@ -375,6 +431,27 @@ public static class DependencyInjection
                     UriKind.Absolute);
                 client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
             });
+
+        services.AddHttpClient<GeminiImageGenerationProvider>(
+            (serviceProvider, client) =>
+            {
+                var options = serviceProvider
+                    .GetRequiredService<IOptions<GeminiImageOptions>>()
+                    .Value;
+                client.BaseAddress = new Uri(
+                    $"{options.BaseUrl.TrimEnd('/')}/",
+                    UriKind.Absolute);
+                client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+            });
+
+        services.AddTransient<IImageGenerationProvider>(serviceProvider =>
+        {
+            var comfy = serviceProvider.GetRequiredService<IOptions<ComfyUiOptions>>().Value;
+            var gemini = serviceProvider.GetRequiredService<IOptions<GeminiImageOptions>>().Value;
+            return !comfy.Enabled && gemini.Enabled && !string.IsNullOrWhiteSpace(gemini.ApiKey)
+                ? serviceProvider.GetRequiredService<GeminiImageGenerationProvider>()
+                : serviceProvider.GetRequiredService<ComfyUiImageGenerationProvider>();
+        });
 
         services
             .AddOptions<ComfyUiVideoOptions>()
@@ -408,9 +485,38 @@ public static class DependencyInjection
                 "ComfyUiVideo:Fps must be between 1 and 120.")
             .ValidateOnStart();
 
+        services
+            .AddOptions<GeminiVideoOptions>()
+            .Bind(configuration.GetSection(GeminiVideoOptions.SectionName))
+            .Validate(
+                options => IsValidBaseUrl(options.BaseUrl),
+                "GeminiVideo:BaseUrl must be an absolute HTTP or HTTPS URL.")
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.Model),
+                "GeminiVideo:Model is required.")
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.OutputDirectory),
+                "GeminiVideo:OutputDirectory is required.")
+            .Validate(
+                options => options.TimeoutSeconds is >= 1 and <= 7200,
+                "GeminiVideo:TimeoutSeconds must be between 1 and 7200.")
+            .Validate(
+                options => options.MaxSeconds is >= 1 and <= 60,
+                "GeminiVideo:MaxSeconds must be between 1 and 60.")
+            .Validate(
+                options => options.Width is >= 16 and <= 4096,
+                "GeminiVideo:Width must be between 16 and 4096.")
+            .Validate(
+                options => options.Height is >= 16 and <= 4096,
+                "GeminiVideo:Height must be between 16 and 4096.")
+            .Validate(
+                options => options.Fps is >= 1 and <= 120,
+                "GeminiVideo:Fps must be between 1 and 120.")
+            .ValidateOnStart();
+
         // Registered but disabled by default and not selected by any production path
         // in v1; a missing external ComfyUI runtime never affects existing engines.
-        services.AddHttpClient<IVideoGenerationProvider, ComfyUiVideoGenerationProvider>(
+        services.AddHttpClient<ComfyUiVideoGenerationProvider>(
             (serviceProvider, client) =>
             {
                 var options = serviceProvider
@@ -421,6 +527,27 @@ public static class DependencyInjection
                     UriKind.Absolute);
                 client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
             });
+
+        services.AddHttpClient<GeminiVideoGenerationProvider>(
+            (serviceProvider, client) =>
+            {
+                var options = serviceProvider
+                    .GetRequiredService<IOptions<GeminiVideoOptions>>()
+                    .Value;
+                client.BaseAddress = new Uri(
+                    $"{options.BaseUrl.TrimEnd('/')}/",
+                    UriKind.Absolute);
+                client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+            });
+
+        services.AddTransient<IVideoGenerationProvider>(serviceProvider =>
+        {
+            var comfy = serviceProvider.GetRequiredService<IOptions<ComfyUiVideoOptions>>().Value;
+            var gemini = serviceProvider.GetRequiredService<IOptions<GeminiVideoOptions>>().Value;
+            return !comfy.Enabled && gemini.Enabled && !string.IsNullOrWhiteSpace(gemini.ApiKey)
+                ? serviceProvider.GetRequiredService<GeminiVideoGenerationProvider>()
+                : serviceProvider.GetRequiredService<ComfyUiVideoGenerationProvider>();
+        });
     }
 
     private static void AddAudioGeneration(
@@ -445,6 +572,26 @@ public static class DependencyInjection
             .Validate(
                 options => options.VoxCpm2.ExpectedSampleRate is >= 8000 and <= 192000,
                 "SpeechSynthesis:VoxCPM2:ExpectedSampleRate must be between 8000 and 192000.")
+            .ValidateOnStart();
+
+        services
+            .AddOptions<GeminiSpeechOptions>()
+            .Bind(configuration.GetSection(GeminiSpeechOptions.SectionName))
+            .Validate(
+                options => IsValidBaseUrl(options.BaseUrl),
+                "GeminiSpeech:BaseUrl must be an absolute HTTP or HTTPS URL.")
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.Model),
+                "GeminiSpeech:Model is required.")
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.FfmpegPath),
+                "GeminiSpeech:FfmpegPath is required.")
+            .Validate(
+                options => options.TimeoutSeconds is >= 1 and <= 3600,
+                "GeminiSpeech:TimeoutSeconds must be between 1 and 3600.")
+            .Validate(
+                options => options.ExpectedSampleRate is >= 8000 and <= 192000,
+                "GeminiSpeech:ExpectedSampleRate must be between 8000 and 192000.")
             .ValidateOnStart();
 
         services
@@ -473,7 +620,26 @@ public static class DependencyInjection
                 "MusicGeneration:AceStep:ExpectedChannels must be 1 or 2.")
             .ValidateOnStart();
 
-        services.AddSingleton<ISpeechSynthesisProvider, VoxCpmSpeechSynthesisProvider>();
+        services.AddSingleton<VoxCpmSpeechSynthesisProvider>();
+        services.AddHttpClient<GeminiSpeechSynthesisProvider>(
+            (serviceProvider, client) =>
+            {
+                var options = serviceProvider
+                    .GetRequiredService<IOptions<GeminiSpeechOptions>>()
+                    .Value;
+                client.BaseAddress = new Uri(
+                    $"{options.BaseUrl.TrimEnd('/')}/",
+                    UriKind.Absolute);
+                client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+            });
+        services.AddTransient<ISpeechSynthesisProvider>(serviceProvider =>
+        {
+            var localSpeech = serviceProvider.GetRequiredService<IOptions<SpeechSynthesisOptions>>().Value;
+            var geminiSpeech = serviceProvider.GetRequiredService<IOptions<GeminiSpeechOptions>>().Value;
+            return !localSpeech.Enabled && geminiSpeech.Enabled && !string.IsNullOrWhiteSpace(geminiSpeech.ApiKey)
+                ? serviceProvider.GetRequiredService<GeminiSpeechSynthesisProvider>()
+                : serviceProvider.GetRequiredService<VoxCpmSpeechSynthesisProvider>();
+        });
         services.AddSingleton<IMusicGenerationProvider, AceStepMusicGenerationProvider>();
     }
 
@@ -494,8 +660,17 @@ public static class DependencyInjection
         // so capability discovery works even when no external runtime is installed.
         services.AddSingleton<ICapabilityRegistry>(serviceProvider =>
         {
+            var ai = serviceProvider
+                .GetRequiredService<IOptions<AiOptions>>()
+                .Value;
+            var geminiText = serviceProvider
+                .GetRequiredService<IOptions<GeminiOptions>>()
+                .Value;
             var speech = serviceProvider
                 .GetRequiredService<IOptions<SpeechSynthesisOptions>>()
+                .Value;
+            var geminiSpeech = serviceProvider
+                .GetRequiredService<IOptions<GeminiSpeechOptions>>()
                 .Value;
             var music = serviceProvider
                 .GetRequiredService<IOptions<MusicGenerationOptions>>()
@@ -506,11 +681,17 @@ public static class DependencyInjection
             var images = serviceProvider
                 .GetRequiredService<IOptions<ComfyUiOptions>>()
                 .Value;
+            var geminiImages = serviceProvider
+                .GetRequiredService<IOptions<GeminiImageOptions>>()
+                .Value;
             var threeD = serviceProvider
                 .GetRequiredService<IOptions<BlenderOptions>>()
                 .Value;
             var video = serviceProvider
                 .GetRequiredService<IOptions<ComfyUiVideoOptions>>()
+                .Value;
+            var geminiVideo = serviceProvider
+                .GetRequiredService<IOptions<GeminiVideoOptions>>()
                 .Value;
 
             var providers = ProductionCapabilityCatalog.CreateProviders(
@@ -519,7 +700,12 @@ public static class DependencyInjection
                 manimEnabled: manim.Enabled,
                 imageEnabled: images.Enabled,
                 threeDEnabled: threeD.Enabled,
-                videoEnabled: video.Enabled);
+                videoEnabled: video.Enabled,
+                textEnabled: string.Equals(ai.Provider, "Ollama", StringComparison.OrdinalIgnoreCase),
+                geminiTextEnabled: geminiText.Enabled && !string.IsNullOrWhiteSpace(geminiText.ApiKey),
+                geminiImageEnabled: geminiImages.Enabled && !string.IsNullOrWhiteSpace(geminiImages.ApiKey),
+                geminiVideoEnabled: geminiVideo.Enabled && !string.IsNullOrWhiteSpace(geminiVideo.ApiKey),
+                geminiSpeechEnabled: geminiSpeech.Enabled && !string.IsNullOrWhiteSpace(geminiSpeech.ApiKey));
 
             return new CapabilityRegistry(
                 ProductionCapabilityCatalog.Capabilities,

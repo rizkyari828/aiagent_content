@@ -22,6 +22,11 @@ import { Skeleton } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
 import { useFormatters } from "../i18n/format";
 import { useI18n, type Translate } from "../i18n/i18n";
+import { AssetsAudioSection } from "./projectDetail/AssetsAudioSection";
+import { MetricsSection } from "./projectDetail/MetricsSection";
+import { ProductionSection } from "./projectDetail/ProductionSection";
+import { PublishSection } from "./projectDetail/PublishSection";
+import { ScriptReviewSection } from "./projectDetail/ScriptReviewSection";
 
 const MAX_TITLE = 200;
 const MAX_BRIEF = 4_000;
@@ -33,7 +38,14 @@ const READINESS_CODES = new Set([
   "readiness_final_approval_changes_requested",
   "readiness_publication_missing",
 ]);
-const NEXT_SECTIONS = ["script", "assets", "production", "publish", "metrics"] as const;
+type SectionTab = "script" | "assets" | "production" | "publish" | "metrics";
+const SECTION_TABS: readonly SectionTab[] = [
+  "script",
+  "assets",
+  "production",
+  "publish",
+  "metrics",
+] as const;
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -134,6 +146,11 @@ export function ProjectDetailScreen({ projectId, onBack }: ProjectDetailScreenPr
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+  const [activeSection, setActiveSection] = useState<SectionTab>("script");
+
+  const detailRef = useRef<ProjectDetail | null>(null);
+  detailRef.current = detail;
+  const prevProjectIdRef = useRef(projectId);
 
   const [editOpen, setEditOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -145,9 +162,17 @@ export function ProjectDetailScreen({ projectId, onBack }: ProjectDetailScreenPr
 
   useEffect(() => {
     const controller = new AbortController();
+    const isNewProject = prevProjectIdRef.current !== projectId;
+    prevProjectIdRef.current = projectId;
 
-    setLoadState("loading");
-    setLoadError(null);
+    if (isNewProject || detailRef.current === null) {
+      setLoadState("loading");
+      setLoadError(null);
+      if (isNewProject) {
+        setDetail(null);
+        setReadiness(null);
+      }
+    }
 
     Promise.all([
       getProject(projectId, controller.signal),
@@ -167,8 +192,10 @@ export function ProjectDetailScreen({ projectId, onBack }: ProjectDetailScreenPr
           return;
         }
 
-        setLoadError(toApiError(error));
-        setLoadState("error");
+        if (detailRef.current === null) {
+          setLoadError(toApiError(error));
+          setLoadState("error");
+        }
       });
 
     return () => controller.abort();
@@ -280,9 +307,9 @@ export function ProjectDetailScreen({ projectId, onBack }: ProjectDetailScreenPr
         </button>
       </div>
 
-      {loadState === "loading" ? <DetailSkeleton /> : null}
+      {loadState === "loading" && detail === null ? <DetailSkeleton /> : null}
 
-      {loadState === "error" && loadError ? (
+      {loadState === "error" && detail === null && loadError ? (
         <InlineError
           title={t("project.error.title")}
           detail={describeLoadError(loadError, t)}
@@ -292,7 +319,7 @@ export function ProjectDetailScreen({ projectId, onBack }: ProjectDetailScreenPr
         />
       ) : null}
 
-      {loadState === "ready" && detail ? (
+      {detail ? (
         <div className="stack">
           <div className="detail-header">
             <div className="detail-header__main">
@@ -384,17 +411,76 @@ export function ProjectDetailScreen({ projectId, onBack }: ProjectDetailScreenPr
                 </dl>
               </Card>
             ) : null}
+          </div>
 
-            <Card
-              title={t("project.next.title")}
-              description={t("project.next.description")}
-            >
-              <ul className="next-list">
-                {NEXT_SECTIONS.map((section) => (
-                  <li key={section}>{t(`project.next.${section}`)}</li>
-                ))}
-              </ul>
-            </Card>
+          <div
+            className="section-tabs"
+            role="tablist"
+            aria-label={t("project.sections.ariaLabel")}
+          >
+            {SECTION_TABS.map((tab) => {
+              const isSelected = activeSection === tab;
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  id={`tab-${tab}`}
+                  aria-selected={isSelected}
+                  aria-controls={`tabpanel-${tab}`}
+                  className={
+                    isSelected
+                      ? "section-tabs__tab section-tabs__tab--active"
+                      : "section-tabs__tab"
+                  }
+                  onClick={() => setActiveSection(tab)}
+                >
+                  {t(`project.next.${tab}`)}
+                </button>
+              );
+            })}
+          </div>
+
+          <div
+            role="tabpanel"
+            id={`tabpanel-${activeSection}`}
+            aria-labelledby={`tab-${activeSection}`}
+            className="section-tabs__panel"
+          >
+            {activeSection === "script" && (
+              <ScriptReviewSection
+                projectId={projectId}
+                lastJob={detail.lastJob}
+                onProjectChanged={refresh}
+              />
+            )}
+            {activeSection === "assets" && (
+              <AssetsAudioSection
+                projectId={projectId}
+                onProjectChanged={refresh}
+              />
+            )}
+            {activeSection === "production" && (
+              <ProductionSection
+                projectId={projectId}
+                lastJob={detail.lastJob}
+                onProjectChanged={refresh}
+              />
+            )}
+            {activeSection === "publish" && (
+              <PublishSection
+                projectId={projectId}
+                projectStatus={detail.status}
+                lastJob={detail.lastJob}
+                onProjectChanged={refresh}
+              />
+            )}
+            {activeSection === "metrics" && (
+              <MetricsSection
+                projectId={projectId}
+                onProjectChanged={refresh}
+              />
+            )}
           </div>
         </div>
       ) : null}

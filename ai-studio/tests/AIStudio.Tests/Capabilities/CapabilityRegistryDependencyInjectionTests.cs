@@ -86,6 +86,47 @@ public sealed class CapabilityRegistryDependencyInjectionTests
         Assert.Equal(CapabilityGapReason.CapabilityNotImplemented, resolution.Gap!.Reason);
     }
 
+    [Fact]
+    public void GeminiCloudProvidersAreEnabledOnlyWhenEnabledAndApiKeyConfigured()
+    {
+        using var provider = BuildProvider(new Dictionary<string, string?>
+        {
+            ["ComfyUi:Enabled"] = "false",
+            ["GeminiImage:Enabled"] = "true",
+            ["GeminiImage:ApiKey"] = "test-gemini-key",
+            ["ComfyUiVideo:Enabled"] = "false",
+            ["GeminiVideo:Enabled"] = "true",
+            ["GeminiVideo:ApiKey"] = "test-gemini-key",
+            ["SpeechSynthesis:Enabled"] = "false",
+            ["GeminiSpeech:Enabled"] = "true",
+            ["GeminiSpeech:ApiKey"] = "test-gemini-key",
+            ["Gemini:Enabled"] = "true",
+            ["Gemini:ApiKey"] = "test-gemini-key"
+        });
+
+        var registry = provider.GetRequiredService<ICapabilityRegistry>();
+
+        var image = registry.Resolve(
+            CapabilityRequirement.ForProvider(CapabilityIds.VisualAiImage, "gemini-nanobanana"));
+        Assert.True(image.IsResolved);
+        Assert.Equal("gemini-nanobanana", image.Provider!.ProviderId);
+
+        var video = registry.Resolve(
+            CapabilityRequirement.ForProvider(CapabilityIds.VisualCharacterAnimation, "gemini-veo"));
+        Assert.True(video.IsResolved);
+        Assert.Equal("gemini-veo", video.Provider!.ProviderId);
+
+        var speech = registry.Resolve(
+            CapabilityRequirement.ForProvider(CapabilityIds.SpeechNarration, "gemini-tts"));
+        Assert.True(speech.IsResolved);
+        Assert.Equal("gemini-tts", speech.Provider!.ProviderId);
+
+        var text = registry.Resolve(
+            CapabilityRequirement.ForProvider(CapabilityIds.TextGeneration, "gemini-text"));
+        Assert.True(text.IsResolved);
+        Assert.Equal("gemini-text", text.Provider!.ProviderId);
+    }
+
     private static ServiceProvider BuildProvider(
         Dictionary<string, string?>? overrides = null)
     {

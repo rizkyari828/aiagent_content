@@ -108,11 +108,22 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 
 ## Capability Registry
 
-- `src/AIStudio.Application/Capabilities/CapabilityId.cs`, `CapabilityIds.cs` — validated dotted capability value object plus the v1 identifier set (stable strings, not an enum).
+- `src/AIStudio.Application/Capabilities/CapabilityId.cs`, `CapabilityIds.cs` — validated dotted capability value object plus the identifier set (`CapabilityIds.TextGeneration` [`text.generation`], `visual.ai_image`, `visual.character_animation`, `speech.narration`, `music.instrumental`).
 - `CapabilityDescriptor.cs`, `CapabilityProviderDescriptor.cs`, `CapabilityAvailability.cs` — capability metadata and trusted provider registration (id, capability, priority, enabled, runtime category; REGISTERED vs ENABLED, no executable/model paths).
-- `CapabilityRequirement.cs`, `CapabilityResolution.cs`, `CapabilityGap.cs`, `ICapabilityRegistry.cs` — requirement with ordered fallback capability chain, resolution result, explicit gap, and the application-facing registry boundary.
-- `CapabilityRegistry.cs`, `ProductionCapabilityCatalog.cs` — pure deterministic registry (fail-fast duplicate/unknown registration, priority ordering, fallback resolution) and the compile-time mapping of the current provider stack.
-- `tests/AIStudio.Tests/Capabilities/` — id validation/stability, registration and duplicate validation, deterministic resolution, disabled/missing capability gaps, fallback selection, catalog mapping, and DI enablement reflection.
+- `CapabilityRequirement.cs`, `CapabilityResolution.cs`, `CapabilityGap.cs`, `ICapabilityRegistry.cs` — requirement with ordered fallback capability chain, explicit `PreferredProviderId` selection, resolution result, explicit gap (`ProviderNotRegistered` / `ProviderDisabled` / `CapabilityNotImplemented`), and the application-facing registry boundary.
+- `CapabilityRegistry.cs`, `ProductionCapabilityCatalog.cs` — pure deterministic registry (fail-fast duplicate/unknown registration, priority ordering, fallback resolution) and compile-time multi-provider catalog: local defaults at priority 100 (`ollama`, `comfyui-flux`, `comfyui-i2v`, `voxcpm2`, `ace-step`) and optional Gemini cloud providers at priority 50 (`gemini-text`, `gemini-nanobanana`, `gemini-veo`, `gemini-tts`).
+- `src/AIStudio.Api/Endpoints/CapabilityEndpoints.cs` — `GET /api/capabilities` deterministic metadata-only capability and provider availability discovery route (no URLs, paths, or secrets exposed).
+- `src/AIStudio.Web/src/api/capabilities.ts` — typed client for capability discovery and per-feature provider selection.
+- `tests/AIStudio.Tests/Capabilities/`, `tests/AIStudio.Tests/Api/CapabilityApiContractTests.cs` — id validation/stability, registration and duplicate validation, deterministic resolution, preferred provider selection, disabled/missing capability gaps, fallback selection, catalog mapping, API response contract, and DI enablement reflection.
+
+## Optional Cloud AI Adapters (Gemini Ecosystem)
+
+- `src/AIStudio.Infrastructure/AI/Gemini/GeminiOptions.cs`, `GeminiTextGenerator.cs` — optional cloud text generation adapter (`IAiTextGenerator`, `gemini-2.5-flash` default, system instruction + JSON mode, bearer token authentication); `Gemini:Enabled=false` by default.
+- `src/AIStudio.Infrastructure/Rendering/Gemini/GeminiImageOptions.cs`, `GeminiImageGenerationProvider.cs` — optional cloud image generation adapter (`IImageGenerationProvider`, `gemini-2.5-flash-image` / Nano Banana, 0 or 1 exact-key verified `PinnedIdentityAsset` inline PNG reference, safety settings); `GeminiImage:Enabled=false` by default.
+- `src/AIStudio.Infrastructure/Rendering/Gemini/GeminiVideoOptions.cs`, `GeminiVideoGenerationProvider.cs` — optional cloud video generation adapter (`IVideoGenerationProvider`, `veo-3.1-generate-preview` via `predictLongRunning` + operation polling, exact-key `FirstFrame` pin, downloaded MP4 verified via `IAssetFileStore` + `IMediaInspector` probe); `GeminiVideo:Enabled=false` by default.
+- `src/AIStudio.Infrastructure/Rendering/AudioGeneration/GeminiSpeechOptions.cs`, `GeminiSpeechSynthesisProvider.cs` — optional cloud speech synthesis adapter (`ISpeechSynthesisProvider`, `gemini-2.5-flash-preview-tts` + deterministic Indonesian voice presets, CPU FFmpeg 48 kHz mono WAV normalization via `IProcessRunner`); `GeminiSpeech:Enabled=false` by default.
+- Zero `IGpuResourceGate` acquisition across all Gemini adapters (cloud HTTP calls do not contend for local RTX VRAM).
+- `tests/AIStudio.Tests/AI/GeminiTextGeneratorTests.cs`, `tests/AIStudio.Tests/Rendering/GeminiImageGenerationProviderTests.cs`, `GeminiVideoGenerationProviderTests.cs`, `GeminiSpeechSynthesisProviderTests.cs` — comprehensive fake-HTTP test suites covering authentication, configuration gating, error mapping, timeout, polling, identity asset pinning, media probing, and audio normalization.
 
 ## Production Recipes
 
@@ -280,11 +291,11 @@ Content Studio now lives under `ai-studio/`. Unless a path starts with `../`, pa
 - `src/AIStudio.Web/src/styles/tokens.css` — light/dark color, space, radius, shadow, and typography tokens (`[data-theme]` + `prefers-color-scheme`); `styles/app.css` holds shell/component/responsive styles.
 - `src/AIStudio.Web/src/i18n/` — custom i18n (`id.json` default, `en.json`, provider/hook + `t(key, params)`, persisted locale and `<html lang>`) and `format.ts` (`Intl` date/number helpers + `useFormatters`).
 - `src/AIStudio.Web/src/theme/useTheme.ts` — `auto|light|dark` external store; persists, applies `data-theme`/`color-scheme`, follows the media query in auto.
-- `src/AIStudio.Web/src/api/client.ts`, `projects.ts` — fetch wrapper (`VITE_API_BASE_URL` override; default same-origin through the Vite `/api` dev proxy, AbortController timeout, normalized ApiError with problem+json `code`) and the projects list/create/detail/update/readiness calls.
+- `src/AIStudio.Web/src/api/client.ts`, `projects.ts`, `scriptReview.ts`, `jobs.ts`, `media.ts`, `publishing.ts`, `tracking.ts` — fetch wrapper (`VITE_API_BASE_URL` override; default same-origin through the Vite `/api` dev proxy, AbortController timeout, normalized ApiError with problem+json `code`) and typed API modules for projects, reviewed script (A2), durable jobs (get/cancel/enqueue 7 pipeline types), scene assets/narration/subtitle, final approval (A3)/publication/transition/export archives, and metrics/time/cost tracking.
 - `src/AIStudio.Web/src/components/` — Button, Badge/StatusBadge, Card, Table, EmptyState, Skeleton, InlineError, Dialog, Toast, Preferences (language/theme), icons.
 - `src/AIStudio.Web/src/layout/AppShell.tsx` — sidebar (Projects/Runs/Settings), sticky topbar with breadcrumb/language/theme controls, skip link.
 - `src/AIStudio.Web/src/routing/useHashRoute.ts` — minimal typed hash router (`#/projects`, `#/projects/{id}`, `#/settings`).
-- `src/AIStudio.Web/src/screens/ProjectsScreen.tsx` — implemented Projects list (skeleton/error/empty/table) + create dialog with inline validation and toast; `ProjectDetailScreen.tsx` is the detail route (header, brief view/edit, readiness, last job); `SettingsScreen.tsx` is a preference shell.
+- `src/AIStudio.Web/src/screens/ProjectsScreen.tsx` — implemented Projects list (skeleton/error/empty/table) + create dialog with inline validation and toast; `ProjectDetailScreen.tsx` + `src/screens/projectDetail/` (`ScriptReviewSection.tsx`, `AssetsAudioSection.tsx`, `ProductionSection.tsx`, `PublishSection.tsx`, `MetricsSection.tsx`) implement the full project detail route with interactive section tabs; `SettingsScreen.tsx` is a preference shell.
 - `docs/design/UI_IMPLEMENTATION.md` — UI conventions, folder map, screen status, toolchain and exact verification.
 - `docs/agent/UI_TODO.md` — WSL handoff: kerja workflow, quick start, blocker CORS/base URL, workflow produk, and the remaining UI screens.
 

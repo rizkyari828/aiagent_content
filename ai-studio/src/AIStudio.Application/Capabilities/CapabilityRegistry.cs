@@ -88,6 +88,46 @@ public sealed class CapabilityRegistry : ICapabilityRegistry
     {
         ArgumentNullException.ThrowIfNull(requirement);
 
+        if (!string.IsNullOrWhiteSpace(requirement.PreferredProviderId))
+        {
+            var preferredId = requirement.PreferredProviderId.Trim();
+
+            if (!_providersByCapability.TryGetValue(requirement.CapabilityId, out var providers) || providers.Count == 0)
+            {
+                return CapabilityResolution.Unresolved(new CapabilityGap
+                {
+                    CapabilityId = requirement.CapabilityId,
+                    Reason = CapabilityGapReason.CapabilityNotImplemented
+                });
+            }
+
+            var matched = providers.FirstOrDefault(p => string.Equals(p.ProviderId, preferredId, StringComparison.Ordinal));
+            if (matched is null)
+            {
+                return CapabilityResolution.Unresolved(new CapabilityGap
+                {
+                    CapabilityId = requirement.CapabilityId,
+                    Reason = CapabilityGapReason.ProviderNotRegistered,
+                    KnownProviderIds = providers.Select(p => p.ProviderId).ToList()
+                });
+            }
+
+            if (matched.Enabled)
+            {
+                return CapabilityResolution.Resolved(
+                    requirement.CapabilityId,
+                    matched,
+                    usedFallback: false);
+            }
+
+            return CapabilityResolution.Unresolved(new CapabilityGap
+            {
+                CapabilityId = requirement.CapabilityId,
+                Reason = CapabilityGapReason.ProviderDisabled,
+                KnownProviderIds = providers.Select(p => p.ProviderId).ToList()
+            });
+        }
+
         CapabilityGap? gap = null;
 
         foreach (var candidate in Candidates(requirement))
