@@ -1286,3 +1286,55 @@ a {
 .table__link:hover { text-decoration: underline; }
 
 .detail-skeleton { display: grid; gap: var(--space-3); }
+
+/* ---------- Section Tabs ---------- */
+
+.section-tabs {
+  display: flex;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  overflow-x: auto;
+  padding-bottom: 0;
+  margin-top: var(--space-2);
+}
+
+.section-tabs__tab {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid transparent;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.section-tabs__tab:hover {
+  color: var(--color-text);
+  background: var(--color-surface-hover);
+}
+
+.section-tabs__tab:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.section-tabs__tab--active,
+.section-tabs__tab[aria-selected="true"] {
+  color: var(--color-accent);
+  border-bottom-color: var(--color-accent);
+  background: var(--color-surface);
+  font-weight: var(--weight-semibold);
+}
+
+.section-tabs__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-top: var(--space-2);
+}
