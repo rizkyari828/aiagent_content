@@ -5,6 +5,12 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import {
+  loadPreferredProviders,
+  savePreferredProvider,
+  type FeatureCapabilityKey,
+  type PreferredProvidersMap,
+} from "../../api/capabilities";
 import { isApiRequestError, type ApiError } from "../../api/client";
 import {
   cancelJob,
@@ -110,6 +116,10 @@ export function ProductionSection({
   const { dateTime, number } = useFormatters();
   const { showToast } = useToast();
 
+  // Preferred Providers from Settings
+  const [preferredProviders, setPreferredProviders] =
+    useState<PreferredProvidersMap>(() => loadPreferredProviders());
+
   // Job Inspector State
   const [jobIdInput, setJobIdInput] = useState(() => lastJob?.id ?? "");
   const [inspectedJob, setInspectedJob] = useState<JobResponse | null>(null);
@@ -131,11 +141,18 @@ export function ProductionSection({
   >({});
 
   // 1. GenerateIdea fields
+  const [ideaProvider, setIdeaProvider] = useState<string>(
+    () => preferredProviders["text.generation"] ?? "auto",
+  );
+  const [ideaModel, setIdeaModel] = useState("");
   const [ideaTopic, setIdeaTopic] = useState("");
   const [ideaAudience, setIdeaAudience] = useState("");
   const [ideaLanguage, setIdeaLanguage] = useState("");
 
   // 2. GenerateScript fields
+  const [scriptProvider, setScriptProvider] = useState<string>(
+    () => preferredProviders["text.generation"] ?? "auto",
+  );
   const [scriptTitle, setScriptTitle] = useState("");
   const [scriptHook, setScriptHook] = useState("");
   const [scriptSummary, setScriptSummary] = useState("");
@@ -145,14 +162,29 @@ export function ProductionSection({
   const [scriptLanguage, setScriptLanguage] = useState("");
 
   // 3. GenerateStoryboard fields
+  const [storyboardProvider, setStoryboardProvider] = useState<string>(
+    () => preferredProviders["text.generation"] ?? "auto",
+  );
   const [storyboardNotes, setStoryboardNotes] = useState("");
 
   // 4. GenerateSceneVisuals fields
+  const [visualsImageProvider, setVisualsImageProvider] = useState<string>(
+    () => preferredProviders["visual.ai_image"] ?? "auto",
+  );
+  const [visualsVideoProvider, setVisualsVideoProvider] = useState<string>(
+    () => preferredProviders["visual.character_animation"] ?? "auto",
+  );
   const [visualsStoryboardJobId, setVisualsStoryboardJobId] = useState("");
   const [visualsForce, setVisualsForce] = useState(false);
   const [visualsArtDirection, setVisualsArtDirection] = useState("");
 
   // 5. GenerateAudio fields
+  const [audioSpeechProvider, setAudioSpeechProvider] = useState<string>(
+    () => preferredProviders["speech.narration"] ?? "auto",
+  );
+  const [audioMusicProvider, setAudioMusicProvider] = useState<string>(
+    () => preferredProviders["music.instrumental"] ?? "auto",
+  );
   const [audioStoryboardJobId, setAudioStoryboardJobId] = useState("");
 
   // 6. RenderVideo fields
@@ -163,6 +195,68 @@ export function ProductionSection({
   const [qaRenderJobId, setQaRenderJobId] = useState("");
 
   const initialFetchAttempted = useRef(false);
+
+  const handleProviderSelect = (
+    featureKey: FeatureCapabilityKey,
+    value: string,
+    setter: (val: string) => void,
+  ) => {
+    setter(value);
+    const updated = savePreferredProvider(featureKey, value);
+    setPreferredProviders(updated);
+  };
+
+  const getInspectedStoryboardScenes = useCallback(() => {
+    if (!inspectedJob?.result || typeof inspectedJob.result !== "object") {
+      return null;
+    }
+    const rec = inspectedJob.result as Record<string, unknown>;
+    if (Array.isArray(rec.scenes) && rec.scenes.length > 0) {
+      return rec.scenes;
+    }
+    return null;
+  }, [inspectedJob]);
+
+  const handleCopyScenePrompts = useCallback(async () => {
+    const scenes = getInspectedStoryboardScenes();
+    if (!scenes || scenes.length === 0) {
+      showToast(t("project.production.noScenesToCopy"), "info");
+      return;
+    }
+
+    const rec = inspectedJob?.result as Record<string, unknown> | undefined;
+    const title = typeof rec?.title === "string" ? rec.title : null;
+
+    const lines: string[] = [];
+    if (title) {
+      lines.push(`# ${title}`);
+      lines.push("");
+    }
+
+    scenes.forEach((item, index) => {
+      if (typeof item === "object" && item !== null) {
+        const s = item as {
+          heading?: string;
+          visual?: string;
+          sceneIndex?: number;
+        };
+        const heading = s.heading ?? `Scene ${index + 1}`;
+        const visual = s.visual ?? "";
+        lines.push(`## Scene ${index + 1}: ${heading}`);
+        lines.push(`Prompt: ${visual}`);
+        lines.push("");
+      }
+    });
+
+    const promptText = lines.join("\n").trim();
+
+    try {
+      await navigator.clipboard.writeText(promptText);
+      showToast(t("project.production.toast.scenePromptCopied"), "success");
+    } catch {
+      showToast(t("project.production.toast.copyFailed"), "error");
+    }
+  }, [getInspectedStoryboardScenes, inspectedJob, showToast, t]);
 
   const fetchJob = useCallback(
     async (id: string, signal?: AbortSignal) => {
@@ -394,6 +488,12 @@ export function ProductionSection({
     }
   };
 
+  const hasStoryboardScenesToCopy = Boolean(
+    inspectedJob &&
+      inspectedJob.type === "GenerateStoryboard" &&
+      getInspectedStoryboardScenes(),
+  );
+
   return (
     <div className="stack">
       <div className="detail-grid">
@@ -524,6 +624,11 @@ export function ProductionSection({
                           result={inspectedJob.result}
                           t={t}
                           number={number}
+                          onCopyScenePrompt={
+                            getInspectedStoryboardScenes()
+                              ? handleCopyScenePrompts
+                              : undefined
+                          }
                         />
                       </dd>
                     </div>
@@ -621,6 +726,54 @@ export function ProductionSection({
             {selectedJobType === "GenerateIdea" ? (
               <>
                 <div className="field">
+                  <label
+                    className="field__label"
+                    htmlFor="idea-provider"
+                  >
+                    {t("project.production.field.preferredProvider")}
+                  </label>
+                  <select
+                    id="idea-provider"
+                    className="select"
+                    value={ideaProvider}
+                    onChange={(e) =>
+                      handleProviderSelect(
+                        "text.generation",
+                        e.target.value,
+                        setIdeaProvider,
+                      )
+                    }
+                  >
+                    <option value="auto">
+                      {t("project.production.provider.auto")}
+                    </option>
+                    <option value="ollama">
+                      {t("project.production.provider.ollama")}
+                    </option>
+                    <option value="gemini-text">
+                      {t("project.production.provider.geminiText")}
+                    </option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="idea-model">
+                    {t("project.production.field.model")}
+                    <span className="field__optional">
+                      {t("projects.form.optional")}
+                    </span>
+                  </label>
+                  <input
+                    id="idea-model"
+                    className="field__input mono"
+                    type="text"
+                    placeholder={t(
+                      "project.production.field.modelPlaceholder",
+                    )}
+                    value={ideaModel}
+                    onChange={(e) => setIdeaModel(e.target.value)}
+                  />
+                </div>
+                <div className="field">
                   <label className="field__label" htmlFor="idea-topic">
                     {t("project.production.field.topic")}
                   </label>
@@ -681,6 +834,36 @@ export function ProductionSection({
             {/* 2. GenerateScript Fields */}
             {selectedJobType === "GenerateScript" ? (
               <>
+                <div className="field">
+                  <label
+                    className="field__label"
+                    htmlFor="script-provider"
+                  >
+                    {t("project.production.field.preferredProvider")}
+                  </label>
+                  <select
+                    id="script-provider"
+                    className="select"
+                    value={scriptProvider}
+                    onChange={(e) =>
+                      handleProviderSelect(
+                        "text.generation",
+                        e.target.value,
+                        setScriptProvider,
+                      )
+                    }
+                  >
+                    <option value="auto">
+                      {t("project.production.provider.auto")}
+                    </option>
+                    <option value="ollama">
+                      {t("project.production.provider.ollama")}
+                    </option>
+                    <option value="gemini-text">
+                      {t("project.production.provider.geminiText")}
+                    </option>
+                  </select>
+                </div>
                 <div className="field">
                   <label className="field__label" htmlFor="script-title">
                     {t("project.production.field.title")}
@@ -856,6 +1039,36 @@ export function ProductionSection({
                   {t("project.production.enqueue.storyboardHint")}
                 </p>
                 <div className="field">
+                  <label
+                    className="field__label"
+                    htmlFor="storyboard-provider"
+                  >
+                    {t("project.production.field.preferredProvider")}
+                  </label>
+                  <select
+                    id="storyboard-provider"
+                    className="select"
+                    value={storyboardProvider}
+                    onChange={(e) =>
+                      handleProviderSelect(
+                        "text.generation",
+                        e.target.value,
+                        setStoryboardProvider,
+                      )
+                    }
+                  >
+                    <option value="auto">
+                      {t("project.production.provider.auto")}
+                    </option>
+                    <option value="ollama">
+                      {t("project.production.provider.ollama")}
+                    </option>
+                    <option value="gemini-text">
+                      {t("project.production.provider.geminiText")}
+                    </option>
+                  </select>
+                </div>
+                <div className="field">
                   <label className="field__label" htmlFor="storyboard-notes">
                     {t("project.production.field.notes")}
                     <span className="field__optional">
@@ -876,6 +1089,93 @@ export function ProductionSection({
             {/* 4. GenerateSceneVisuals Fields */}
             {selectedJobType === "GenerateSceneVisuals" ? (
               <>
+                {hasStoryboardScenesToCopy ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "var(--space-1)",
+                      padding: "var(--space-3)",
+                      background: "var(--color-surface-muted)",
+                      borderRadius: "var(--radius-md)",
+                      marginBottom: "var(--space-2)",
+                    }}
+                  >
+                    <div>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={handleCopyScenePrompts}
+                      >
+                        {t("project.production.copyScenePrompt")}
+                      </Button>
+                    </div>
+                    <p className="inline-note">
+                      {t("project.production.copyScenePromptHint")}
+                    </p>
+                  </div>
+                ) : null}
+                <div className="field">
+                  <label
+                    className="field__label"
+                    htmlFor="visuals-image-provider"
+                  >
+                    {t("project.production.field.preferredImageProvider")}
+                  </label>
+                  <select
+                    id="visuals-image-provider"
+                    className="select"
+                    value={visualsImageProvider}
+                    onChange={(e) =>
+                      handleProviderSelect(
+                        "visual.ai_image",
+                        e.target.value,
+                        setVisualsImageProvider,
+                      )
+                    }
+                  >
+                    <option value="auto">
+                      {t("project.production.provider.auto")}
+                    </option>
+                    <option value="comfyui-flux">
+                      {t("project.production.provider.comfyuiFlux")}
+                    </option>
+                    <option value="gemini-nanobanana">
+                      {t("project.production.provider.geminiNanobanana")}
+                    </option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label
+                    className="field__label"
+                    htmlFor="visuals-video-provider"
+                  >
+                    {t("project.production.field.preferredVideoProvider")}
+                  </label>
+                  <select
+                    id="visuals-video-provider"
+                    className="select"
+                    value={visualsVideoProvider}
+                    onChange={(e) =>
+                      handleProviderSelect(
+                        "visual.character_animation",
+                        e.target.value,
+                        setVisualsVideoProvider,
+                      )
+                    }
+                  >
+                    <option value="auto">
+                      {t("project.production.provider.auto")}
+                    </option>
+                    <option value="comfyui-i2v">
+                      {t("project.production.provider.comfyuiI2v")}
+                    </option>
+                    <option value="gemini-veo">
+                      {t("project.production.provider.geminiVeo")}
+                    </option>
+                  </select>
+                </div>
                 <div className="field">
                   <label
                     className="field__label"
@@ -949,34 +1249,93 @@ export function ProductionSection({
 
             {/* 5. GenerateAudio Fields */}
             {selectedJobType === "GenerateAudio" ? (
-              <div className="field">
-                <label
-                  className="field__label"
-                  htmlFor="audio-storyboard-job-id"
-                >
-                  {t("project.production.field.storyboardJobId")}
-                </label>
-                <input
-                  id="audio-storyboard-job-id"
-                  className="field__input mono"
-                  type="text"
-                  value={audioStoryboardJobId}
-                  aria-invalid={
-                    enqueueFormErrors.audioStoryboardJobId ? true : undefined
-                  }
-                  aria-describedby={
-                    enqueueFormErrors.audioStoryboardJobId
-                      ? "audio-job-id-error"
-                      : undefined
-                  }
-                  onChange={(e) => setAudioStoryboardJobId(e.target.value)}
-                />
-                {enqueueFormErrors.audioStoryboardJobId ? (
-                  <p className="field__error" id="audio-job-id-error">
-                    {enqueueFormErrors.audioStoryboardJobId}
-                  </p>
-                ) : null}
-              </div>
+              <>
+                <div className="field">
+                  <label
+                    className="field__label"
+                    htmlFor="audio-speech-provider"
+                  >
+                    {t("project.production.field.preferredSpeechProvider")}
+                  </label>
+                  <select
+                    id="audio-speech-provider"
+                    className="select"
+                    value={audioSpeechProvider}
+                    onChange={(e) =>
+                      handleProviderSelect(
+                        "speech.narration",
+                        e.target.value,
+                        setAudioSpeechProvider,
+                      )
+                    }
+                  >
+                    <option value="auto">
+                      {t("project.production.provider.auto")}
+                    </option>
+                    <option value="voxcpm2">
+                      {t("project.production.provider.voxcpm2")}
+                    </option>
+                    <option value="gemini-tts">
+                      {t("project.production.provider.geminiTts")}
+                    </option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label
+                    className="field__label"
+                    htmlFor="audio-music-provider"
+                  >
+                    {t("project.production.field.preferredMusicProvider")}
+                  </label>
+                  <select
+                    id="audio-music-provider"
+                    className="select"
+                    value={audioMusicProvider}
+                    onChange={(e) =>
+                      handleProviderSelect(
+                        "music.instrumental",
+                        e.target.value,
+                        setAudioMusicProvider,
+                      )
+                    }
+                  >
+                    <option value="auto">
+                      {t("project.production.provider.auto")}
+                    </option>
+                    <option value="ace-step">
+                      {t("project.production.provider.aceStep")}
+                    </option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label
+                    className="field__label"
+                    htmlFor="audio-storyboard-job-id"
+                  >
+                    {t("project.production.field.storyboardJobId")}
+                  </label>
+                  <input
+                    id="audio-storyboard-job-id"
+                    className="field__input mono"
+                    type="text"
+                    value={audioStoryboardJobId}
+                    aria-invalid={
+                      enqueueFormErrors.audioStoryboardJobId ? true : undefined
+                    }
+                    aria-describedby={
+                      enqueueFormErrors.audioStoryboardJobId
+                        ? "audio-job-id-error"
+                        : undefined
+                    }
+                    onChange={(e) => setAudioStoryboardJobId(e.target.value)}
+                  />
+                  {enqueueFormErrors.audioStoryboardJobId ? (
+                    <p className="field__error" id="audio-job-id-error">
+                      {enqueueFormErrors.audioStoryboardJobId}
+                    </p>
+                  ) : null}
+                </div>
+              </>
             ) : null}
 
             {/* 6. RenderVideo Fields */}
@@ -1130,9 +1489,15 @@ interface JobResultSummaryProps {
   result: unknown;
   t: Translate;
   number: (val: number) => string;
+  onCopyScenePrompt?: () => void;
 }
 
-function JobResultSummary({ result, t, number }: JobResultSummaryProps) {
+function JobResultSummary({
+  result,
+  t,
+  number,
+  onCopyScenePrompt,
+}: JobResultSummaryProps) {
   if (result === null || typeof result !== "object") {
     return <span className="mono">{String(result)}</span>;
   }
@@ -1239,6 +1604,19 @@ function JobResultSummary({ result, t, number }: JobResultSummaryProps) {
             </div>
           ) : null}
         </dl>
+      ) : null}
+
+      {scenes && scenes.length > 0 && onCopyScenePrompt ? (
+        <div style={{ marginTop: "var(--space-2)" }}>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={onCopyScenePrompt}
+          >
+            {t("project.production.copyScenePrompt")}
+          </Button>
+        </div>
       ) : null}
 
       <details>
