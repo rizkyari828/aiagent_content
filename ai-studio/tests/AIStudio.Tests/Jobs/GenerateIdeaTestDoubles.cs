@@ -19,13 +19,13 @@ internal static class GenerateIdeaTestData
         }
         """;
 
-    public static string ValidPayload(Guid projectId, string? model = null) =>
+    public static string ValidPayload(Guid projectId, string? model = null, string? provider = null) =>
         $$"""
         {
           "contentProjectId": "{{projectId}}",
           "topic": "Local AI",
           "targetAudience": "Creators",
-          "language": "Indonesian"{{(model is null ? string.Empty : $",\n  \"model\": \"{model}\"")}}
+          "language": "Indonesian"{{(model is null ? string.Empty : $",\n  \"model\": \"{model}\"")}}{{(provider is null ? string.Empty : $",\n  \"provider\": \"{provider}\"")}}
         }
         """;
 

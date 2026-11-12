@@ -35,11 +35,28 @@ public sealed class GenerateIdeaWorkflow(
         return new ContentProjectSnapshot(project.Id, project.Title, project.Brief);
     }
 
+    public Task<Guid?> EnqueueAsync(
+        Guid contentProjectId,
+        string topic,
+        string? targetAudience,
+        string? language,
+        CancellationToken cancellationToken) =>
+        EnqueueAsync(
+            contentProjectId,
+            topic,
+            targetAudience,
+            language,
+            model: null,
+            provider: null,
+            cancellationToken);
+
     public async Task<Guid?> EnqueueAsync(
         Guid contentProjectId,
         string topic,
         string? targetAudience,
         string? language,
+        string? model,
+        string? provider,
         CancellationToken cancellationToken)
     {
         if (contentProjectId == Guid.Empty)
@@ -54,7 +71,9 @@ public sealed class GenerateIdeaWorkflow(
                 contentProjectId,
                 topic,
                 targetAudience,
-                language),
+                language,
+                model,
+                provider),
             JsonOptions);
         var normalizedPayload = GenerateIdeaJobPayload.Deserialize(rawPayload);
         var payload = JsonSerializer.Serialize(normalizedPayload, JsonOptions);

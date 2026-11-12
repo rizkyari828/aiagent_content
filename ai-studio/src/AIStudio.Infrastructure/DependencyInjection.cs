@@ -31,6 +31,7 @@ using AIStudio.Application.Tracking;
 using AIStudio.Application.Transfer;
 using AIStudio.Infrastructure.AI;
 using AIStudio.Infrastructure.AI.Gemini;
+using AIStudio.Infrastructure.AI.OpenAiCompatible;
 using AIStudio.Infrastructure.Approvals;
 using AIStudio.Infrastructure.Assets;
 using AIStudio.Infrastructure.Content;
@@ -186,8 +187,16 @@ public static class DependencyInjection
                     || string.Equals(
                         options.Provider,
                         "Gemini",
+                        StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(
+                        options.Provider,
+                        "DeepSeek",
+                        StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(
+                        options.Provider,
+                        "OpenAi",
                         StringComparison.OrdinalIgnoreCase),
-                "Ai:Provider must be 'Ollama' or 'Gemini'.")
+                "Ai:Provider must be 'Ollama', 'Gemini', 'DeepSeek', or 'OpenAi'.")
             .ValidateOnStart();
 
         services
@@ -218,6 +227,34 @@ public static class DependencyInjection
                 "Gemini:TimeoutSeconds must be between 1 and 600.")
             .ValidateOnStart();
 
+        services
+            .AddOptions<DeepSeekOptions>()
+            .Bind(configuration.GetSection(DeepSeekOptions.SectionName))
+            .Validate(
+                options => IsValidBaseUrl(options.BaseUrl),
+                "DeepSeek:BaseUrl must be an absolute HTTP or HTTPS URL.")
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.DefaultModel),
+                "DeepSeek:DefaultModel is required.")
+            .Validate(
+                options => options.TimeoutSeconds is >= 1 and <= 600,
+                "DeepSeek:TimeoutSeconds must be between 1 and 600.")
+            .ValidateOnStart();
+
+        services
+            .AddOptions<OpenAiOptions>()
+            .Bind(configuration.GetSection(OpenAiOptions.SectionName))
+            .Validate(
+                options => IsValidBaseUrl(options.BaseUrl),
+                "OpenAi:BaseUrl must be an absolute HTTP or HTTPS URL.")
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.DefaultModel),
+                "OpenAi:DefaultModel is required.")
+            .Validate(
+                options => options.TimeoutSeconds is >= 1 and <= 600,
+                "OpenAi:TimeoutSeconds must be between 1 and 600.")
+            .ValidateOnStart();
+
         services.AddHttpClient<OllamaTextGenerator>(
             (serviceProvider, client) =>
             {
@@ -242,15 +279,33 @@ public static class DependencyInjection
                 client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
             });
 
+        services.AddHttpClient<DeepSeekTextGenerator>(
+            (serviceProvider, client) =>
+            {
+                var options = serviceProvider
+                    .GetRequiredService<IOptions<DeepSeekOptions>>()
+                    .Value;
+                client.BaseAddress = new Uri(
+                    $"{options.BaseUrl.TrimEnd('/')}/",
+                    UriKind.Absolute);
+                client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+            });
+
+        services.AddHttpClient<OpenAiTextGenerator>(
+            (serviceProvider, client) =>
+            {
+                var options = serviceProvider
+                    .GetRequiredService<IOptions<OpenAiOptions>>()
+                    .Value;
+                client.BaseAddress = new Uri(
+                    $"{options.BaseUrl.TrimEnd('/')}/",
+                    UriKind.Absolute);
+                client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+            });
+
+        services.AddTransient<RoutingTextGenerator>();
         services.AddTransient<IAiTextGenerator>(serviceProvider =>
-        {
-            var aiOptions = serviceProvider
-                .GetRequiredService<IOptions<AiOptions>>()
-                .Value;
-            return string.Equals(aiOptions.Provider, "Gemini", StringComparison.OrdinalIgnoreCase)
-                ? serviceProvider.GetRequiredService<GeminiTextGenerator>()
-                : serviceProvider.GetRequiredService<OllamaTextGenerator>();
-        });
+            serviceProvider.GetRequiredService<RoutingTextGenerator>());
     }
 
     private static void AddProjectTransfer(
@@ -666,6 +721,12 @@ public static class DependencyInjection
             var geminiText = serviceProvider
                 .GetRequiredService<IOptions<GeminiOptions>>()
                 .Value;
+            var deepseek = serviceProvider
+                .GetRequiredService<IOptions<DeepSeekOptions>>()
+                .Value;
+            var openAi = serviceProvider
+                .GetRequiredService<IOptions<OpenAiOptions>>()
+                .Value;
             var speech = serviceProvider
                 .GetRequiredService<IOptions<SpeechSynthesisOptions>>()
                 .Value;
@@ -705,7 +766,9 @@ public static class DependencyInjection
                 geminiTextEnabled: geminiText.Enabled && !string.IsNullOrWhiteSpace(geminiText.ApiKey),
                 geminiImageEnabled: geminiImages.Enabled && !string.IsNullOrWhiteSpace(geminiImages.ApiKey),
                 geminiVideoEnabled: geminiVideo.Enabled && !string.IsNullOrWhiteSpace(geminiVideo.ApiKey),
-                geminiSpeechEnabled: geminiSpeech.Enabled && !string.IsNullOrWhiteSpace(geminiSpeech.ApiKey));
+                geminiSpeechEnabled: geminiSpeech.Enabled && !string.IsNullOrWhiteSpace(geminiSpeech.ApiKey),
+                deepseekEnabled: deepseek.Enabled && !string.IsNullOrWhiteSpace(deepseek.ApiKey),
+                openAiEnabled: openAi.Enabled && !string.IsNullOrWhiteSpace(openAi.ApiKey));
 
             return new CapabilityRegistry(
                 ProductionCapabilityCatalog.Capabilities,

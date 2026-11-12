@@ -34,11 +34,13 @@ internal static class GenerateScriptTestData
         "Creators",
         "Tutorial");
 
-    public static string ValidPayload(Guid projectId) =>
+    public static string ValidPayload(Guid projectId, string? model = null, string? provider = null) =>
         JsonSerializer.Serialize(new GenerateScriptJobPayload(
             projectId,
             SelectedIdea,
-            "Indonesian"),
+            "Indonesian",
+            Model: model,
+            Provider: provider),
             new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
     public static ClaimedJob CreateJob(Guid projectId, string payload) =>

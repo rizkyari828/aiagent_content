@@ -42,7 +42,9 @@ public static class ProductionCapabilityCatalog
         bool geminiTextEnabled = false,
         bool geminiImageEnabled = false,
         bool geminiVideoEnabled = false,
-        bool geminiSpeechEnabled = false) =>
+        bool geminiSpeechEnabled = false,
+        bool deepseekEnabled = false,
+        bool openAiEnabled = false) =>
     [
         new()
         {
@@ -58,6 +60,22 @@ public static class ProductionCapabilityCatalog
             CapabilityId = CapabilityIds.TextGeneration,
             Priority = 50,
             Enabled = geminiTextEnabled,
+            RuntimeCategory = "cloud_api"
+        },
+        new()
+        {
+            ProviderId = "deepseek",
+            CapabilityId = CapabilityIds.TextGeneration,
+            Priority = 45,
+            Enabled = deepseekEnabled,
+            RuntimeCategory = "cloud_api"
+        },
+        new()
+        {
+            ProviderId = "openai",
+            CapabilityId = CapabilityIds.TextGeneration,
+            Priority = 40,
+            Enabled = openAiEnabled,
             RuntimeCategory = "cloud_api"
         },
         new()

@@ -24,6 +24,7 @@ public sealed class GenerateScriptJobHandlerTests
 
         Assert.NotNull(generator.Request);
         Assert.Null(generator.Request.Model);
+        Assert.Null(generator.Request.Provider);
         Assert.Equal(AiResponseFormat.JsonObject, generator.Request.ResponseFormat);
         Assert.Equal(0.3, generator.Request.Temperature);
         Assert.Equal(3_000, generator.Request.MaxTokens);
@@ -35,6 +36,24 @@ public sealed class GenerateScriptJobHandlerTests
         var result = GenerateScriptResult.Deserialize(resultJson);
         Assert.Equal("Local AI Tutorial", result.Title);
         Assert.Equal(2, result.Sections.Count);
+    }
+
+    [Fact]
+    public async Task Handler_ForwardsModelAndProviderToAiTextRequest()
+    {
+        var projectId = Guid.NewGuid();
+        var generator = new RecordingTextGenerator(GenerateScriptTestData.ValidResult);
+        var handler = CreateHandler(projectId, generator);
+
+        await handler.ExecuteAsync(
+            GenerateScriptTestData.CreateJob(
+                projectId,
+                GenerateScriptTestData.ValidPayload(projectId, "custom-script-model", "openai")),
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(generator.Request);
+        Assert.Equal("custom-script-model", generator.Request.Model);
+        Assert.Equal("openai", generator.Request.Provider);
     }
 
     [Fact]

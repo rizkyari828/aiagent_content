@@ -67,10 +67,12 @@ public sealed class GenerateScriptJobHandler(
                 new AiTextRequest(
                     GenerateScriptPrompt.Build(project, payload, storyContext),
                     GenerateScriptPrompt.SystemInstruction,
+                    Model: payload.Model,
                     ResponseFormat: AiResponseFormat.JsonObject,
                     Temperature: 0.3,
                     MaxTokens: 3_000,
-                    Think: false),
+                    Think: false,
+                    Provider: payload.Provider),
                 cancellationToken);
         }
         catch (AiGenerationException exception)

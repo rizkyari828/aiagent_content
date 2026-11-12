@@ -8,12 +8,14 @@ public sealed record GenerateIdeaJobPayload(
     string Topic,
     string? TargetAudience = null,
     string? Language = null,
-    string? Model = null)
+    string? Model = null,
+    string? Provider = null)
 {
     private const int MaxTopicLength = 1_000;
     private const int MaxAudienceLength = 500;
     private const int MaxLanguageLength = 100;
     private const int MaxModelLength = 200;
+    private const int MaxProviderLength = 100;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -48,7 +50,8 @@ public sealed record GenerateIdeaJobPayload(
             Language = string.IsNullOrWhiteSpace(payload.Language)
                 ? "English"
                 : RequireText(payload.Language, MaxLanguageLength, "language"),
-            Model = OptionalText(payload.Model, MaxModelLength, "model")
+            Model = OptionalText(payload.Model, MaxModelLength, "model"),
+            Provider = OptionalText(payload.Provider, MaxProviderLength, "provider")
         };
     }
 

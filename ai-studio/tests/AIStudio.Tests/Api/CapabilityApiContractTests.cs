@@ -76,9 +76,9 @@ public sealed class CapabilityApiContractTests
         var ok = Assert.IsType<Ok<CapabilitiesResponse>>(result);
         var capabilities = ok.Value!.Capabilities.ToDictionary(c => c.Id);
 
-        // text.generation: local enabled (ollama), cloud disabled (gemini-text)
+        // text.generation: local enabled (ollama), cloud disabled (gemini-text, deepseek, openai)
         Assert.True(capabilities.TryGetValue("text.generation", out var textCap));
-        Assert.Equal(2, textCap.Providers.Count);
+        Assert.Equal(4, textCap.Providers.Count);
         Assert.Equal("ollama", textCap.Providers[0].ProviderId);
         Assert.Equal(100, textCap.Providers[0].Priority);
         Assert.True(textCap.Providers[0].Enabled);
@@ -87,6 +87,14 @@ public sealed class CapabilityApiContractTests
         Assert.Equal(50, textCap.Providers[1].Priority);
         Assert.False(textCap.Providers[1].Enabled);
         Assert.Equal("cloud_api", textCap.Providers[1].RuntimeCategory);
+        Assert.Equal("deepseek", textCap.Providers[2].ProviderId);
+        Assert.Equal(45, textCap.Providers[2].Priority);
+        Assert.False(textCap.Providers[2].Enabled);
+        Assert.Equal("cloud_api", textCap.Providers[2].RuntimeCategory);
+        Assert.Equal("openai", textCap.Providers[3].ProviderId);
+        Assert.Equal(40, textCap.Providers[3].Priority);
+        Assert.False(textCap.Providers[3].Enabled);
+        Assert.Equal("cloud_api", textCap.Providers[3].RuntimeCategory);
 
         // visual.ai_image: local disabled (comfyui-flux), cloud enabled (gemini-nanobanana)
         Assert.True(capabilities.TryGetValue("visual.ai_image", out var imageCap));

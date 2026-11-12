@@ -41,6 +41,24 @@ public sealed class GenerateIdeaJobHandlerTests
     }
 
     [Fact]
+    public async Task Handler_ForwardsModelAndProviderToAiTextRequest()
+    {
+        var projectId = Guid.NewGuid();
+        var generator = new RecordingTextGenerator(GenerateIdeaTestData.ValidResult);
+        var handler = CreateHandler(projectId, generator);
+
+        await handler.ExecuteAsync(
+            GenerateIdeaTestData.CreateJob(
+                projectId,
+                GenerateIdeaTestData.ValidPayload(projectId, "custom-deepseek-model", "deepseek")),
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(generator.Request);
+        Assert.Equal("custom-deepseek-model", generator.Request.Model);
+        Assert.Equal("deepseek", generator.Request.Provider);
+    }
+
+    [Fact]
     public async Task Handler_RejectsMalformedStructuredResponse()
     {
         var projectId = Guid.NewGuid();

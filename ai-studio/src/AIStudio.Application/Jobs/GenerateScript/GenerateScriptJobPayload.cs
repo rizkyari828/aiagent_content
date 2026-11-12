@@ -14,9 +14,13 @@ public sealed record GenerateScriptJobPayload(
     CreativeDirection? CreativeDirection = null,
     StoryPlan? StoryPlan = null,
     IReadOnlyList<CharacterState>? CharacterStates = null,
-    IReadOnlyList<WorldState>? WorldStates = null)
+    IReadOnlyList<WorldState>? WorldStates = null,
+    string? Model = null,
+    string? Provider = null)
 {
     private const int MaxLanguageLength = 100;
+    private const int MaxModelLength = 200;
+    private const int MaxProviderLength = 100;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -61,9 +65,16 @@ public sealed record GenerateScriptJobPayload(
             SelectedIdea = selectedIdea,
             Language = string.IsNullOrWhiteSpace(payload.Language)
                 ? "Indonesian"
-                : RequireText(payload.Language, MaxLanguageLength, "language")
+                : RequireText(payload.Language, MaxLanguageLength, "language"),
+            Model = OptionalText(payload.Model, MaxModelLength, "model"),
+            Provider = OptionalText(payload.Provider, MaxProviderLength, "provider")
         };
     }
+
+    private static string? OptionalText(string? value, int maxLength, string fieldName) =>
+        string.IsNullOrWhiteSpace(value)
+            ? null
+            : RequireText(value, maxLength, fieldName);
 
     private static string RequireText(string? value, int maxLength, string fieldName)
     {

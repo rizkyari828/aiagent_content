@@ -86,6 +86,8 @@ public static class GenerateIdeaEndpoints
                 request.Topic,
                 request.TargetAudience,
                 request.Language,
+                request.Model,
+                request.Provider,
                 cancellationToken);
 
             if (jobId is null)
@@ -133,6 +135,8 @@ public static class GenerateIdeaEndpoints
                 parsedContentProjectId,
                 request.SelectedIdea,
                 request.Language,
+                request.Model,
+                request.Provider,
                 cancellationToken);
 
             if (jobId is null)
@@ -214,12 +218,16 @@ public sealed record ContentProjectResponse(
 
 public sealed record EnqueueGenerateIdeaRequest(
     string Topic,
-    string? TargetAudience,
-    string? Language);
+    string? TargetAudience = null,
+    string? Language = null,
+    string? Model = null,
+    string? Provider = null);
 
 public sealed record EnqueueGenerateScriptRequest(
     GenerateIdeaResult SelectedIdea,
-    string? Language);
+    string? Language = null,
+    string? Model = null,
+    string? Provider = null);
 
 public sealed record EnqueueJobResponse(Guid JobId, string Status);
 

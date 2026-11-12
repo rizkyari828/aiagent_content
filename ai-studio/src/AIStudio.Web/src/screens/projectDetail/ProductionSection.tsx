@@ -153,6 +153,7 @@ export function ProductionSection({
   const [scriptProvider, setScriptProvider] = useState<string>(
     () => preferredProviders["text.generation"] ?? "auto",
   );
+  const [scriptModel, setScriptModel] = useState("");
   const [scriptTitle, setScriptTitle] = useState("");
   const [scriptHook, setScriptHook] = useState("");
   const [scriptSummary, setScriptSummary] = useState("");
@@ -423,6 +424,8 @@ export function ProductionSection({
           topic: ideaTopic.trim(),
           targetAudience: ideaAudience.trim() || undefined,
           language: ideaLanguage.trim() || undefined,
+          model: ideaModel.trim() || undefined,
+          provider: ideaProvider === "auto" ? undefined : ideaProvider,
         });
         resultJobId = response.jobId;
       } else if (selectedJobType === "GenerateScript") {
@@ -436,6 +439,8 @@ export function ProductionSection({
             suggestedFormat: scriptFormat.trim(),
           },
           language: scriptLanguage.trim() || undefined,
+          model: scriptModel.trim() || undefined,
+          provider: scriptProvider === "auto" ? undefined : scriptProvider,
         });
         resultJobId = response.jobId;
       } else if (selectedJobType === "GenerateStoryboard") {
@@ -753,6 +758,12 @@ export function ProductionSection({
                     <option value="gemini-text">
                       {t("project.production.provider.geminiText")}
                     </option>
+                    <option value="deepseek">
+                      {t("project.production.provider.deepseek")}
+                    </option>
+                    <option value="openai">
+                      {t("project.production.provider.openai")}
+                    </option>
                   </select>
                 </div>
                 <div className="field">
@@ -862,7 +873,31 @@ export function ProductionSection({
                     <option value="gemini-text">
                       {t("project.production.provider.geminiText")}
                     </option>
+                    <option value="deepseek">
+                      {t("project.production.provider.deepseek")}
+                    </option>
+                    <option value="openai">
+                      {t("project.production.provider.openai")}
+                    </option>
                   </select>
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="script-model">
+                    {t("project.production.field.model")}
+                    <span className="field__optional">
+                      {t("projects.form.optional")}
+                    </span>
+                  </label>
+                  <input
+                    id="script-model"
+                    className="field__input mono"
+                    type="text"
+                    placeholder={t(
+                      "project.production.field.modelPlaceholder",
+                    )}
+                    value={scriptModel}
+                    onChange={(e) => setScriptModel(e.target.value)}
+                  />
                 </div>
                 <div className="field">
                   <label className="field__label" htmlFor="script-title">
@@ -1065,6 +1100,12 @@ export function ProductionSection({
                     </option>
                     <option value="gemini-text">
                       {t("project.production.provider.geminiText")}
+                    </option>
+                    <option value="deepseek">
+                      {t("project.production.provider.deepseek")}
+                    </option>
+                    <option value="openai">
+                      {t("project.production.provider.openai")}
                     </option>
                   </select>
                 </div>

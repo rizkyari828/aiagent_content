@@ -19,6 +19,31 @@ public sealed class GenerateScriptContractsTests
     }
 
     [Fact]
+    public void Payload_DeserializesAndNormalizesModelAndProvider()
+    {
+        var projectId = Guid.NewGuid();
+        var payload = GenerateScriptJobPayload.Deserialize(
+            $$"""
+            {
+              "contentProjectId": "{{projectId}}",
+              "selectedIdea": {
+                "title": "Title",
+                "hook": "Hook",
+                "summary": "Summary",
+                "angle": "Angle",
+                "targetAudience": "Audience",
+                "suggestedFormat": "Tutorial"
+              },
+              "model": " deepseek-chat ",
+              "provider": " deepseek "
+            }
+            """);
+
+        Assert.Equal("deepseek-chat", payload.Model);
+        Assert.Equal("deepseek", payload.Provider);
+    }
+
+    [Fact]
     public void Payload_DefaultsLanguageAndRejectsMissingIdea()
     {
         var projectId = Guid.NewGuid();

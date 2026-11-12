@@ -4,6 +4,21 @@ Updated: 2026-11-12.
 
 ## Current milestone
 
+PASS (home real, 2026-11-12) - Dynamic AI Text Generation Routing & OpenAI-Compatible Cloud Adapters (DeepSeek & OpenAI/ChatGPT) + UI Integration:
+- `dotnet build AIStudio.slnx -c Release` -> 0 warnings / 0 errors; `dotnet format AIStudio.slnx --verify-no-changes` -> clean; `git diff --check` -> clean.
+- `AIStudio.Tests` suite: **1741 tests total (1740 passed, 0 failed, 1 skipped real audio E2E)**.
+- **Dynamic Text AI Architecture & OpenAI-Compatible Adapters**:
+  1. `AiTextRequest` carries optional `Provider` with 100% backward compatibility.
+  2. `OpenAiCompatibleTextGenerator` (Infrastructure) implements `IAiTextGenerator` over standard REST `POST {BaseUrl}/chat/completions`, supporting DeepSeek (`DeepSeekTextGenerator`, `deepseek-chat`), OpenAI/ChatGPT (`OpenAiTextGenerator`, `gpt-4o`), Perplexity, and Groq with JSON mode, structured `AiErrorCode` mapping, and API key redaction.
+  3. `RoutingTextGenerator` (Infrastructure) dynamically dispatches `request.Provider` (case-insensitive: `gemini`/`gemini-text` -> `GeminiTextGenerator`, `deepseek` -> `DeepSeekTextGenerator`, `openai`/`chatgpt` -> `OpenAiTextGenerator`, `ollama`/`local` -> `OllamaTextGenerator`), falling back to `AiOptions.Provider` (defaulting to Ollama), and throwing `InvalidRequest` on unknown tokens.
+  4. `ProductionCapabilityCatalog` registers `deepseek` (Priority 45) and `openai` (Priority 40) under `CapabilityIds.TextGeneration`, exposed via `GET /api/capabilities`.
+  5. `GenerateIdeaJobPayload`, `GenerateScriptJobPayload`, and API endpoints (`GenerateIdeaEndpoints`) accept `provider` and `model` tokens with safe backward-compatible defaults.
+- **Frontend UI Integration**:
+  1. `src/api/jobs.ts`: `EnqueueGenerateIdeaInput` and `EnqueueGenerateScriptInput` accept `provider` and `model`.
+  2. `ProductionSection.tsx`: Idea, Script, and Storyboard provider selects expose `deepseek` and `openai` alongside `ollama` and `gemini-text`; Script adds `script-model` override input; enqueue handlers pass user-selected provider and model.
+  3. `SettingsScreen.tsx`: automatically enumerates all 4 text providers with live enabled/disabled badges and runtime category from `GET /api/capabilities`.
+  4. `npx tsc --noEmit` -> exit 0; `npx vite build` -> exit 0 (53 modules; `dist/assets/index-BQrvYa83.js` 490.36 kB / gzip 120.75 kB); `en.json` & `id.json` 700 keys each with 100% parity, 0 hardcoded strings.
+
 PASS (home real, 2026-11-12) - UI slice 4 (Runs Screen & Settings Project Transfer Export/Import):
 - `npx tsc --noEmit` -> exit 0; `npx vite build` -> exit 0 (53 modules; `dist/index.html` 0.46 kB / gzip 0.28 kB; `dist/assets/index-B249hLYx.css` 24.55 kB / gzip 5.11 kB; `dist/assets/index-DI6OTfIY.js` 489.00 kB / gzip 120.58 kB; built in 152ms, Node 24.21.0 / npm 11.19.0); `git diff --check` -> clean.
 - Frontend-only: added `src/api/transfer.ts` (`exportProject`, `listProjectExports`, `importProjectPackage`), enabled Runs nav link in `AppShell.tsx`, implemented `RunsScreen.tsx` (`#/runs`, `#/runs/{jobId}`) with Job Inspector (lookup by UUID, status badge, timestamps, lease/retry counters, expandable payload/result JSON, and active job cancel dialog) and session recent jobs table (`sessionStorage`), and added Project Transfer card in `SettingsScreen.tsx` (export package generation + `.zip` multipart import upload with confirmation dialog and navigation to imported project). 100% i18n key parity in `id.json`/`en.json`, 0 hardcoded strings.

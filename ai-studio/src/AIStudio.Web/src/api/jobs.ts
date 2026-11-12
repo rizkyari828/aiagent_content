@@ -158,11 +158,15 @@ export interface EnqueueGenerateIdeaInput {
   topic: string;
   targetAudience?: string;
   language?: string;
+  model?: string;
+  provider?: string;
 }
 
 export interface EnqueueGenerateScriptInput {
   selectedIdea: GenerateIdeaResult;
   language?: string;
+  model?: string;
+  provider?: string;
 }
 
 export interface EnqueueStoryboardInput {

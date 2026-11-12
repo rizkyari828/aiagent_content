@@ -16,10 +16,25 @@ public sealed class GenerateScriptWorkflow(
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
 
+    public Task<Guid?> EnqueueAsync(
+        Guid contentProjectId,
+        GenerateIdeaResult selectedIdea,
+        string? language,
+        CancellationToken cancellationToken) =>
+        EnqueueAsync(
+            contentProjectId,
+            selectedIdea,
+            language,
+            model: null,
+            provider: null,
+            cancellationToken);
+
     public async Task<Guid?> EnqueueAsync(
         Guid contentProjectId,
         GenerateIdeaResult selectedIdea,
         string? language,
+        string? model,
+        string? provider,
         CancellationToken cancellationToken)
     {
         if (contentProjectId == Guid.Empty)
@@ -30,7 +45,12 @@ public sealed class GenerateScriptWorkflow(
         }
 
         var rawPayload = JsonSerializer.Serialize(
-            new GenerateScriptJobPayload(contentProjectId, selectedIdea, language),
+            new GenerateScriptJobPayload(
+                contentProjectId,
+                selectedIdea,
+                language,
+                Model: model,
+                Provider: provider),
             JsonOptions);
         var normalizedPayload = GenerateScriptJobPayload.Deserialize(rawPayload);
         var payload = JsonSerializer.Serialize(normalizedPayload, JsonOptions);

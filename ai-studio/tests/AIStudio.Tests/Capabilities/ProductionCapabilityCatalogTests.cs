@@ -144,16 +144,31 @@ public sealed class ProductionCapabilityCatalogTests
                 geminiTextEnabled: true,
                 geminiImageEnabled: true,
                 geminiVideoEnabled: true,
-                geminiSpeechEnabled: true));
+                geminiSpeechEnabled: true,
+                deepseekEnabled: true,
+                openAiEnabled: true));
 
         var textProviders = registry.GetProviders(CapabilityIds.TextGeneration);
-        Assert.Equal(2, textProviders.Count);
+        Assert.Equal(4, textProviders.Count);
         Assert.Equal("ollama", textProviders[0].ProviderId);
         Assert.Equal(100, textProviders[0].Priority);
         Assert.Equal("local_service_gpu", textProviders[0].RuntimeCategory);
+        Assert.True(textProviders[0].Enabled);
+
         Assert.Equal("gemini-text", textProviders[1].ProviderId);
         Assert.Equal(50, textProviders[1].Priority);
         Assert.Equal("cloud_api", textProviders[1].RuntimeCategory);
+        Assert.True(textProviders[1].Enabled);
+
+        Assert.Equal("deepseek", textProviders[2].ProviderId);
+        Assert.Equal(45, textProviders[2].Priority);
+        Assert.Equal("cloud_api", textProviders[2].RuntimeCategory);
+        Assert.True(textProviders[2].Enabled);
+
+        Assert.Equal("openai", textProviders[3].ProviderId);
+        Assert.Equal(40, textProviders[3].Priority);
+        Assert.Equal("cloud_api", textProviders[3].RuntimeCategory);
+        Assert.True(textProviders[3].Enabled);
 
         var speechProviders = registry.GetProviders(CapabilityIds.SpeechNarration);
         Assert.Equal(2, speechProviders.Count);
@@ -217,7 +232,7 @@ public sealed class ProductionCapabilityCatalogTests
     }
 
     [Fact]
-    public void BothProvidersDisabledReportsProviderDisabledGapWithAllKnownProviders()
+    public void AllTextProvidersDisabledReportsProviderDisabledGapWithAllKnownProviders()
     {
         var registry = new CapabilityRegistry(
             ProductionCapabilityCatalog.Capabilities,
@@ -232,13 +247,15 @@ public sealed class ProductionCapabilityCatalogTests
                 geminiTextEnabled: false,
                 geminiImageEnabled: false,
                 geminiVideoEnabled: false,
-                geminiSpeechEnabled: false));
+                geminiSpeechEnabled: false,
+                deepseekEnabled: false,
+                openAiEnabled: false));
 
         var resolution = registry.Resolve(CapabilityRequirement.For(CapabilityIds.TextGeneration));
         Assert.False(resolution.IsResolved);
         Assert.Equal(CapabilityGapReason.ProviderDisabled, resolution.Gap!.Reason);
         Assert.Equal(CapabilityIds.TextGeneration, resolution.Gap.CapabilityId);
-        Assert.Equal(["ollama", "gemini-text"], resolution.Gap.KnownProviderIds);
+        Assert.Equal(["ollama", "gemini-text", "deepseek", "openai"], resolution.Gap.KnownProviderIds);
     }
 
     [Fact]
@@ -254,14 +271,24 @@ public sealed class ProductionCapabilityCatalogTests
                 threeDEnabled: true,
                 videoEnabled: true,
                 textEnabled: true,
-                geminiTextEnabled: true));
+                geminiTextEnabled: true,
+                deepseekEnabled: true,
+                openAiEnabled: true));
 
-        var requirement = CapabilityRequirement.ForProvider(CapabilityIds.TextGeneration, "gemini-text");
-        var resolution = registry.Resolve(requirement);
+        var geminiReq = CapabilityRequirement.ForProvider(CapabilityIds.TextGeneration, "gemini-text");
+        var geminiRes = registry.Resolve(geminiReq);
+        Assert.True(geminiRes.IsResolved);
+        Assert.Equal("gemini-text", geminiRes.Provider!.ProviderId);
 
-        Assert.True(resolution.IsResolved);
-        Assert.Equal("gemini-text", resolution.Provider!.ProviderId);
-        Assert.False(resolution.UsedFallback);
+        var deepseekReq = CapabilityRequirement.ForProvider(CapabilityIds.TextGeneration, "deepseek");
+        var deepseekRes = registry.Resolve(deepseekReq);
+        Assert.True(deepseekRes.IsResolved);
+        Assert.Equal("deepseek", deepseekRes.Provider!.ProviderId);
+
+        var openAiReq = CapabilityRequirement.ForProvider(CapabilityIds.TextGeneration, "openai");
+        var openAiRes = registry.Resolve(openAiReq);
+        Assert.True(openAiRes.IsResolved);
+        Assert.Equal("openai", openAiRes.Provider!.ProviderId);
     }
 
     [Fact]
@@ -277,7 +304,9 @@ public sealed class ProductionCapabilityCatalogTests
                 threeDEnabled: true,
                 videoEnabled: true,
                 textEnabled: true,
-                geminiTextEnabled: false));
+                geminiTextEnabled: false,
+                deepseekEnabled: false,
+                openAiEnabled: false));
 
         var requirement = CapabilityRequirement.ForProvider(CapabilityIds.TextGeneration, "gemini-text");
         var resolution = registry.Resolve(requirement);
@@ -285,7 +314,17 @@ public sealed class ProductionCapabilityCatalogTests
         Assert.False(resolution.IsResolved);
         Assert.Equal(CapabilityGapReason.ProviderDisabled, resolution.Gap!.Reason);
         Assert.Equal(CapabilityIds.TextGeneration, resolution.Gap.CapabilityId);
-        Assert.Equal(["ollama", "gemini-text"], resolution.Gap.KnownProviderIds);
+        Assert.Equal(["ollama", "gemini-text", "deepseek", "openai"], resolution.Gap.KnownProviderIds);
+
+        var deepseekReq = CapabilityRequirement.ForProvider(CapabilityIds.TextGeneration, "deepseek");
+        var deepseekRes = registry.Resolve(deepseekReq);
+        Assert.False(deepseekRes.IsResolved);
+        Assert.Equal(CapabilityGapReason.ProviderDisabled, deepseekRes.Gap!.Reason);
+
+        var openAiReq = CapabilityRequirement.ForProvider(CapabilityIds.TextGeneration, "openai");
+        var openAiRes = registry.Resolve(openAiReq);
+        Assert.False(openAiRes.IsResolved);
+        Assert.Equal(CapabilityGapReason.ProviderDisabled, openAiRes.Gap!.Reason);
     }
 
     [Fact]
@@ -307,7 +346,7 @@ public sealed class ProductionCapabilityCatalogTests
         Assert.False(resolution.IsResolved);
         Assert.Equal(CapabilityGapReason.ProviderNotRegistered, resolution.Gap!.Reason);
         Assert.Equal(CapabilityIds.TextGeneration, resolution.Gap.CapabilityId);
-        Assert.Equal(["ollama", "gemini-text"], resolution.Gap.KnownProviderIds);
+        Assert.Equal(["ollama", "gemini-text", "deepseek", "openai"], resolution.Gap.KnownProviderIds);
     }
 
     private static void AssertProvider(

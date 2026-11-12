@@ -52,7 +52,8 @@ public sealed class GenerateIdeaJobHandler(
                     payload.Model,
                     AiResponseFormat.JsonObject,
                     Temperature: 0.3,
-                    MaxTokens: 512),
+                    MaxTokens: 512,
+                    Provider: payload.Provider),
                 cancellationToken);
         }
         catch (AiGenerationException exception)

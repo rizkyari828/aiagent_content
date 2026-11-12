@@ -271,10 +271,12 @@ public sealed class OllamaTextGeneratorTests
         services.AddInfrastructure(configuration);
         using var provider = services.BuildServiceProvider();
 
-        var generator = provider.GetRequiredService<IAiTextGenerator>();
+        var routingGenerator = provider.GetRequiredService<IAiTextGenerator>();
+        var ollamaGenerator = provider.GetRequiredService<OllamaTextGenerator>();
         var options = provider.GetRequiredService<IOptions<OllamaOptions>>().Value;
 
-        Assert.IsType<OllamaTextGenerator>(generator);
+        Assert.IsType<RoutingTextGenerator>(routingGenerator);
+        Assert.NotNull(ollamaGenerator);
         Assert.Equal("http://127.0.0.1:11434", options.BaseUrl);
         Assert.Equal("test-model", options.DefaultModel);
         Assert.Equal(30, options.TimeoutSeconds);

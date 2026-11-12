@@ -30,6 +30,23 @@ public sealed class GenerateIdeaContractsTests
     }
 
     [Fact]
+    public void Payload_DeserializesAndNormalizesProvider()
+    {
+        var projectId = Guid.NewGuid();
+
+        var payload = GenerateIdeaJobPayload.Deserialize(
+            $$"""
+            {
+              "contentProjectId": "{{projectId}}",
+              "topic": "Local content",
+              "provider": " deepseek "
+            }
+            """);
+
+        Assert.Equal("deepseek", payload.Provider);
+    }
+
+    [Fact]
     public void Payload_RejectsMalformedJson()
     {
         var exception = Assert.Throws<JobExecutionException>(
