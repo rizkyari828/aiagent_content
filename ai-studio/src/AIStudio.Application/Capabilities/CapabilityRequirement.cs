@@ -12,6 +12,8 @@ public sealed record CapabilityRequirement
 
     public IReadOnlyList<CapabilityId> FallbackCapabilityIds { get; init; } = [];
 
+    public string? PreferredProviderId { get; init; }
+
     public static CapabilityRequirement For(CapabilityId capabilityId) =>
         new() { CapabilityId = capabilityId };
 
@@ -23,4 +25,17 @@ public sealed record CapabilityRequirement
             CapabilityId = capabilityId,
             FallbackCapabilityIds = fallbackCapabilityIds
         };
+
+    public static CapabilityRequirement ForProvider(
+        CapabilityId capabilityId,
+        string preferredProviderId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(preferredProviderId);
+
+        return new()
+        {
+            CapabilityId = capabilityId,
+            PreferredProviderId = preferredProviderId.Trim()
+        };
+    }
 }

@@ -12,6 +12,7 @@ public static class ProductionCapabilityCatalog
 {
     public static IReadOnlyList<CapabilityDescriptor> Capabilities { get; } =
     [
+        new() { Id = CapabilityIds.TextGeneration, DisplayName = "AI text and script generation", Category = "text" },
         new() { Id = CapabilityIds.SpeechNarration, DisplayName = "Speech narration", Category = "speech" },
         new() { Id = CapabilityIds.MusicInstrumental, DisplayName = "Instrumental music", Category = "music" },
         new() { Id = CapabilityIds.VisualStill, DisplayName = "Deterministic still visual", Category = "visual" },
@@ -36,8 +37,29 @@ public static class ProductionCapabilityCatalog
         bool manimEnabled,
         bool imageEnabled,
         bool threeDEnabled,
-        bool videoEnabled) =>
+        bool videoEnabled,
+        bool textEnabled = true,
+        bool geminiTextEnabled = false,
+        bool geminiImageEnabled = false,
+        bool geminiVideoEnabled = false,
+        bool geminiSpeechEnabled = false) =>
     [
+        new()
+        {
+            ProviderId = "ollama",
+            CapabilityId = CapabilityIds.TextGeneration,
+            Priority = 100,
+            Enabled = textEnabled,
+            RuntimeCategory = "local_service_gpu"
+        },
+        new()
+        {
+            ProviderId = "gemini-text",
+            CapabilityId = CapabilityIds.TextGeneration,
+            Priority = 50,
+            Enabled = geminiTextEnabled,
+            RuntimeCategory = "cloud_api"
+        },
         new()
         {
             ProviderId = "voxcpm2",
@@ -45,6 +67,14 @@ public static class ProductionCapabilityCatalog
             Priority = 100,
             Enabled = speechEnabled,
             RuntimeCategory = "local_python_gpu"
+        },
+        new()
+        {
+            ProviderId = "gemini-tts",
+            CapabilityId = CapabilityIds.SpeechNarration,
+            Priority = 50,
+            Enabled = geminiSpeechEnabled,
+            RuntimeCategory = "cloud_api"
         },
         new()
         {
@@ -88,6 +118,14 @@ public static class ProductionCapabilityCatalog
         },
         new()
         {
+            ProviderId = "gemini-nanobanana",
+            CapabilityId = CapabilityIds.VisualAiImage,
+            Priority = 50,
+            Enabled = geminiImageEnabled,
+            RuntimeCategory = "cloud_api"
+        },
+        new()
+        {
             ProviderId = "blender",
             CapabilityId = CapabilityIds.VisualThreeD,
             Priority = 100,
@@ -101,6 +139,14 @@ public static class ProductionCapabilityCatalog
             Priority = 100,
             Enabled = videoEnabled,
             RuntimeCategory = "local_service_gpu"
+        },
+        new()
+        {
+            ProviderId = "gemini-veo",
+            CapabilityId = CapabilityIds.VisualCharacterAnimation,
+            Priority = 50,
+            Enabled = geminiVideoEnabled,
+            RuntimeCategory = "cloud_api"
         },
         new()
         {

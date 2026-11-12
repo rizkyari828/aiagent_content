@@ -21,5 +21,8 @@ public enum CapabilityGapReason
     CapabilityNotImplemented = 0,
 
     /// <summary>Providers are registered but configuration disables all of them.</summary>
-    ProviderDisabled = 1
+    ProviderDisabled = 1,
+
+    /// <summary>Caller explicitly requested a provider that is not registered for the capability.</summary>
+    ProviderNotRegistered = 2
 }

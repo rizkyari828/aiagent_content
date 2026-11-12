@@ -80,6 +80,7 @@ app.MapFinalApprovalApi();
 app.MapPublicationApi();
 app.MapTrackingApi();
 app.MapProjectTransferApi();
+app.MapCapabilityApi();
 
 app.Run();
 

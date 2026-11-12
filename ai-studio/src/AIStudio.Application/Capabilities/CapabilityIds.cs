@@ -8,6 +8,8 @@ namespace AIStudio.Application.Capabilities;
 /// </summary>
 public static class CapabilityIds
 {
+    public static readonly CapabilityId TextGeneration = new("text.generation");
+
     public static readonly CapabilityId SpeechNarration = new("speech.narration");
 
     public static readonly CapabilityId MusicInstrumental = new("music.instrumental");
