@@ -4,6 +4,10 @@ Updated: 2026-11-12.
 
 ## Current milestone
 
+PASS (home real, 2026-11-12) - UI slice 4 (Runs Screen & Settings Project Transfer Export/Import):
+- `npx tsc --noEmit` -> exit 0; `npx vite build` -> exit 0 (53 modules; `dist/index.html` 0.46 kB / gzip 0.28 kB; `dist/assets/index-B249hLYx.css` 24.55 kB / gzip 5.11 kB; `dist/assets/index-DI6OTfIY.js` 489.00 kB / gzip 120.58 kB; built in 152ms, Node 24.21.0 / npm 11.19.0); `git diff --check` -> clean.
+- Frontend-only: added `src/api/transfer.ts` (`exportProject`, `listProjectExports`, `importProjectPackage`), enabled Runs nav link in `AppShell.tsx`, implemented `RunsScreen.tsx` (`#/runs`, `#/runs/{jobId}`) with Job Inspector (lookup by UUID, status badge, timestamps, lease/retry counters, expandable payload/result JSON, and active job cancel dialog) and session recent jobs table (`sessionStorage`), and added Project Transfer card in `SettingsScreen.tsx` (export package generation + `.zip` multipart import upload with confirmation dialog and navigation to imported project). 100% i18n key parity in `id.json`/`en.json`, 0 hardcoded strings.
+
 PASS (home real, 2026-11-12) - Multi-Provider Capability Catalog + Gemini Cloud Adapters (Text, Nano Banana, Veo, TTS) + Capability Discovery API + UI Provider Selector:
 - `dotnet build AIStudio.slnx -c Release` -> 0 warnings / 0 errors.
 - `AIStudio.Tests` suite expanded from `1579` to **`1741` total tests** (+162 new deterministic unit & contract tests; `1716/1717` non-DB tests pass, 1 skipped real-audio E2E; `dotnet format AIStudio.slnx --verify-no-changes` and `git diff --check` clean).

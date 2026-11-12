@@ -3,14 +3,19 @@ import { useCallback, useEffect, useState } from "react";
 export type AppRoute =
   | { screen: "projects" }
   | { screen: "project"; projectId: string }
+  | { screen: "runs"; jobId?: string }
   | { screen: "settings" };
 
 const DEFAULT_ROUTE: AppRoute = { screen: "projects" };
 
 export function routeToHash(route: AppRoute): string {
-  return route.screen === "project"
-    ? `#/projects/${route.projectId}`
-    : `#/${route.screen}`;
+  if (route.screen === "project") {
+    return `#/projects/${route.projectId}`;
+  }
+  if (route.screen === "runs") {
+    return route.jobId ? `#/runs/${route.jobId}` : "#/runs";
+  }
+  return `#/${route.screen}`;
 }
 
 function parseRoute(hash: string): AppRoute {
@@ -21,6 +26,16 @@ function parseRoute(hash: string): AppRoute {
 
   if (path === "settings") {
     return { screen: "settings" };
+  }
+
+  if (path === "runs") {
+    return { screen: "runs" };
+  }
+
+  const runsMatch = /^runs\/([0-9a-fA-F-]{36})$/.exec(path);
+
+  if (runsMatch) {
+    return { screen: "runs", jobId: runsMatch[1] };
   }
 
   const projectMatch = /^projects\/([0-9a-fA-F-]{36})$/.exec(path);

@@ -2,6 +2,7 @@ import { AppShell } from "./layout/AppShell";
 import { useHashRoute } from "./routing/useHashRoute";
 import { ProjectDetailScreen } from "./screens/ProjectDetailScreen";
 import { ProjectsScreen } from "./screens/ProjectsScreen";
+import { RunsScreen } from "./screens/RunsScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 
 export function App() {
@@ -9,7 +10,25 @@ export function App() {
 
   return (
     <AppShell route={route} onNavigate={navigate}>
-      {route.screen === "settings" ? <SettingsScreen /> : null}
+      {route.screen === "settings" ? (
+        <SettingsScreen
+          onOpenProject={(projectId) =>
+            navigate({ screen: "project", projectId })
+          }
+        />
+      ) : null}
+
+      {route.screen === "runs" ? (
+        <RunsScreen
+          initialJobId={route.jobId}
+          onOpenProject={(projectId) =>
+            navigate({ screen: "project", projectId })
+          }
+          onSelectJob={(jobId) =>
+            navigate({ screen: "runs", jobId })
+          }
+        />
+      ) : null}
 
       {route.screen === "projects" ? (
         <ProjectsScreen

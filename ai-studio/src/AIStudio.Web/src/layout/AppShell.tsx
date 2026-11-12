@@ -92,18 +92,13 @@ export function AppShell({ route, onNavigate, children }: AppShellProps) {
               onNavigate={onNavigate}
               icon={IconProjects}
             />
-            <button
-              type="button"
-              className="nav-item"
-              disabled
-              title={t("nav.runsSoon")}
-            >
-              <span className="nav-item__icon">
-                <IconRuns size={18} />
-              </span>
-              <span className="nav-item__label">{t("nav.runs")}</span>
-              <span className="nav-item__soon">{t("nav.soon")}</span>
-            </button>
+            <NavLink
+              target={{ screen: "runs" }}
+              label={t("nav.runs")}
+              current={route.screen === "runs"}
+              onNavigate={onNavigate}
+              icon={IconRuns}
+            />
             <NavLink
               target={{ screen: "settings" }}
               label={t("nav.settings")}

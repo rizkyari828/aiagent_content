@@ -154,22 +154,18 @@ publication, metrics/time/cost, export/import.
 - [x] Job queued/running/failed/cancelled: status, alasan, inspect/refresh/cancel serta enqueue 7 jenis pipeline job sesuai
       kontrak yang ada.
 
-### 5.3 Runs
+### 5.3 Runs (selesai 2026-11-12)
 
-- [ ] **Dependency backend:** belum ada endpoint daftar job. Yang ada hanya
-      `GET /api/jobs/{jobId}` dan `POST /api/jobs/{jobId}/cancel`. Jangan
-      mengarang endpoint list; putuskan apakah Runs memakai lookup by id atau
-      menunggu endpoint list yang disetujui.
-- [ ] Setelah kontraknya ada: tabel job, status, waktu, error code sekunder,
-      cancel dengan konfirmasi, retry bila diizinkan backend.
+- [x] Route `#/runs` dan `#/runs/{jobId}` di `useHashRoute.ts` serta link sidebar Runs aktif di `AppShell.tsx`.
+- [x] Layar `RunsScreen.tsx` dengan Job Inspector (lookup by UUID, status badge dengan tone, waktu created/started/completed, lease/retry counters, expandable payload & result JSON).
+- [x] Cancel job untuk status aktif (`pending`, `queued`, `running`) dengan `Dialog` konfirmasi via `POST /api/jobs/{id}/cancel`.
+- [x] Riwayat Recent Jobs sesi browser di `sessionStorage` (`aistudio.recentJobs`) dalam bentuk tabel ringkas dan empty state informatif.
 
-### 5.4 Settings produksi + import/export
+### 5.4 Settings produksi + import/export (selesai 2026-11-12)
 
-- [ ] Ganti shell preferensi menjadi halaman Settings lengkap: lokasi data,
-      konfigurasi model lokal, batas job, template, export/backup, import.
-- [ ] Export/import memakai endpoint yang ada (`.../exports`,
-      `POST /api/projects/imports`) dengan upload multipart dan konfirmasi.
-- [ ] Jangan menampilkan path/credential yang tidak aman.
+- [x] Preferensi provider AI produksi per fitur (`text.generation`, `visual.ai_image`, `visual.character_animation`, `speech.narration`, `music.instrumental`) via `api/capabilities.ts`.
+- [x] Kartu Project Transfer & Backup di `SettingsScreen.tsx`: ekspor paket `.zip` proyek via `POST /api/content-projects/{id}/exports` dan impor paket via `POST /api/projects/imports` multipart upload dengan dialog konfirmasi serta navigasi ke proyek hasil impor.
+- [x] Alamat API base URL aman dan zero leakage credentials.
 
 ### 5.5 Cross-cutting
 

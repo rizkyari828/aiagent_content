@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import {
   FEATURE_CAPABILITY_KEYS,
   getCapabilities,
@@ -13,13 +13,26 @@ import {
   isApiRequestError,
   type ApiError,
 } from "../api/client";
+import {
+  exportProject,
+  importProjectPackage,
+  type ProjectExportResponse,
+  type ProjectImportResponse,
+} from "../api/transfer";
 import { Badge } from "../components/Badge";
+import { Button } from "../components/Button";
 import { Card } from "../components/Card";
+import { Dialog } from "../components/Dialog";
 import { InlineError } from "../components/InlineError";
 import { LanguageSelect, ThemePicker } from "../components/Preferences";
 import { Skeleton } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
+import { useFormatters } from "../i18n/format";
 import { useI18n } from "../i18n/i18n";
+
+export interface SettingsScreenProps {
+  onOpenProject?: (projectId: string) => void;
+}
 
 function toApiError(error: unknown): ApiError {
   if (isApiRequestError(error)) {
@@ -40,8 +53,21 @@ function toApiError(error: unknown): ApiError {
   };
 }
 
-export function SettingsScreen() {
+function formatByteSize(bytes: number, numberFormatter: (n: number) => string): string {
+  if (bytes < 1024) {
+    return `${numberFormatter(bytes)} B`;
+  }
+  const kb = bytes / 1024;
+  if (kb < 1024) {
+    return `${numberFormatter(Math.round(kb * 10) / 10)} KB (${numberFormatter(bytes)} B)`;
+  }
+  const mb = kb / 1024;
+  return `${numberFormatter(Math.round(mb * 10) / 10)} MB (${numberFormatter(bytes)} B)`;
+}
+
+export function SettingsScreen({ onOpenProject }: SettingsScreenProps = {}) {
   const { t } = useI18n();
+  const { dateTime, number } = useFormatters();
   const { showToast } = useToast();
 
   const [capabilities, setCapabilities] = useState<CapabilityView[]>([]);
@@ -49,6 +75,21 @@ export function SettingsScreen() {
   const [error, setError] = useState<ApiError | null>(null);
   const [preferredProviders, setPreferredProviders] =
     useState<PreferredProvidersMap>(() => loadPreferredProviders());
+
+  // Project Transfer Export state
+  const [exportProjectId, setExportProjectId] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<ApiError | null>(null);
+  const [exportResult, setExportResult] =
+    useState<ProjectExportResponse | null>(null);
+
+  // Project Transfer Import state
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [importConfirmOpen, setImportConfirmOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<ApiError | null>(null);
+  const [importResult, setImportResult] =
+    useState<ProjectImportResponse | null>(null);
 
   const fetchCapabilitiesData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -82,6 +123,55 @@ export function SettingsScreen() {
     const updated = savePreferredProvider(featureKey, providerId);
     setPreferredProviders(updated);
     showToast(t("settings.providers.savedToast"), "success");
+  };
+
+  const handleExport = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const id = exportProjectId.trim();
+    if (!id) {
+      return;
+    }
+
+    setExporting(true);
+    setExportError(null);
+    try {
+      const response = await exportProject(id);
+      setExportResult(response);
+      showToast(t("settings.transfer.export.successToast"), "success");
+    } catch (err: unknown) {
+      setExportError(toApiError(err));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    setSelectedFile(file);
+    setImportError(null);
+    setImportResult(null);
+  };
+
+  const handleConfirmImport = async () => {
+    if (!selectedFile) {
+      return;
+    }
+
+    setImporting(true);
+    setImportError(null);
+    try {
+      const response = await importProjectPackage(selectedFile);
+      setImportResult(response);
+      setImportConfirmOpen(false);
+      showToast(t("settings.transfer.import.successToast"), "success");
+    } catch (err: unknown) {
+      setImportConfirmOpen(false);
+      setImportError(toApiError(err));
+      const apiErr = toApiError(err);
+      showToast(apiErr.detail ?? apiErr.title, "error");
+    } finally {
+      setImporting(false);
+    }
   };
 
   return (
@@ -249,6 +339,271 @@ export function SettingsScreen() {
           )}
         </Card>
 
+        {/* Project Transfer & Backup Card */}
+        <Card
+          title={t("settings.transfer.title")}
+          description={t("settings.transfer.description")}
+        >
+          <div className="stack">
+            {/* Export Section */}
+            <div
+              style={{
+                borderBottom: "1px solid var(--color-border)",
+                paddingBottom: "var(--space-5)",
+              }}
+            >
+              <h3
+                style={{
+                  fontSize: "var(--text-md)",
+                  fontWeight: "var(--font-semibold)",
+                  marginBottom: "var(--space-1)",
+                }}
+              >
+                {t("settings.transfer.export.title")}
+              </h3>
+              <p
+                className="inline-note"
+                style={{ marginBottom: "var(--space-3)" }}
+              >
+                {t("settings.transfer.export.hint")}
+              </p>
+
+              <form onSubmit={handleExport} className="form-stack" noValidate>
+                <div className="field">
+                  <label
+                    className="field__label"
+                    htmlFor="transfer-export-project-id"
+                  >
+                    {t("settings.transfer.export.projectIdLabel")}
+                  </label>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "var(--space-3)",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <input
+                      id="transfer-export-project-id"
+                      type="text"
+                      className="field__input mono"
+                      style={{ flex: 1, minWidth: "260px" }}
+                      placeholder={t(
+                        "settings.transfer.export.projectIdPlaceholder",
+                      )}
+                      value={exportProjectId}
+                      onChange={(e) => setExportProjectId(e.target.value)}
+                    />
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      loading={exporting}
+                      loadingLabel={t("settings.transfer.export.loading")}
+                      disabled={!exportProjectId.trim()}
+                    >
+                      {t("settings.transfer.export.action")}
+                    </Button>
+                  </div>
+                </div>
+              </form>
+
+              {exportError ? (
+                <div style={{ marginTop: "var(--space-3)" }}>
+                  <InlineError
+                    title={t("settings.transfer.export.errorTitle")}
+                    detail={exportError.detail ?? exportError.title}
+                    code={exportError.code}
+                  />
+                </div>
+              ) : null}
+
+              {exportResult ? (
+                <div
+                  style={{
+                    marginTop: "var(--space-3)",
+                    background: "var(--color-surface-muted)",
+                    padding: "var(--space-4)",
+                    borderRadius: "var(--radius-md)",
+                  }}
+                >
+                  <h4
+                    style={{
+                      fontSize: "var(--text-sm)",
+                      fontWeight: "var(--font-semibold)",
+                      marginBottom: "var(--space-2)",
+                    }}
+                  >
+                    {t("settings.transfer.export.resultTitle")}
+                  </h4>
+                  <dl className="definition-list">
+                    <div>
+                      <dt>{t("settings.transfer.export.fileName")}</dt>
+                      <dd className="mono">
+                        {exportResult.relativePackagePath ||
+                          exportResult.fileName}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{t("settings.transfer.export.byteSize")}</dt>
+                      <dd>{formatByteSize(exportResult.byteSize, number)}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("settings.transfer.export.sha256")}</dt>
+                      <dd className="mono">
+                        {exportResult.contentHash ||
+                          exportResult.sha256 ||
+                          "—"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{t("settings.transfer.export.exportedAt")}</dt>
+                      <dd>
+                        {dateTime(
+                          exportResult.exportedAt ||
+                            exportResult.createdAtUtc ||
+                            new Date().toISOString(),
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Import Section */}
+            <div>
+              <h3
+                style={{
+                  fontSize: "var(--text-md)",
+                  fontWeight: "var(--font-semibold)",
+                  marginBottom: "var(--space-1)",
+                }}
+              >
+                {t("settings.transfer.import.title")}
+              </h3>
+              <p
+                className="inline-note"
+                style={{ marginBottom: "var(--space-3)" }}
+              >
+                {t("settings.transfer.import.hint")}
+              </p>
+
+              <div className="field">
+                <label
+                  className="field__label"
+                  htmlFor="transfer-import-file-input"
+                >
+                  {t("settings.transfer.import.fileLabel")}
+                </label>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "var(--space-3)",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <input
+                    id="transfer-import-file-input"
+                    type="file"
+                    accept=".zip,application/zip"
+                    className="field__input"
+                    style={{ flex: 1, minWidth: "260px" }}
+                    onChange={handleFileChange}
+                  />
+                  <Button
+                    type="button"
+                    variant="primary"
+                    disabled={!selectedFile || importing}
+                    loading={importing}
+                    loadingLabel={t("settings.transfer.import.loading")}
+                    onClick={() => setImportConfirmOpen(true)}
+                  >
+                    {t("settings.transfer.import.action")}
+                  </Button>
+                </div>
+              </div>
+
+              {importError ? (
+                <div style={{ marginTop: "var(--space-3)" }}>
+                  <InlineError
+                    title={t("settings.transfer.import.errorTitle")}
+                    detail={importError.detail ?? importError.title}
+                    code={importError.code}
+                  />
+                </div>
+              ) : null}
+
+              {importResult ? (
+                <div
+                  style={{
+                    marginTop: "var(--space-3)",
+                    background: "var(--color-surface-muted)",
+                    padding: "var(--space-4)",
+                    borderRadius: "var(--radius-md)",
+                  }}
+                >
+                  <h4
+                    style={{
+                      fontSize: "var(--text-sm)",
+                      fontWeight: "var(--font-semibold)",
+                      marginBottom: "var(--space-2)",
+                    }}
+                  >
+                    {t("settings.transfer.import.resultTitle")}
+                  </h4>
+                  <dl className="definition-list">
+                    <div>
+                      <dt>{t("settings.transfer.import.projectId")}</dt>
+                      <dd className="mono">{importResult.contentProjectId}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("settings.transfer.import.restoredFiles")}</dt>
+                      <dd>
+                        {number(
+                          importResult.totalFilesImported ??
+                            importResult.files ??
+                            0,
+                        )}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{t("settings.transfer.import.restoredBytes")}</dt>
+                      <dd>
+                        {formatByteSize(
+                          importResult.totalBytesImported ?? 0,
+                          number,
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+                  <div style={{ marginTop: "var(--space-3)" }}>
+                    {onOpenProject ? (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() =>
+                          onOpenProject(importResult.contentProjectId)
+                        }
+                      >
+                        {t("settings.transfer.import.viewProject")}
+                      </Button>
+                    ) : (
+                      <a
+                        href={`#/projects/${importResult.contentProjectId}`}
+                        className="button button--secondary button--sm"
+                      >
+                        {t("settings.transfer.import.viewProject")}
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </Card>
+
         <Card title={t("settings.api.title")} flush>
           <div className="preference-row">
             <div className="preference-row__text">
@@ -263,6 +618,39 @@ export function SettingsScreen() {
           <p className="inline-note">{t("settings.status.description")}</p>
         </Card>
       </div>
+
+      {/* Import Confirmation Dialog */}
+      <Dialog
+        open={importConfirmOpen}
+        title={t("settings.transfer.import.confirmTitle")}
+        description={
+          selectedFile
+            ? t("settings.transfer.import.confirmDescription", {
+                fileName: selectedFile.name,
+              })
+            : undefined
+        }
+        onClose={() => setImportConfirmOpen(false)}
+      >
+        <div className="dialog-form__actions">
+          <Button
+            variant="secondary"
+            onClick={() => setImportConfirmOpen(false)}
+            data-autofocus
+            disabled={importing}
+          >
+            {t("action.cancel")}
+          </Button>
+          <Button
+            variant="primary"
+            onClick={handleConfirmImport}
+            loading={importing}
+            loadingLabel={t("settings.transfer.import.loading")}
+          >
+            {t("settings.transfer.import.confirmAction")}
+          </Button>
+        </div>
+      </Dialog>
     </>
   );
 }
