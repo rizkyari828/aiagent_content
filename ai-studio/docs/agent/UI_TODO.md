@@ -101,6 +101,7 @@ lain (mis. `dist/` di belakang reverse proxy).
 Bukti 2026-11-09: Vite dev + stub API di `5002` -> `GET /api/content-projects/{id}`
 dan `GET .../readiness` lewat `127.0.0.1:5173` mengembalikan HTTP 200 dengan
 payload utuh (prefix `/api` tidak dipotong).
+Bukti 2026-11-12 (WSL real stack): Vite dev (`127.0.0.1:5173`) + `AIStudio.Api` nyata (`127.0.0.1:5002`) + PostgreSQL 18.6 (`127.0.0.1:5432`) -> `GET /api/content-projects?take=20`, `GET /api/content-projects/{id}`, dan `GET .../readiness` lewat `127.0.0.1:5173` semuanya mengembalikan HTTP 200 OK dengan data proyek asli dari database.
 
 ## 4. Workflow produk yang harus ditampung UI
 

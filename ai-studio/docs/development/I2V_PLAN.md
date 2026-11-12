@@ -69,13 +69,9 @@ Each item states owner, deliverable, and how to verify it. Do not check an item 
 
 ### P0 — unblock and baseline
 
-- [x] **P0.1 [Home] Push the 2026-10-01 work.** Done 2026-11-09: the Ken Burns v2 code
+- [x] **P0.1 [Home] Push the 2026-10-01 work.** Done 2026-11-09 (`471f8c9`) and DB-verified on WSL 2026-11-12: the Ken Burns v2 code
       (streaming AiImage narrative motion) was committed on `feat/ken-burns-v2` (`471f8c9`, 5
-      files, +290/-4), merged to `main`, and pushed. The anime Video #1 artifact stays local
-      (gitignored) and remains REPORTED. Verify: `main` shows the Ken Burns commit; `dotnet build
-      AIStudio.slnx -c Release` 0 warnings/0 errors; full suite without a database 1579 total
-      (1554 pass, 24 DB-gated failures, 1 skipped), suite excluding `Persistence` 1538 total
-      (1537 pass, 0 failed, 1 skipped); tracked tree clean (only unrelated untracked `dmm_*.ps1` remain).
+      files, +290/-4), merged to `main`, and pushed. On 2026-11-12, full suite with PostgreSQL 18.6 (`127.0.0.1:5432`) passed 1578/1579 (0 failed, 1 skipped real-audio E2E), and the Anime Video #1 (`0bdba51c-58a9-4fc0-9a68-6f3e130dadba`, storyboard `48821f7d-6c82-47f9-9270-e7dd1a4084f9`, 5 scenes, `72.50s`, identity pin `angsa-kertas-protagonist` v1) plus both rendered MP4s (`48821f7d6c8247f99270e7dd1a4084f9.mp4` SHA-256 `9a3467daf476a22892d99978eea557ce08a58155cc147a6f47eced24831bcbae` and `-kenburns-v2.mp4` SHA-256 `4a03df2cf799cd93112cf51015df6c8f1c468e0d6c03adcd824c45a6826c0b8a`) were **VERIFIED** on disk and in PostgreSQL.
 - [x] **P0.2 [Mac] Docs reconciliation** (this branch). Canonical anime Video #1 and Ken Burns
       status recorded as reported, "Video #1" ambiguity removed, next milestone points here.
       Verify: links resolve, `git diff --check` clean.
