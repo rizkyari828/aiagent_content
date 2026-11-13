@@ -23,6 +23,7 @@ public static class StoryboardEndpoints
 
     private static async Task<IResult> EnqueueGenerateStoryboardAsync(
         string contentProjectId,
+        HttpRequest httpRequest,
         GenerateStoryboardWorkflow workflow,
         CancellationToken cancellationToken)
     {
@@ -32,10 +33,30 @@ public static class StoryboardEndpoints
             return InvalidIdentifier("contentProjectId");
         }
 
+        EnqueueGenerateStoryboardRequest? body = null;
+        if (httpRequest.HasJsonContentType() && (httpRequest.ContentLength ?? 1) > 0)
+        {
+            try
+            {
+                body = await httpRequest.ReadFromJsonAsync<EnqueueGenerateStoryboardRequest>(cancellationToken);
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return Results.ValidationProblem(
+                    new Dictionary<string, string[]>
+                    {
+                        ["request"] = ["Request body must be a valid JSON object."]
+                    });
+            }
+        }
+
         try
         {
             var jobId = await workflow.EnqueueAsync(
                 parsedContentProjectId,
+                body?.Provider,
+                body?.Model,
+                body?.Notes,
                 cancellationToken);
 
             if (jobId is null)
@@ -88,4 +109,9 @@ public static class StoryboardEndpoints
             {
                 [fieldName] = ["A non-empty GUID is required."]
             });
+
+    public sealed record EnqueueGenerateStoryboardRequest(
+        string? Provider = null,
+        string? Model = null,
+        string? Notes = null);
 }

@@ -25,7 +25,7 @@ public sealed class GenerateIdeaJobHandlerTests
         Assert.Equal("configured-model", generator.Request.Model);
         Assert.Equal(AiResponseFormat.JsonObject, generator.Request.ResponseFormat);
         Assert.Equal(0.3, generator.Request.Temperature);
-        Assert.Equal(512, generator.Request.MaxTokens);
+        Assert.Equal(1200, generator.Request.MaxTokens);
         Assert.Contains("Project title: Test project", generator.Request.Prompt);
         Assert.Contains("Response language: Indonesian", generator.Request.Prompt);
         Assert.Contains("targetAudience, suggestedFormat", generator.Request.Prompt);

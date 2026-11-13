@@ -35,6 +35,8 @@ public sealed class ContentProject
 
     public DateTimeOffset UpdatedAt { get; private set; }
 
+    public Guid? SourceResearchPackageId { get; private set; }
+
     public static ContentProject Create(
         string title,
         string? brief,
@@ -90,6 +92,17 @@ public sealed class ContentProject
         Brief = normalizedBrief;
         UpdatedAt = NormalizeUpdateTime(utcNow);
         return true;
+    }
+
+    public void LinkResearchPackage(Guid researchPackageId, DateTimeOffset utcNow)
+    {
+        if (researchPackageId == Guid.Empty)
+        {
+            throw new ArgumentException("Research package ID cannot be empty.", nameof(researchPackageId));
+        }
+
+        SourceResearchPackageId = researchPackageId;
+        UpdatedAt = NormalizeUpdateTime(utcNow);
     }
 
     /// <summary>

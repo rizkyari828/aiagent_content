@@ -1,4 +1,5 @@
 using AIStudio.Application.AI;
+using AIStudio.Infrastructure.AI.Cli;
 using AIStudio.Infrastructure.AI.Gemini;
 using AIStudio.Infrastructure.AI.OpenAiCompatible;
 using Microsoft.Extensions.Logging;
@@ -12,6 +13,7 @@ public sealed class RoutingTextGenerator : IAiTextGenerator
     private readonly IAiTextGenerator geminiGenerator;
     private readonly IAiTextGenerator deepSeekGenerator;
     private readonly IAiTextGenerator openAiGenerator;
+    private readonly IAiTextGenerator? cliGenerator;
     private readonly IOptions<AiOptions> aiOptions;
     private readonly ILogger<RoutingTextGenerator>? logger;
 
@@ -20,6 +22,7 @@ public sealed class RoutingTextGenerator : IAiTextGenerator
         GeminiTextGenerator geminiGenerator,
         DeepSeekTextGenerator deepSeekGenerator,
         OpenAiTextGenerator openAiGenerator,
+        CliTextGenerator cliGenerator,
         IOptions<AiOptions> aiOptions,
         ILogger<RoutingTextGenerator>? logger = null)
     {
@@ -27,6 +30,7 @@ public sealed class RoutingTextGenerator : IAiTextGenerator
         this.geminiGenerator = geminiGenerator ?? throw new ArgumentNullException(nameof(geminiGenerator));
         this.deepSeekGenerator = deepSeekGenerator ?? throw new ArgumentNullException(nameof(deepSeekGenerator));
         this.openAiGenerator = openAiGenerator ?? throw new ArgumentNullException(nameof(openAiGenerator));
+        this.cliGenerator = cliGenerator ?? throw new ArgumentNullException(nameof(cliGenerator));
         this.aiOptions = aiOptions ?? throw new ArgumentNullException(nameof(aiOptions));
         this.logger = logger;
     }
@@ -37,12 +41,14 @@ public sealed class RoutingTextGenerator : IAiTextGenerator
         IAiTextGenerator deepSeekGenerator,
         IAiTextGenerator openAiGenerator,
         IOptions<AiOptions> aiOptions,
-        ILogger<RoutingTextGenerator>? logger = null) =>
+        ILogger<RoutingTextGenerator>? logger = null,
+        IAiTextGenerator? cliGenerator = null) =>
         new(
             ollamaGenerator,
             geminiGenerator,
             deepSeekGenerator,
             openAiGenerator,
+            cliGenerator,
             aiOptions,
             logger,
             isTest: true);
@@ -52,6 +58,7 @@ public sealed class RoutingTextGenerator : IAiTextGenerator
         IAiTextGenerator geminiGenerator,
         IAiTextGenerator deepSeekGenerator,
         IAiTextGenerator openAiGenerator,
+        IAiTextGenerator? cliGenerator,
         IOptions<AiOptions> aiOptions,
         ILogger<RoutingTextGenerator>? logger,
         bool isTest)
@@ -60,6 +67,7 @@ public sealed class RoutingTextGenerator : IAiTextGenerator
         this.geminiGenerator = geminiGenerator ?? throw new ArgumentNullException(nameof(geminiGenerator));
         this.deepSeekGenerator = deepSeekGenerator ?? throw new ArgumentNullException(nameof(deepSeekGenerator));
         this.openAiGenerator = openAiGenerator ?? throw new ArgumentNullException(nameof(openAiGenerator));
+        this.cliGenerator = cliGenerator;
         this.aiOptions = aiOptions ?? throw new ArgumentNullException(nameof(aiOptions));
         this.logger = logger;
     }
@@ -85,6 +93,9 @@ public sealed class RoutingTextGenerator : IAiTextGenerator
                 "deepseek" => deepSeekGenerator,
                 "openai" or "chatgpt" => openAiGenerator,
                 "ollama" or "local" => ollamaGenerator,
+                "cli" or "gemini-cli" => cliGenerator ?? throw new AiGenerationException(
+                    AiErrorCode.ProviderUnavailable,
+                    "CLI AI text provider is not registered."),
                 _ => throw new AiGenerationException(
                     AiErrorCode.InvalidRequest,
                     $"Unknown AI text provider '{provider}'.")
@@ -105,6 +116,12 @@ public sealed class RoutingTextGenerator : IAiTextGenerator
         if (string.Equals(defaultProvider, "OpenAi", StringComparison.OrdinalIgnoreCase))
         {
             return openAiGenerator;
+        }
+
+        if (string.Equals(defaultProvider, "Cli", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(defaultProvider, "GeminiCli", StringComparison.OrdinalIgnoreCase))
+        {
+            return cliGenerator ?? ollamaGenerator;
         }
 
         return ollamaGenerator;

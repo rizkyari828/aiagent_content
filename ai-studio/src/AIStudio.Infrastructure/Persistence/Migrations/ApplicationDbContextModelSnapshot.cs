@@ -297,6 +297,10 @@ namespace AIStudio.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<Guid?>("SourceResearchPackageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_research_package_id");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -419,6 +423,61 @@ namespace AIStudio.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AIStudio.Domain.Learning.LearningGuideline", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("kind");
+
+                    b.Property<DateTimeOffset?>("PromotedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("promoted_at");
+
+                    b.Property<string>("SourceCorrectionReason")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("source_correction_reason");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("summary");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_learning_guidelines_status");
+
+                    b.ToTable("learning_guidelines", (string)null);
+                });
+
             modelBuilder.Entity("AIStudio.Domain.Narration.NarrationTrack", b =>
                 {
                     b.Property<Guid>("Id")
@@ -495,6 +554,165 @@ namespace AIStudio.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AIStudio.Domain.Research.EvidenceClaimRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ClaimKind")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("claim_kind");
+
+                    b.Property<string>("ClaimText")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("claim_text");
+
+                    b.Property<string>("ConfidenceNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("confidence_note");
+
+                    b.Property<Guid?>("ContentProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("content_project_id");
+
+                    b.Property<Guid>("ResearchPackageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("research_package_id");
+
+                    b.Property<Guid?>("SourceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_id");
+
+                    b.Property<string>("VisualProofSuggestion")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("visual_proof_suggestion");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContentProjectId")
+                        .HasDatabaseName("ix_evidence_claims_project_id");
+
+                    b.HasIndex("ResearchPackageId")
+                        .HasDatabaseName("ix_evidence_claims_package_id");
+
+                    b.HasIndex("SourceId");
+
+                    b.ToTable("evidence_claims", (string)null);
+                });
+
+            modelBuilder.Entity("AIStudio.Domain.Research.ResearchPackageRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CandidatesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("candidates_json");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("DegradedFallback")
+                        .HasColumnType("boolean")
+                        .HasColumnName("degraded_fallback");
+
+                    b.Property<string>("PacingBlueprintJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("pacing_blueprint_json");
+
+                    b.Property<string>("ProviderUsed")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("provider_used");
+
+                    b.Property<string>("QueryTopic")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("query_topic");
+
+                    b.Property<string>("RegionCode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("region_code");
+
+                    b.Property<string>("WarningsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("warnings_json");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_research_packages_created_at");
+
+                    b.ToTable("research_packages", (string)null);
+                });
+
+            modelBuilder.Entity("AIStudio.Domain.Research.ResearchSourceRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("ContentProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("content_project_id");
+
+                    b.Property<Guid>("ResearchPackageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("research_package_id");
+
+                    b.Property<DateTimeOffset>("RetrievedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("retrieved_at");
+
+                    b.Property<string>("SnapshotHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("snapshot_hash");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("source_type");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("title");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("url");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContentProjectId")
+                        .HasDatabaseName("ix_research_sources_project_id");
+
+                    b.HasIndex("ResearchPackageId")
+                        .HasDatabaseName("ix_research_sources_package_id");
+
+                    b.ToTable("research_sources", (string)null);
+                });
+
             modelBuilder.Entity("AIStudio.Domain.Scripts.ReviewedScript", b =>
                 {
                     b.Property<Guid>("Id")
@@ -517,6 +735,15 @@ namespace AIStudio.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<string>("LastCorrectionReason")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("last_correction_reason");
+
+                    b.Property<string>("PackagingJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("packaging_json");
 
                     b.Property<int>("Revision")
                         .HasColumnType("integer")
@@ -904,6 +1131,29 @@ namespace AIStudio.Infrastructure.Persistence.Migrations
                     b.Navigation("ContentProject");
 
                     b.Navigation("SourceJob");
+                });
+
+            modelBuilder.Entity("AIStudio.Domain.Research.EvidenceClaimRecord", b =>
+                {
+                    b.HasOne("AIStudio.Domain.Research.ResearchPackageRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ResearchPackageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AIStudio.Domain.Research.ResearchSourceRecord", null)
+                        .WithMany()
+                        .HasForeignKey("SourceId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("AIStudio.Domain.Research.ResearchSourceRecord", b =>
+                {
+                    b.HasOne("AIStudio.Domain.Research.ResearchPackageRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ResearchPackageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("AIStudio.Domain.Scripts.ReviewedScript", b =>

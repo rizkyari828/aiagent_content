@@ -3,7 +3,9 @@ using AIStudio.Domain.Approvals;
 using AIStudio.Domain.Assets;
 using AIStudio.Domain.Content;
 using AIStudio.Domain.Jobs;
+using AIStudio.Domain.Learning;
 using AIStudio.Domain.Narration;
+using AIStudio.Domain.Research;
 using AIStudio.Domain.Scripts;
 using AIStudio.Domain.Subtitles;
 using AIStudio.Domain.Tracking;
@@ -35,6 +37,14 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<TimeEntry> TimeEntries => Set<TimeEntry>();
 
     public DbSet<CostEntry> CostEntries => Set<CostEntry>();
+
+    public DbSet<ResearchPackageRecord> ResearchPackages => Set<ResearchPackageRecord>();
+
+    public DbSet<ResearchSourceRecord> ResearchSources => Set<ResearchSourceRecord>();
+
+    public DbSet<EvidenceClaimRecord> EvidenceClaims => Set<EvidenceClaimRecord>();
+
+    public DbSet<LearningGuideline> LearningGuidelines => Set<LearningGuideline>();
 
     public void Add(ContentProject project)
     {

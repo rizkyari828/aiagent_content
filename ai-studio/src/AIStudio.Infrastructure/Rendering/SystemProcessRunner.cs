@@ -17,9 +17,15 @@ public sealed class SystemProcessRunner : IProcessRunner
             FileName = request.FileName,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            RedirectStandardInput = request.CloseStandardInput,
             UseShellExecute = false,
             CreateNoWindow = true
         };
+
+        if (!string.IsNullOrWhiteSpace(request.WorkingDirectory))
+        {
+            startInfo.WorkingDirectory = request.WorkingDirectory;
+        }
 
         foreach (var argument in request.Arguments)
         {
@@ -30,6 +36,10 @@ public sealed class SystemProcessRunner : IProcessRunner
         try
         {
             process.Start();
+            if (request.CloseStandardInput)
+            {
+                process.StandardInput.Close();
+            }
         }
         catch (Exception exception)
             when (exception is Win32Exception

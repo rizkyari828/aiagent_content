@@ -28,6 +28,13 @@ import {
   type JobResponse,
 } from "../../api/jobs";
 import type { ProjectLastJob } from "../../api/projects";
+import {
+  generatePackagingMetadata,
+  getPackagingMetadata,
+  getPreRenderCheck,
+  type PackagingMetadataDto,
+  type PreRenderCheckReportDto,
+} from "../../api/research";
 import { Badge, type BadgeTone } from "../../components/Badge";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
@@ -113,6 +120,7 @@ function isJobActive(status: string): boolean {
 const PROVIDER_I18N_KEYS: Record<string, string> = {
   ollama: "project.production.provider.ollama",
   "gemini-text": "project.production.provider.geminiText",
+  "gemini-cli": "project.production.provider.geminiCli",
   deepseek: "project.production.provider.deepseek",
   openai: "project.production.provider.openai",
   "comfyui-flux": "project.production.provider.comfyuiFlux",
@@ -194,6 +202,59 @@ export function ProductionSection({
   const [inspectedJob, setInspectedJob] = useState<JobResponse | null>(null);
   const [inspectLoading, setInspectLoading] = useState(false);
   const [inspectError, setInspectError] = useState<ApiError | null>(null);
+
+  // Pre-Render QA & Packaging State
+  const [preRenderReport, setPreRenderReport] =
+    useState<PreRenderCheckReportDto | null>(null);
+  const [preRenderLoading, setPreRenderLoading] = useState(false);
+  const [preRenderError, setPreRenderError] = useState<ApiError | null>(null);
+  const [packaging, setPackaging] = useState<PackagingMetadataDto | null>(null);
+  const [packagingLoading, setPackagingLoading] = useState(false);
+  const [packagingGenerating, setPackagingGenerating] = useState(false);
+  const [packagingError, setPackagingError] = useState<ApiError | null>(null);
+
+  const handleRunPreRenderCheck = async () => {
+    setPreRenderLoading(true);
+    setPreRenderError(null);
+    try {
+      const report = await getPreRenderCheck(projectId);
+      setPreRenderReport(report);
+    } catch (error) {
+      setPreRenderError(toApiError(error));
+    } finally {
+      setPreRenderLoading(false);
+    }
+  };
+
+  const handleLoadPackaging = async () => {
+    setPackagingLoading(true);
+    setPackagingError(null);
+    try {
+      const data = await getPackagingMetadata(projectId);
+      setPackaging(data);
+    } catch (error) {
+      setPackagingError(toApiError(error));
+    } finally {
+      setPackagingLoading(false);
+    }
+  };
+
+  const handleGeneratePackaging = async () => {
+    setPackagingGenerating(true);
+    setPackagingError(null);
+    try {
+      const data = await generatePackagingMetadata(
+        projectId,
+        ideaProvider === "auto" ? undefined : ideaProvider,
+      );
+      setPackaging(data);
+      showToast(t("project.production.packaging.generated"));
+    } catch (error) {
+      setPackagingError(toApiError(error));
+    } finally {
+      setPackagingGenerating(false);
+    }
+  };
 
   // Cancel Job State
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
@@ -514,11 +575,16 @@ export function ProductionSection({
         });
         resultJobId = response.jobId;
       } else if (selectedJobType === "GenerateStoryboard") {
+        const payload: Record<string, unknown> = {};
+        if (storyboardNotes.trim()) {
+          payload.notes = storyboardNotes.trim();
+        }
+        if (storyboardProvider !== "auto") {
+          payload.provider = storyboardProvider;
+        }
         const response = await enqueueStoryboardJob(
           projectId,
-          storyboardNotes.trim()
-            ? { notes: storyboardNotes.trim() }
-            : undefined,
+          Object.keys(payload).length > 0 ? payload : undefined,
         );
         resultJobId = response.jobId;
       } else if (selectedJobType === "GenerateSceneVisuals") {
@@ -1570,6 +1636,151 @@ export function ProductionSection({
         </Card>
       </div>
 
+      {/* Pre-Render QA & Packaging Card */}
+      <div className="detail-grid">
+        <Card
+          title={t("project.production.preRender.title")}
+          description={t("project.production.preRender.description")}
+        >
+          <div className="stack-sm">
+            <div className="row-actions">
+              <Button
+                type="button"
+                variant="secondary"
+                loading={preRenderLoading}
+                onClick={handleRunPreRenderCheck}
+              >
+                {t("project.production.preRender.run")}
+              </Button>
+            </div>
+            {preRenderError ? (
+              <InlineError
+                title={t("project.production.preRender.errorTitle")}
+                detail={preRenderError.detail ?? preRenderError.title}
+                code={errorCode(preRenderError)}
+              />
+            ) : null}
+            {preRenderReport ? (
+              <div className="stack-sm">
+                <div className="row-actions">
+                  <Badge tone={preRenderReport.passed ? "success" : "danger"}>
+                    {t(
+                      preRenderReport.passed
+                        ? "project.production.preRender.status.pass"
+                        : "project.production.preRender.status.fail",
+                    )}
+                  </Badge>
+                  <span className="inline-note">
+                    {t("project.production.preRender.metrics", {
+                      words: preRenderReport.scriptWordCount,
+                      wps:
+                        preRenderReport.estimatedSpeechSeconds > 0
+                          ? (
+                              preRenderReport.scriptWordCount /
+                              preRenderReport.estimatedSpeechSeconds
+                            ).toFixed(1)
+                          : "0.0",
+                      seconds: Math.round(
+                        preRenderReport.estimatedSpeechSeconds,
+                      ),
+                    })}
+                  </span>
+                </div>
+                {preRenderReport.issues.length > 0 ? (
+                  <ul className="stack-sm" style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                    {preRenderReport.issues.map((f, idx) => (
+                      <li key={`${f.category}-${idx}`} className="kv-card">
+                        <div className="row-actions">
+                          <Badge
+                            tone={
+                              f.severity === "error" || f.severity === "fail"
+                                ? "danger"
+                                : f.severity === "warn" || f.severity === "warning"
+                                  ? "warning"
+                                  : "accent"
+                            }
+                          >
+                            {f.severity}
+                          </Badge>
+                          <strong className="mono">{f.category}</strong>
+                        </div>
+                        <p className="inline-note">{f.message}</p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="inline-note">
+                    {t("project.production.preRender.noFindings")}
+                  </p>
+                )}
+              </div>
+            ) : null}
+          </div>
+        </Card>
+
+        <Card
+          title={t("project.production.packaging.title")}
+          description={t("project.production.packaging.description")}
+        >
+          <div className="stack-sm">
+            <div className="row-actions">
+              <Button
+                type="button"
+                variant="secondary"
+                loading={packagingLoading}
+                onClick={handleLoadPackaging}
+              >
+                {t("project.production.packaging.load")}
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                loading={packagingGenerating}
+                onClick={handleGeneratePackaging}
+              >
+                {t("project.production.packaging.generate")}
+              </Button>
+            </div>
+            {packagingError ? (
+              <InlineError
+                title={t("project.production.packaging.errorTitle")}
+                detail={packagingError.detail ?? packagingError.title}
+                code={errorCode(packagingError)}
+              />
+            ) : null}
+            {packaging ? (
+              <div className="stack-sm">
+                <div className="kv-card">
+                  <strong>{t("project.production.packaging.titles")}</strong>
+                  <ul style={{ margin: "var(--space-1) 0", paddingLeft: "var(--space-4)" }}>
+                    {packaging.titleVariants.map((titleText, idx) => (
+                      <li key={idx}>{titleText}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="kv-card">
+                  <strong>{t("project.production.packaging.thumbnail")}</strong>
+                  <p className="inline-note">
+                    {packaging.thumbnailConcept.textOverlay}
+                  </p>
+                </div>
+                <div className="kv-card">
+                  <strong>{t("project.production.packaging.descriptionLabel")}</strong>
+                  <p className="inline-note">{packaging.seoDescription}</p>
+                </div>
+                <div className="row-actions">
+                  {packaging.hashtags.map((tag) => (
+                    <Badge key={tag} tone="neutral">
+                      #{tag}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </Card>
+      </div>
+
       {/* Cancel Job Confirmation Dialog */}
       <Dialog
         open={cancelDialogOpen}
@@ -1649,6 +1860,9 @@ function JobResultSummary({
   const title = typeof record.title === "string" ? record.title : null;
   const scenes = Array.isArray(record.scenes) ? record.scenes : null;
   const visuals = Array.isArray(record.visuals) ? record.visuals : null;
+  const variants = Array.isArray(record.variants)
+    ? (record.variants as Array<Record<string, unknown>>)
+    : null;
   const hasVideo =
     typeof record.hasVideo === "boolean" ? record.hasVideo : null;
   const hasAudio =
@@ -1737,6 +1951,25 @@ function JobResultSummary({
             </div>
           ) : null}
         </dl>
+      ) : null}
+
+      {variants && variants.length > 0 ? (
+        <div className="stack-sm">
+          <strong>{t("project.production.result.variants")}</strong>
+          {variants.map((v, idx) => (
+            <div key={idx} className="kv-card">
+              <div className="row-actions">
+                <Badge tone="accent">
+                  {typeof v.angle === "string" ? v.angle : `#${idx + 1}`}
+                </Badge>
+                <strong>{typeof v.title === "string" ? v.title : ""}</strong>
+              </div>
+              {typeof v.hook === "string" ? (
+                <p className="inline-note">{v.hook}</p>
+              ) : null}
+            </div>
+          ))}
+        </div>
       ) : null}
 
       {scenes && scenes.length > 0 && onCopyScenePrompt ? (

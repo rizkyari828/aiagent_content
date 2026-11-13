@@ -13,6 +13,10 @@ import {
   type ProjectDetail,
   type ProjectReadiness,
 } from "../api/projects";
+import {
+  getProjectSources,
+  type ProjectSourcesAndClaimsDto,
+} from "../api/research";
 import { Badge, StatusBadge, type BadgeTone } from "../components/Badge";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
@@ -143,6 +147,7 @@ export function ProjectDetailScreen({ projectId, onBack }: ProjectDetailScreenPr
 
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [readiness, setReadiness] = useState<ProjectReadiness | null>(null);
+  const [sources, setSources] = useState<ProjectSourcesAndClaimsDto | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -177,14 +182,16 @@ export function ProjectDetailScreen({ projectId, onBack }: ProjectDetailScreenPr
     Promise.all([
       getProject(projectId, controller.signal),
       getProjectReadiness(projectId, controller.signal),
+      getProjectSources(projectId, controller.signal).catch(() => null),
     ])
-      .then(([nextDetail, nextReadiness]) => {
+      .then(([nextDetail, nextReadiness, nextSources]) => {
         if (controller.signal.aborted) {
           return;
         }
 
         setDetail(nextDetail);
         setReadiness(nextReadiness);
+        setSources(nextSources);
         setLoadState("ready");
       })
       .catch((error: unknown) => {
@@ -409,6 +416,37 @@ export function ProjectDetailScreen({ projectId, onBack }: ProjectDetailScreenPr
                     </dd>
                   </div>
                 </dl>
+              </Card>
+            ) : null}
+
+            {sources && sources.sources.length > 0 ? (
+              <Card title={t("project.sources.title")}>
+                <div className="stack-sm">
+                  <p className="inline-note">
+                    {t("project.sources.summary", {
+                      sources: sources.sources.length,
+                      claims: sources.claims.length,
+                    })}
+                  </p>
+                  <ul className="stack-sm" style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                    {sources.sources.slice(0, 4).map((src) => (
+                      <li key={src.id} className="kv-card">
+                        <a
+                          href={src.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="link"
+                        >
+                          {src.title}
+                        </a>
+                        <div className="row-actions">
+                          <Badge tone="neutral">{src.sourceType}</Badge>
+                          <Badge tone="accent">{dateTime(src.retrievedAt)}</Badge>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </Card>
             ) : null}
           </div>

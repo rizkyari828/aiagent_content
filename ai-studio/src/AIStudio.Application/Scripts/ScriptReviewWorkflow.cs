@@ -86,9 +86,16 @@ public sealed class ScriptReviewWorkflow(
         return script is null ? null : ToSnapshot(script);
     }
 
+    public Task<ReviewedScriptSnapshot?> EditAsync(
+        Guid contentProjectId,
+        GenerateScriptResult scriptContent,
+        CancellationToken cancellationToken) =>
+        EditAsync(contentProjectId, scriptContent, correctionReason: null, cancellationToken);
+
     public async Task<ReviewedScriptSnapshot?> EditAsync(
         Guid contentProjectId,
         GenerateScriptResult scriptContent,
+        string? correctionReason,
         CancellationToken cancellationToken)
     {
         RequireIdentifier(contentProjectId, nameof(contentProjectId));
@@ -101,7 +108,7 @@ public sealed class ScriptReviewWorkflow(
 
         try
         {
-            if (script.Edit(canonicalContent, timeProvider.GetUtcNow()))
+            if (script.Edit(canonicalContent, timeProvider.GetUtcNow(), correctionReason))
             {
                 await scripts.SaveChangesAsync(cancellationToken);
             }

@@ -44,7 +44,8 @@ public static class ProductionCapabilityCatalog
         bool geminiVideoEnabled = false,
         bool geminiSpeechEnabled = false,
         bool deepseekEnabled = false,
-        bool openAiEnabled = false) =>
+        bool openAiEnabled = false,
+        bool cliTextEnabled = false) =>
     [
         new()
         {
@@ -77,6 +78,14 @@ public static class ProductionCapabilityCatalog
             Priority = 40,
             Enabled = openAiEnabled,
             RuntimeCategory = "cloud_api"
+        },
+        new()
+        {
+            ProviderId = "gemini-cli",
+            CapabilityId = CapabilityIds.TextGeneration,
+            Priority = 20,
+            Enabled = cliTextEnabled,
+            RuntimeCategory = "local_cli_experimental"
         },
         new()
         {

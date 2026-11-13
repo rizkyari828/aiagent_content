@@ -114,6 +114,7 @@ public static class ScriptReviewEndpoints
             var script = await workflow.EditAsync(
                 projectId,
                 request.Script,
+                request.CorrectionReason,
                 cancellationToken);
             return script is null
                 ? ScriptNotFound(projectId)
@@ -189,7 +190,9 @@ public static class ScriptReviewEndpoints
 
 public sealed record StartScriptReviewRequest(Guid SourceJobId);
 
-public sealed record EditScriptReviewRequest(GenerateScriptResult Script);
+public sealed record EditScriptReviewRequest(
+    GenerateScriptResult Script,
+    string? CorrectionReason = null);
 
 public sealed record ReviewedScriptResponse(
     Guid Id,

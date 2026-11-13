@@ -30,6 +30,7 @@ export interface StartScriptReviewInput {
 
 export interface UpdateReviewedScriptInput {
   script: ScriptContentDto;
+  correctionReason?: string | null;
 }
 
 export function getReviewedScript(

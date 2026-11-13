@@ -15,14 +15,17 @@ using AIStudio.Application.Jobs.GenerateIdea;
 using AIStudio.Application.Jobs.GenerateScript;
 using AIStudio.Application.Jobs.GenerateStoryboard;
 using AIStudio.Application.Jobs.RenderVideo;
+using AIStudio.Application.Learning;
 using AIStudio.Application.Narration;
 using AIStudio.Application.ProductionRecipes;
+using AIStudio.Application.Quality;
 using AIStudio.Application.Rendering;
 using AIStudio.Application.Rendering.AudioGeneration;
 using AIStudio.Application.Rendering.AudioMixing;
 using AIStudio.Application.Rendering.AudioProduction;
 using AIStudio.Application.Jobs.GenerateSceneVisuals;
 using AIStudio.Application.Rendering.Visuals;
+using AIStudio.Application.Research;
 using AIStudio.Application.Scripts;
 using AIStudio.Application.Stories;
 using AIStudio.Application.StoryContext;
@@ -30,6 +33,7 @@ using AIStudio.Application.Subtitles;
 using AIStudio.Application.Tracking;
 using AIStudio.Application.Transfer;
 using AIStudio.Infrastructure.AI;
+using AIStudio.Infrastructure.AI.Cli;
 using AIStudio.Infrastructure.AI.Gemini;
 using AIStudio.Infrastructure.AI.OpenAiCompatible;
 using AIStudio.Infrastructure.Approvals;
@@ -37,12 +41,14 @@ using AIStudio.Infrastructure.Assets;
 using AIStudio.Infrastructure.Content;
 using AIStudio.Infrastructure.Gpu;
 using AIStudio.Infrastructure.Jobs;
+using AIStudio.Infrastructure.Learning;
 using AIStudio.Infrastructure.Narration;
 using AIStudio.Infrastructure.Persistence;
 using AIStudio.Infrastructure.Rendering;
 using AIStudio.Infrastructure.Rendering.AudioGeneration;
 using AIStudio.Infrastructure.Rendering.AudioMixing;
 using AIStudio.Infrastructure.Rendering.AudioProduction;
+using AIStudio.Infrastructure.Research;
 using AIStudio.Infrastructure.Rendering.Gemini;
 using AIStudio.Infrastructure.Scripts;
 using AIStudio.Infrastructure.Subtitles;
@@ -86,6 +92,7 @@ public static class DependencyInjection
         AddBibles(services);
         AddStoryContext(services);
         AddProjectTransfer(services, configuration);
+        AddResearch(services, configuration);
 
         return services;
     }
@@ -302,6 +309,11 @@ public static class DependencyInjection
                     UriKind.Absolute);
                 client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
             });
+
+        services.AddTransient<CliTextGenerator>();
+        services
+            .AddOptions<CliAiOptions>()
+            .Bind(configuration.GetSection(CliAiOptions.SectionName));
 
         services.AddTransient<RoutingTextGenerator>();
         services.AddTransient<IAiTextGenerator>(serviceProvider =>
@@ -758,6 +770,9 @@ public static class DependencyInjection
             var geminiVideo = serviceProvider
                 .GetRequiredService<IOptions<GeminiVideoOptions>>()
                 .Value;
+            var cliAi = serviceProvider
+                .GetRequiredService<IOptions<CliAiOptions>>()
+                .Value;
 
             var providers = ProductionCapabilityCatalog.CreateProviders(
                 speechEnabled: speech.Enabled,
@@ -766,13 +781,14 @@ public static class DependencyInjection
                 imageEnabled: images.Enabled,
                 threeDEnabled: threeD.Enabled,
                 videoEnabled: video.Enabled,
-                textEnabled: string.Equals(ai.Provider, "Ollama", StringComparison.OrdinalIgnoreCase),
+                textEnabled: true,
                 geminiTextEnabled: geminiText.Enabled && !string.IsNullOrWhiteSpace(geminiText.ApiKey),
                 geminiImageEnabled: geminiImages.Enabled && !string.IsNullOrWhiteSpace(geminiImages.ApiKey),
                 geminiVideoEnabled: geminiVideo.Enabled && !string.IsNullOrWhiteSpace(geminiVideo.ApiKey),
                 geminiSpeechEnabled: geminiSpeech.Enabled && !string.IsNullOrWhiteSpace(geminiSpeech.ApiKey),
                 deepseekEnabled: deepseek.Enabled && !string.IsNullOrWhiteSpace(deepseek.ApiKey),
-                openAiEnabled: openAi.Enabled && !string.IsNullOrWhiteSpace(openAi.ApiKey));
+                openAiEnabled: openAi.Enabled && !string.IsNullOrWhiteSpace(openAi.ApiKey),
+                cliTextEnabled: cliAi.Enabled && !string.IsNullOrWhiteSpace(cliAi.Executable));
 
             return new CapabilityRegistry(
                 ProductionCapabilityCatalog.Capabilities,
@@ -877,6 +893,55 @@ public static class DependencyInjection
         // The context builder is a pure, AI-free projector over the trusted
         // registries. It executes nothing and touches no provider or database.
         services.AddSingleton<IStoryContextBuilder, StoryContextBuilder>();
+    }
+
+    private static void AddResearch(
+        IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services
+            .AddOptions<YouTubeOptions>()
+            .Bind(configuration.GetSection(YouTubeOptions.SectionName));
+
+        services
+            .AddOptions<ResearchOptions>()
+            .Bind(configuration.GetSection(ResearchOptions.SectionName));
+
+        services.AddSingleton<ITrendCacheStore, InMemoryTrendCacheStore>();
+        services.AddSingleton<IResearchWatchlistProvider, OptionsResearchWatchlistProvider>();
+        services.AddSingleton<ITrendCollector, OperatorSeedCollector>();
+
+        services.AddHttpClient<YouTubeDataApiTrendCollector>((sp, client) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<YouTubeOptions>>().Value;
+            client.Timeout = TimeSpan.FromSeconds(Math.Clamp(opts.TimeoutSeconds, 1, 60));
+        });
+        services.AddTransient<ITrendCollector>(sp => sp.GetRequiredService<YouTubeDataApiTrendCollector>());
+
+        services.AddHttpClient<GoogleTrendsRssCollector>((sp, client) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<ResearchOptions>>().Value;
+            client.Timeout = TimeSpan.FromSeconds(Math.Clamp(opts.TimeoutSeconds, 1, 60));
+        });
+        services.AddTransient<ITrendCollector>(sp => sp.GetRequiredService<GoogleTrendsRssCollector>());
+
+        services.AddHttpClient<WatchlistRssCollector>((sp, client) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<ResearchOptions>>().Value;
+            client.Timeout = TimeSpan.FromSeconds(Math.Clamp(opts.TimeoutSeconds, 1, 60));
+        });
+        services.AddTransient<ITrendCollector>(sp => sp.GetRequiredService<WatchlistRssCollector>());
+
+        services.AddScoped<TrendCollectionService>();
+        services.AddScoped<IResearchSynthesizer, ResearchSynthesizer>();
+        services.AddScoped<IResearchRepository, ResearchRepository>();
+        services.AddScoped<ResearchWorkflow>();
+
+        services.AddScoped<ILearningRepository, LearningRepository>();
+        services.AddScoped<LearningWorkflow>();
+
+        services.AddScoped<PreRenderQualityWorkflow>();
+        services.AddScoped<PackagingWorkflow>();
     }
 
     private static bool IsValidBaseUrl(string? value) =>

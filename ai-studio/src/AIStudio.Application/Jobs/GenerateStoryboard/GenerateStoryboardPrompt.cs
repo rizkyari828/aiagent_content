@@ -44,7 +44,8 @@ internal static class GenerateStoryboardPrompt
             .AppendLine("scenes must be a non-empty ordered array of objects with exactly:")
             .AppendLine("heading, visual.")
             .AppendLine("Follow the script order. All text must be non-empty.")
-            .AppendLine("visual describes what is shown: subject, action, environment, framing, composition, camera movement, and transition intent are all allowed when useful.")
+            .AppendLine("heading must match the project/script language; visual MUST ALWAYS be written in descriptive English (subject, action, environment, framing, lighting, camera motion) so image/video generation models render accurately.")
+            .AppendLine("visual describes what is shown: subject, action, environment, framing, composition, camera movement, and transition intent are all allowed when useful. Maintain visual continuity (palette, lighting, wardrobe/props) across scenes.")
             .AppendLine("Stay engine-neutral and implementation-free: never name providers, models, node graphs, render scripts, executables, file paths, URLs, or commands.")
             .AppendLine("Use the approved script as the spoken reference; do not rewrite, replace, or add dialogue or narration.")
             .ToString();

@@ -94,6 +94,7 @@ public sealed class GenerateScriptJobHandler(
             AiErrorCode.ModelNotFound => "ai_model_not_found",
             AiErrorCode.InvalidRequest => "ai_invalid_request",
             AiErrorCode.MalformedResponse => "ai_malformed_response",
+            AiErrorCode.RateLimited => "ai_rate_limited",
             _ => "ai_provider_error"
         };
 }

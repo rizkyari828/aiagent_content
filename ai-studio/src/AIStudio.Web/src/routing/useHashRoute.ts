@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 export type AppRoute =
   | { screen: "projects" }
+  | { screen: "research" }
   | { screen: "project"; projectId: string }
   | { screen: "runs"; jobId?: string }
   | { screen: "settings" };
@@ -26,6 +27,10 @@ function parseRoute(hash: string): AppRoute {
 
   if (path === "settings") {
     return { screen: "settings" };
+  }
+
+  if (path === "research") {
+    return { screen: "research" };
   }
 
   if (path === "runs") {

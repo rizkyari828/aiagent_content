@@ -19,6 +19,12 @@ import {
   type ProjectExportResponse,
   type ProjectImportResponse,
 } from "../api/transfer";
+import {
+  listLearningGuidelines,
+  promoteLearningGuideline,
+  retireLearningGuideline,
+  type LearningGuidelineDto,
+} from "../api/research";
 import { Badge } from "../components/Badge";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
@@ -91,6 +97,11 @@ export function SettingsScreen({ onOpenProject }: SettingsScreenProps = {}) {
   const [importResult, setImportResult] =
     useState<ProjectImportResponse | null>(null);
 
+  // Learning Guidelines state
+  const [guidelines, setGuidelines] = useState<LearningGuidelineDto[]>([]);
+  const [guidelinesLoading, setGuidelinesLoading] = useState(true);
+  const [guidelineBusyId, setGuidelineBusyId] = useState<string | null>(null);
+
   const fetchCapabilitiesData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
@@ -113,8 +124,42 @@ export function SettingsScreen({ onOpenProject }: SettingsScreenProps = {}) {
   useEffect(() => {
     const controller = new AbortController();
     fetchCapabilitiesData(controller.signal);
+    listLearningGuidelines(controller.signal)
+      .then((res) => {
+        if (!controller.signal.aborted) {
+          setGuidelines(res);
+          setGuidelinesLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setGuidelinesLoading(false);
+        }
+      });
     return () => controller.abort();
   }, [fetchCapabilitiesData]);
+
+  const handlePromoteGuideline = async (id: string) => {
+    setGuidelineBusyId(id);
+    try {
+      const updated = await promoteLearningGuideline(id);
+      setGuidelines((prev) => prev.map((g) => (g.id === id ? updated : g)));
+      showToast(t("settings.learning.toast.promoted"));
+    } finally {
+      setGuidelineBusyId(null);
+    }
+  };
+
+  const handleRetireGuideline = async (id: string) => {
+    setGuidelineBusyId(id);
+    try {
+      const updated = await retireLearningGuideline(id);
+      setGuidelines((prev) => prev.map((g) => (g.id === id ? updated : g)));
+      showToast(t("settings.learning.toast.retired"));
+    } finally {
+      setGuidelineBusyId(null);
+    }
+  };
 
   const handleProviderChange = (
     featureKey: FeatureCapabilityKey,
@@ -602,6 +647,71 @@ export function SettingsScreen({ onOpenProject }: SettingsScreenProps = {}) {
               ) : null}
             </div>
           </div>
+        </Card>
+
+        <Card
+          title={t("settings.learning.title")}
+          description={t("settings.learning.description")}
+        >
+          {guidelinesLoading ? (
+            <Skeleton height="64px" />
+          ) : guidelines.length === 0 ? (
+            <p className="inline-note">{t("settings.learning.empty")}</p>
+          ) : (
+            <div className="stack-sm">
+              {guidelines.map((g) => (
+                <div key={g.id} className="kv-card">
+                  <div className="row-between">
+                    <div className="row-actions">
+                      <Badge
+                        tone={
+                          g.status === "active"
+                            ? "success"
+                            : g.status === "retired"
+                              ? "neutral"
+                              : "warning"
+                        }
+                      >
+                        {t(`settings.learning.status.${g.status}`)}
+                      </Badge>
+                      <Badge tone="accent">{g.kind}</Badge>
+                    </div>
+                    {g.sourceCorrectionReason ? (
+                      <span className="inline-note mono">
+                        {g.sourceCorrectionReason}
+                      </span>
+                    ) : null}
+                  </div>
+                  <strong>{g.title}</strong>
+                  <p style={{ margin: "var(--space-1) 0" }}>{g.summary}</p>
+                  <div className="row-actions">
+                    {g.status !== "active" ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={guidelineBusyId === g.id}
+                        onClick={() => handlePromoteGuideline(g.id)}
+                      >
+                        {t("settings.learning.promote")}
+                      </Button>
+                    ) : null}
+                    {g.status !== "retired" ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={guidelineBusyId === g.id}
+                        onClick={() => handleRetireGuideline(g.id)}
+                      >
+                        {t("settings.learning.retire")}
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
 
         <Card title={t("settings.api.title")} flush>

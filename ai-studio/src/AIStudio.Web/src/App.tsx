@@ -16,6 +16,12 @@ const RunsScreen = lazy(() =>
   })),
 );
 
+const ResearchScreen = lazy(() =>
+  import("./screens/ResearchScreen").then((m) => ({
+    default: m.ResearchScreen,
+  })),
+);
+
 const SettingsScreen = lazy(() =>
   import("./screens/SettingsScreen").then((m) => ({
     default: m.SettingsScreen,
@@ -40,7 +46,17 @@ export function App() {
   return (
     <AppShell route={route} onNavigate={navigate}>
       <Suspense fallback={<ScreenFallback />}>
-        {route.screen === "settings" ? (
+        {route.screen === "research" ? (
+        <Suspense fallback={<ScreenFallback />}>
+          <ResearchScreen
+            onOpenProject={(projectId) =>
+              navigate({ screen: "project", projectId })
+            }
+          />
+        </Suspense>
+      ) : null}
+
+      {route.screen === "settings" ? (
           <SettingsScreen
             onOpenProject={(projectId) =>
               navigate({ screen: "project", projectId })

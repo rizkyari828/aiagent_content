@@ -149,7 +149,7 @@ public sealed class ProductionCapabilityCatalogTests
                 openAiEnabled: true));
 
         var textProviders = registry.GetProviders(CapabilityIds.TextGeneration);
-        Assert.Equal(4, textProviders.Count);
+        Assert.Equal(5, textProviders.Count);
         Assert.Equal("ollama", textProviders[0].ProviderId);
         Assert.Equal(100, textProviders[0].Priority);
         Assert.Equal("local_service_gpu", textProviders[0].RuntimeCategory);
@@ -255,7 +255,7 @@ public sealed class ProductionCapabilityCatalogTests
         Assert.False(resolution.IsResolved);
         Assert.Equal(CapabilityGapReason.ProviderDisabled, resolution.Gap!.Reason);
         Assert.Equal(CapabilityIds.TextGeneration, resolution.Gap.CapabilityId);
-        Assert.Equal(["ollama", "gemini-text", "deepseek", "openai"], resolution.Gap.KnownProviderIds);
+        Assert.Equal(["ollama", "gemini-text", "deepseek", "openai", "gemini-cli"], resolution.Gap.KnownProviderIds);
     }
 
     [Fact]
@@ -314,7 +314,7 @@ public sealed class ProductionCapabilityCatalogTests
         Assert.False(resolution.IsResolved);
         Assert.Equal(CapabilityGapReason.ProviderDisabled, resolution.Gap!.Reason);
         Assert.Equal(CapabilityIds.TextGeneration, resolution.Gap.CapabilityId);
-        Assert.Equal(["ollama", "gemini-text", "deepseek", "openai"], resolution.Gap.KnownProviderIds);
+        Assert.Equal(["ollama", "gemini-text", "deepseek", "openai", "gemini-cli"], resolution.Gap.KnownProviderIds);
 
         var deepseekReq = CapabilityRequirement.ForProvider(CapabilityIds.TextGeneration, "deepseek");
         var deepseekRes = registry.Resolve(deepseekReq);
@@ -346,7 +346,7 @@ public sealed class ProductionCapabilityCatalogTests
         Assert.False(resolution.IsResolved);
         Assert.Equal(CapabilityGapReason.ProviderNotRegistered, resolution.Gap!.Reason);
         Assert.Equal(CapabilityIds.TextGeneration, resolution.Gap.CapabilityId);
-        Assert.Equal(["ollama", "gemini-text", "deepseek", "openai"], resolution.Gap.KnownProviderIds);
+        Assert.Equal(["ollama", "gemini-text", "deepseek", "openai", "gemini-cli"], resolution.Gap.KnownProviderIds);
     }
 
     private static void AssertProvider(

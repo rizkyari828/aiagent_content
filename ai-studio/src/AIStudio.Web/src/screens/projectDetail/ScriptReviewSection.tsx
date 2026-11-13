@@ -87,6 +87,7 @@ export function ScriptReviewSection({
     { heading: "", narration: "" },
   ]);
   const [draftClosing, setDraftClosing] = useState("");
+  const [correctionReason, setCorrectionReason] = useState("");
   const [draftErrors, setDraftErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<ApiError | null>(null);
@@ -287,7 +288,10 @@ export function ScriptReviewSection({
     };
 
     try {
-      const updated = await updateReviewedScript(projectId, scriptContent);
+      const updated = await updateReviewedScript(projectId, {
+        script: scriptContent,
+        correctionReason: correctionReason || null,
+      });
       setReview(updated);
       setDraftErrors({});
       showToast(t("project.script.toast.saved"));
@@ -848,6 +852,49 @@ export function ScriptReviewSection({
                     {draftErrors.closing}
                   </p>
                 ) : null}
+              </div>
+
+              <div className="field">
+                <label
+                  className="field__label"
+                  htmlFor="script-correction-reason"
+                >
+                  {t("project.scriptReview.correctionReason.label")}
+                </label>
+                <select
+                  id="script-correction-reason"
+                  className="select"
+                  value={correctionReason}
+                  onChange={(event) => setCorrectionReason(event.target.value)}
+                >
+                  <option value="">
+                    {t("project.scriptReview.correctionReason.none")}
+                  </option>
+                  <option value="hook_weak">
+                    {t("project.scriptReview.correctionReason.hook_weak")}
+                  </option>
+                  <option value="too_long">
+                    {t("project.scriptReview.correctionReason.too_long")}
+                  </option>
+                  <option value="too_short">
+                    {t("project.scriptReview.correctionReason.too_short")}
+                  </option>
+                  <option value="tone_mismatch">
+                    {t("project.scriptReview.correctionReason.tone_mismatch")}
+                  </option>
+                  <option value="fact_fix">
+                    {t("project.scriptReview.correctionReason.fact_fix")}
+                  </option>
+                  <option value="visual_unclear">
+                    {t("project.scriptReview.correctionReason.visual_unclear")}
+                  </option>
+                  <option value="tts_awkward">
+                    {t("project.scriptReview.correctionReason.tts_awkward")}
+                  </option>
+                  <option value="other">
+                    {t("project.scriptReview.correctionReason.other")}
+                  </option>
+                </select>
               </div>
 
               <div className="dialog-form__actions">

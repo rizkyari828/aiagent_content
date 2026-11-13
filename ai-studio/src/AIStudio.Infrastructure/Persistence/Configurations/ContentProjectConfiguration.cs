@@ -41,6 +41,9 @@ internal sealed class ContentProjectConfiguration : IEntityTypeConfiguration<Con
             .HasColumnType("timestamp with time zone")
             .IsRequired();
 
+        builder.Property(project => project.SourceResearchPackageId)
+            .HasColumnName("source_research_package_id");
+
         builder.HasIndex(project => project.Status)
             .HasDatabaseName("ix_content_projects_status");
     }

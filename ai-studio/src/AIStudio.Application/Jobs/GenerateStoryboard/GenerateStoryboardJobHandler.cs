@@ -101,9 +101,11 @@ public sealed class GenerateStoryboardJobHandler(
                 new AiTextRequest(
                     GenerateStoryboardPrompt.Build(project, scriptContent, storyContext),
                     GenerateStoryboardPrompt.SystemInstruction,
+                    Model: payload.Model,
                     ResponseFormat: AiResponseFormat.JsonObject,
                     Temperature: 0.3,
-                    MaxTokens: 3_000),
+                    MaxTokens: 3_000,
+                    Provider: payload.Provider),
                 cancellationToken);
         }
         catch (AiGenerationException exception)
@@ -125,6 +127,7 @@ public sealed class GenerateStoryboardJobHandler(
             AiErrorCode.ModelNotFound => "ai_model_not_found",
             AiErrorCode.InvalidRequest => "ai_invalid_request",
             AiErrorCode.MalformedResponse => "ai_malformed_response",
+            AiErrorCode.RateLimited => "ai_rate_limited",
             _ => "ai_provider_error"
         };
 }

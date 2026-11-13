@@ -51,6 +51,10 @@ public sealed class ReviewedScript
 
     public DateTimeOffset? ApprovedAt { get; private set; }
 
+    public string? LastCorrectionReason { get; private set; }
+
+    public string? PackagingJson { get; private set; }
+
     public static ReviewedScript Create(
         Guid contentProjectId,
         Guid sourceJobId,
@@ -82,7 +86,10 @@ public sealed class ReviewedScript
             utcNow.ToUniversalTime());
     }
 
-    public bool Edit(string canonicalContent, DateTimeOffset utcNow)
+    public bool Edit(
+        string canonicalContent,
+        DateTimeOffset utcNow,
+        string? correctionReason = null)
     {
         if (Status != ScriptReviewStatus.Draft)
         {
@@ -90,15 +97,30 @@ public sealed class ReviewedScript
         }
 
         var normalizedContent = RequireJsonObject(canonicalContent, nameof(canonicalContent));
-        if (string.Equals(Content, normalizedContent, StringComparison.Ordinal))
+        var normalizedReason = string.IsNullOrWhiteSpace(correctionReason) ? null : correctionReason.Trim();
+
+        if (string.Equals(Content, normalizedContent, StringComparison.Ordinal)
+            && string.Equals(LastCorrectionReason, normalizedReason, StringComparison.Ordinal))
         {
             return false;
         }
 
         Content = normalizedContent;
+        LastCorrectionReason = normalizedReason ?? LastCorrectionReason;
         Revision++;
         UpdatedAt = NormalizeUpdateTime(utcNow);
         return true;
+    }
+
+    public void SetPackagingMetadata(string packagingJson, DateTimeOffset utcNow)
+    {
+        if (Status != ScriptReviewStatus.Approved)
+        {
+            throw new InvalidOperationException("Packaging metadata requires an approved reviewed script.");
+        }
+
+        PackagingJson = RequireJsonObject(packagingJson, nameof(packagingJson));
+        UpdatedAt = NormalizeUpdateTime(utcNow);
     }
 
     public bool Approve(DateTimeOffset utcNow)

@@ -19,8 +19,16 @@ public sealed class GenerateStoryboardWorkflow(
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
 
+    public Task<Guid?> EnqueueAsync(
+        Guid contentProjectId,
+        CancellationToken cancellationToken) =>
+        EnqueueAsync(contentProjectId, provider: null, model: null, notes: null, cancellationToken);
+
     public async Task<Guid?> EnqueueAsync(
         Guid contentProjectId,
+        string? provider,
+        string? model,
+        string? notes,
         CancellationToken cancellationToken)
     {
         if (contentProjectId == Guid.Empty)
@@ -58,7 +66,11 @@ public sealed class GenerateStoryboardWorkflow(
         var canonicalScript = CanonicalizeScript(script.Content);
         var normalizedPayload = GenerateStoryboardJobPayload.Deserialize(
             JsonSerializer.Serialize(
-                new GenerateStoryboardJobPayload(contentProjectId),
+                new GenerateStoryboardJobPayload(
+                    contentProjectId,
+                    Provider: string.IsNullOrWhiteSpace(provider) ? null : provider.Trim(),
+                    Model: string.IsNullOrWhiteSpace(model) ? null : model.Trim(),
+                    Notes: string.IsNullOrWhiteSpace(notes) ? null : notes.Trim()),
                 JsonOptions));
         var payload = JsonSerializer.Serialize(normalizedPayload, JsonOptions);
         var inputVersionHash = Convert.ToHexString(

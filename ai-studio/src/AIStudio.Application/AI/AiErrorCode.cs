@@ -7,5 +7,6 @@ public enum AiErrorCode
     ModelNotFound = 2,
     InvalidRequest = 3,
     MalformedResponse = 4,
-    ProviderError = 5
+    ProviderError = 5,
+    RateLimited = 6
 }

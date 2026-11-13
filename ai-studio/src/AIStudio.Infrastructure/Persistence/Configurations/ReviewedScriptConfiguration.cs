@@ -57,6 +57,14 @@ internal sealed class ReviewedScriptConfiguration : IEntityTypeConfiguration<Rev
             .HasColumnName("approved_at")
             .HasColumnType("timestamp with time zone");
 
+        builder.Property(script => script.LastCorrectionReason)
+            .HasColumnName("last_correction_reason")
+            .HasMaxLength(64);
+
+        builder.Property(script => script.PackagingJson)
+            .HasColumnName("packaging_json")
+            .HasColumnType("jsonb");
+
         builder.HasOne(script => script.ContentProject)
             .WithMany()
             .HasForeignKey(script => script.ContentProjectId)

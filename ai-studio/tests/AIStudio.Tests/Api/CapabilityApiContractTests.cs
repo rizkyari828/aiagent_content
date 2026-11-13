@@ -76,9 +76,9 @@ public sealed class CapabilityApiContractTests
         var ok = Assert.IsType<Ok<CapabilitiesResponse>>(result);
         var capabilities = ok.Value!.Capabilities.ToDictionary(c => c.Id);
 
-        // text.generation: local enabled (ollama), cloud disabled (gemini-text, deepseek, openai)
+        // text.generation: local enabled (ollama), cloud & cli disabled (gemini-text, deepseek, openai, gemini-cli)
         Assert.True(capabilities.TryGetValue("text.generation", out var textCap));
-        Assert.Equal(4, textCap.Providers.Count);
+        Assert.Equal(5, textCap.Providers.Count);
         Assert.Equal("ollama", textCap.Providers[0].ProviderId);
         Assert.Equal(100, textCap.Providers[0].Priority);
         Assert.True(textCap.Providers[0].Enabled);
@@ -95,6 +95,10 @@ public sealed class CapabilityApiContractTests
         Assert.Equal(40, textCap.Providers[3].Priority);
         Assert.False(textCap.Providers[3].Enabled);
         Assert.Equal("cloud_api", textCap.Providers[3].RuntimeCategory);
+        Assert.Equal("gemini-cli", textCap.Providers[4].ProviderId);
+        Assert.Equal(20, textCap.Providers[4].Priority);
+        Assert.False(textCap.Providers[4].Enabled);
+        Assert.Equal("local_cli_experimental", textCap.Providers[4].RuntimeCategory);
 
         // visual.ai_image: local disabled (comfyui-flux), cloud enabled (gemini-nanobanana)
         Assert.True(capabilities.TryGetValue("visual.ai_image", out var imageCap));

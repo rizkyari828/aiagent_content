@@ -11,7 +11,10 @@ public sealed record GenerateStoryboardJobPayload(
     CreativeDirection? CreativeDirection = null,
     StoryPlan? StoryPlan = null,
     IReadOnlyList<CharacterState>? CharacterStates = null,
-    IReadOnlyList<WorldState>? WorldStates = null)
+    IReadOnlyList<WorldState>? WorldStates = null,
+    string? Provider = null,
+    string? Model = null,
+    string? Notes = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {

@@ -81,6 +81,9 @@ app.MapPublicationApi();
 app.MapTrackingApi();
 app.MapProjectTransferApi();
 app.MapCapabilityApi();
+app.MapResearchApi();
+app.MapLearningApi();
+app.MapQualityApi();
 
 app.Run();
 

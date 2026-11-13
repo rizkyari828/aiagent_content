@@ -3,13 +3,23 @@ using System.Text.Json.Serialization;
 
 namespace AIStudio.Application.Jobs.GenerateIdea;
 
+public sealed record GenerateIdeaVariant(
+    string Title,
+    string Hook,
+    string Summary,
+    string Angle,
+    string TargetAudience,
+    string SuggestedFormat);
+
 public sealed record GenerateIdeaResult(
     string Title,
     string Hook,
     string Summary,
     string Angle,
     string TargetAudience,
-    string SuggestedFormat)
+    string SuggestedFormat,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<GenerateIdeaVariant>? Variants = null)
 {
     private const int MaxFieldLength = 2_000;
 

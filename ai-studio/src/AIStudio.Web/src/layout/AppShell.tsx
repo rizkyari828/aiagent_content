@@ -3,6 +3,7 @@ import { LanguageSelect, ThemePicker } from "../components/Preferences";
 import {
   IconLogo,
   IconProjects,
+  IconResearch,
   IconRuns,
   IconSettings,
   type IconProps,
@@ -91,6 +92,13 @@ export function AppShell({ route, onNavigate, children }: AppShellProps) {
               current={route.screen === "projects" || route.screen === "project"}
               onNavigate={onNavigate}
               icon={IconProjects}
+            />
+            <NavLink
+              target={{ screen: "research" }}
+              label={t("nav.research")}
+              current={route.screen === "research"}
+              onNavigate={onNavigate}
+              icon={IconResearch}
             />
             <NavLink
               target={{ screen: "runs" }}
