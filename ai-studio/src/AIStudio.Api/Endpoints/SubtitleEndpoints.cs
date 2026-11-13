@@ -1,3 +1,4 @@
+using AIStudio.Application.Narration;
 using AIStudio.Application.Subtitles;
 using AIStudio.Domain.Assets;
 
@@ -42,6 +43,16 @@ public static class SubtitleEndpoints
             .Produces<SubtitleContentResponse>()
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesValidationProblem();
+
+        api.MapPost(
+                "/content-projects/{contentProjectId}/subtitle/transcribe",
+                TranscribeSubtitleAsync)
+            .WithName("TranscribeSubtitle")
+            .Produces<SubtitleResponse>()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status503ServiceUnavailable)
             .ProducesValidationProblem();
 
         return endpoints;
@@ -232,10 +243,21 @@ public static class SubtitleEndpoints
                 title: "Storyboard job not found.",
                 detail: exception.Message,
                 extensions: new Dictionary<string, object?> { ["code"] = exception.ErrorCode }),
-            "subtitle_not_found" => Results.Problem(
+            "subtitle_not_found" or "subtitle_narration_not_found" => Results.Problem(
                 statusCode: StatusCodes.Status404NotFound,
-                title: "Subtitle not found.",
+                title: "Subtitle input not found.",
                 detail: exception.Message,
+                extensions: new Dictionary<string, object?> { ["code"] = exception.ErrorCode }),
+            "transcription_disabled" or "transcription_runtime_unavailable" => Results.Problem(
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "Transcription service unavailable.",
+                detail: exception.Message,
+                extensions: new Dictionary<string, object?> { ["code"] = exception.ErrorCode }),
+            "transcription_invalid_input" => Results.ValidationProblem(
+                new Dictionary<string, string[]>
+                {
+                    ["audio"] = [exception.Message]
+                },
                 extensions: new Dictionary<string, object?> { ["code"] = exception.ErrorCode }),
             "subtitle_content_invalid" => Results.ValidationProblem(
                 new Dictionary<string, string[]>
@@ -277,6 +299,52 @@ public static class SubtitleEndpoints
         where TEnum : struct, Enum =>
         Enum.TryParse(value, ignoreCase: true, out parsed)
         && Enum.IsDefined(parsed);
+
+    internal static async Task<IResult> TranscribeSubtitleAsync(
+        string contentProjectId,
+        TranscribeSubtitleRequest? request,
+        SubtitleWorkflow workflow,
+        INarrationRepository narrations,
+        ITranscriptionProvider transcriptionProvider,
+        CancellationToken cancellationToken)
+    {
+        if (!TryParseIdentifier(contentProjectId, out var parsedProjectId))
+        {
+            return InvalidIdentifier("contentProjectId");
+        }
+
+        try
+        {
+            var subtitle = await workflow.TranscribeFromNarrationAsync(
+                parsedProjectId,
+                request?.Language,
+                narrations,
+                transcriptionProvider,
+                cancellationToken);
+
+            if (subtitle is null)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Content project not found.",
+                    detail: $"Content project '{parsedProjectId}' does not exist.");
+            }
+
+            return Results.Ok(SubtitleResponse.From(subtitle));
+        }
+        catch (SubtitleException exception)
+        {
+            return SubtitleProblem(exception);
+        }
+        catch (ArgumentException exception)
+        {
+            return Results.ValidationProblem(
+                new Dictionary<string, string[]>
+                {
+                    [exception.ParamName ?? "request"] = [exception.Message]
+                });
+        }
+    }
 
     private static IResult InvalidIdentifier(string fieldName) =>
         Results.ValidationProblem(
@@ -341,3 +409,6 @@ public sealed record SubtitleContentResponse(
     string Content,
     long ByteSize,
     string ContentHash);
+
+public sealed record TranscribeSubtitleRequest(
+    string? Language = null);

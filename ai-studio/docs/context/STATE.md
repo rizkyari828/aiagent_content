@@ -4,6 +4,13 @@ Updated: 2026-11-13.
 
 ## Current milestone
 
+PASS (office code-only, 2026-11-13) - Render Video Preview (`AC-05`) & Faster-Whisper Transcription Adapter (`PRD §35`):
+- `dotnet build AIStudio.slnx -c Release` -> 0 warnings / 0 errors; `dotnet test AIStudio.slnx -c Release --no-build --filter "FullyQualifiedName!~Persistence"` -> **1873 total (1872 passed, 0 failed, 1 skipped real-audio E2E)**; `dotnet format AIStudio.slnx --no-restore --verify-no-changes` -> clean; `git diff --check` -> clean. Note: PostgreSQL `Persistence` tests and real GPU/Faster-Whisper runs remain unexecuted on this MacBook (`office code-only`) and await Home WSL2 + RTX 4060 Ti verification.
+- Frontend (`AIStudio.Web`): `npx tsc --noEmit` -> exit 0; `npx vite build` -> exit 0 (53 modules, `dist/assets/index-Da8clkzG.js` 501.28 kB / gzip 123.57 kB, `dist/assets/index-BspOqGSq.css` 26.40 kB / gzip 5.40 kB); `npm test` (`node --test tests/*.test.mjs`) -> **16/16 pass**; 0 hardcoded UI strings.
+- Added:
+  1. `GET /api/content-projects/{contentProjectId}/render-jobs/{renderJobId}/preview` (`RenderEndpoints`, `RenderVideoWorkflow.GetPreviewArtifactAsync`) with range processing + SHA-256 verification, plus `<video controls>` preview card in `PublishSection.tsx`.
+  2. `ITranscriptionProvider` (`AIStudio.Application/Subtitles/`), `FasterWhisperTranscriptionProvider` + `TranscriptionOptions` + `transcribe.py` (`AIStudio.Infrastructure/Subtitles/`), `SubtitleWorkflow.TranscribeFromNarrationAsync`, and `POST /api/content-projects/{contentProjectId}/subtitle/transcribe` (`SubtitleEndpoints`).
+
 PASS (office code-only, 2026-11-13) - Dynamic Media Provider Routing, I2V P3.3–P3.6 Pipeline Wiring, P1 Code-Only Gaps, UI Testing/A11y/Responsive:
 - `dotnet build AIStudio.slnx -c Release` -> 0 warnings / 0 errors; `dotnet test AIStudio.slnx -c Release --no-build --filter "FullyQualifiedName!~Persistence"` -> **1845 total (1844 passed, 0 failed, 1 skipped real-audio E2E)**; `dotnet format AIStudio.slnx --no-restore --verify-no-changes` -> clean; `git diff --check` -> clean. Note: PostgreSQL `Persistence` tests and real GPU/ComfyUI/Veo/Ollama runs remain unexecuted on this MacBook (`office code-only`) and await Home WSL2 + RTX 4060 Ti verification.
 - Frontend (`AIStudio.Web`): `npx tsc --noEmit` -> exit 0; `npx vite build` -> exit 0 (53 modules, `dist/assets/index-vFsiI-Md.js` 491.00 kB / gzip 121.06 kB, `dist/assets/index-BspOqGSq.css` 26.40 kB / gzip 5.40 kB); `npm test` (`node --test tests/*.test.mjs`) -> **16/16 pass**; 0 hardcoded UI strings.

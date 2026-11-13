@@ -4,6 +4,7 @@ using AIStudio.Application.Assets;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs;
 using AIStudio.Application.Jobs.GenerateStoryboard;
+using AIStudio.Application.Narration;
 using AIStudio.Domain.Assets;
 using AIStudio.Domain.Jobs;
 using AIStudio.Domain.Subtitles;
@@ -186,6 +187,103 @@ public sealed class SubtitleWorkflow(
 
         track.UpdateContentMetadata(file.ByteSize, file.ContentHash, timeProvider.GetUtcNow());
         await subtitles.UpdateAsync(track, cancellationToken);
+        await subtitles.SaveChangesAsync(cancellationToken);
+        return ToSnapshot(track);
+    }
+
+    public async Task<SubtitleSnapshot?> TranscribeFromNarrationAsync(
+        Guid contentProjectId,
+        string? language,
+        INarrationRepository narrations,
+        ITranscriptionProvider transcriptionProvider,
+        CancellationToken cancellationToken)
+    {
+        RequireIdentifier(contentProjectId, nameof(contentProjectId));
+        ArgumentNullException.ThrowIfNull(narrations);
+        ArgumentNullException.ThrowIfNull(transcriptionProvider);
+
+        var project = await contentProjects.FindByIdAsync(contentProjectId, cancellationToken);
+        if (project is null)
+        {
+            return null;
+        }
+
+        var narration = await narrations.FindByProjectIdAsync(contentProjectId, cancellationToken);
+        if (narration is null)
+        {
+            throw Error(
+                "subtitle_narration_not_found",
+                $"Content project '{contentProjectId}' does not have a narration track.");
+        }
+
+        if (!transcriptionProvider.IsEnabled)
+        {
+            throw Error(
+                "transcription_disabled",
+                "The transcription engine is not enabled.");
+        }
+
+        AssetFileInfo narrationFile;
+        try
+        {
+            narrationFile = fileStore.Register(narration.Path);
+        }
+        catch (AssetCollectionException exception)
+        {
+            throw Error(exception.ErrorCode, exception.Message, exception);
+        }
+
+        TranscriptionResult transcription;
+        try
+        {
+            transcription = await transcriptionProvider.TranscribeAsync(
+                new TranscriptionRequest(narrationFile.AbsolutePath, language),
+                cancellationToken);
+        }
+        catch (TranscriptionException exception)
+        {
+            throw Error(exception.ErrorCode, exception.Message, exception);
+        }
+
+        ValidateSrtContent(transcription.SrtContent);
+
+        var existing = await subtitles.FindByProjectIdAsync(contentProjectId, cancellationToken);
+        var targetPath = existing?.Path ?? "subtitles/generated.srt";
+        var bytes = Encoding.UTF8.GetBytes(transcription.SrtContent);
+
+        AssetFileInfo stored;
+        try
+        {
+            stored = await fileStore.WriteAsync(targetPath, bytes, cancellationToken);
+        }
+        catch (AssetCollectionException exception)
+        {
+            throw Error(exception.ErrorCode, exception.Message, exception);
+        }
+
+        var now = timeProvider.GetUtcNow();
+        if (existing is not null)
+        {
+            existing.UpdateContentMetadata(stored.ByteSize, stored.ContentHash, now);
+            await subtitles.UpdateAsync(existing, cancellationToken);
+            await subtitles.SaveChangesAsync(cancellationToken);
+            return ToSnapshot(existing);
+        }
+
+        var track = SubtitleTrack.Create(
+            contentProjectId,
+            narration.SourceJobId,
+            stored.RelativePath,
+            stored.ByteSize,
+            stored.ContentHash,
+            AssetOrigin.Local,
+            source: "faster-whisper",
+            creator: null,
+            license: null,
+            retrievedAt: null,
+            now);
+
+        subtitles.Add(track);
         await subtitles.SaveChangesAsync(cancellationToken);
         return ToSnapshot(track);
     }

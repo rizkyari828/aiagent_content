@@ -681,6 +681,25 @@ public static class DependencyInjection
         services.AddTransient<ISpeechSynthesisProvider>(serviceProvider =>
             serviceProvider.GetRequiredService<RoutingSpeechSynthesisProvider>());
         services.AddSingleton<IMusicGenerationProvider, AceStepMusicGenerationProvider>();
+
+        services
+            .AddOptions<Subtitles.TranscriptionOptions>()
+            .Bind(configuration.GetSection(Subtitles.TranscriptionOptions.SectionName))
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.FasterWhisper.PythonExecutable),
+                "Transcription:FasterWhisper:PythonExecutable is required.")
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.FasterWhisper.ScriptPath),
+                "Transcription:FasterWhisper:ScriptPath is required.")
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.FasterWhisper.Model),
+                "Transcription:FasterWhisper:Model is required.")
+            .Validate(
+                options => options.FasterWhisper.TimeoutSeconds is >= 1 and <= 3600,
+                "Transcription:FasterWhisper:TimeoutSeconds must be between 1 and 3600.")
+            .ValidateOnStart();
+
+        services.AddSingleton<ITranscriptionProvider, Subtitles.FasterWhisperTranscriptionProvider>();
     }
 
     private static void AddAudioProduction(IServiceCollection services)
