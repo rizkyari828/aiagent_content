@@ -7,10 +7,25 @@ Usage:
 """
 
 import argparse
+import glob
 import json
 import os
 import sys
 from pathlib import Path
+
+
+def _preload_nvidia_libraries() -> None:
+    """Preload bundled nvidia cuBLAS/cuDNN libraries if installed in the active environment."""
+    try:
+        import ctypes
+
+        venv_dir = os.path.dirname(os.path.dirname(sys.executable))
+        for lib_name in ["libcublas.so.12", "libcudnn.so.9", "libcudnn.so.8"]:
+            matches = glob.glob(f"{venv_dir}/**/{lib_name}", recursive=True)
+            if matches:
+                ctypes.CDLL(matches[0], mode=ctypes.RTLD_GLOBAL)
+    except Exception:
+        pass
 
 
 def format_srt_timestamp(seconds: float) -> str:
@@ -43,6 +58,7 @@ def main() -> int:
         compute_type = req.get("computeType", "default")
         language = req.get("language") or None
 
+        _preload_nvidia_libraries()
         from faster_whisper import WhisperModel  # type: ignore
 
         model = WhisperModel(model_name, device=device, compute_type=compute_type)

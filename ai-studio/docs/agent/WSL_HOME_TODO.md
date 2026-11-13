@@ -97,9 +97,10 @@ Fitur-fitur berikut sudah **selesai dan teruji deterministik di Mac** (`code-onl
   - Uji selector UI di `ProductionSection.tsx` dengan `comfyui-flux` vs `gemini-nanobanana`, `voxcpm2` vs `gemini-tts`.
 - [x] **2.2 Real Video Preview Player (`AC-05`):**
   - Jalankan `RenderVideo` pada 1 proyek nyata -> buka tab **Publish** di `AIStudio.Web` -> pastikan `<video controls>` streaming HTTP 200/206 dari `GET /api/content-projects/{id}/render-jobs/{jobId}/preview` berfungsi mulus (seek/scrub lancar).
-- [ ] **2.3 Faster-Whisper Transcription Adapter (`PRD §35`):**
-  - Pastikan environment Python memiliki `faster-whisper` (`pip install faster-whisper`).
-  - Uji `POST /api/content-projects/{id}/subtitle/transcribe` dengan `Transcription:Enabled=true` terhadap `narration.wav` -> pastikan `subtitles/generated.srt` terbentuk dan terbaca di **Subtitle Editor** (`AssetsAudioSection.tsx`).
+- [x] **2.3 Faster-Whisper Transcription Adapter (`PRD §35`):**
+  - Venv dibuat di `/home/tama/Developer/Microservices/ai/faster-whisper/.venv` (`faster-whisper 1.2.1`, `ctranslate2 4.9.0`, `av 13.1.0`, `nvidia-cublas-cu12`, `nvidia-cudnn-cu12`).
+  - Preload library NVIDIA cuBLAS/cuDNN ditambahkan ke `transcribe.py`; auto-detect CUDA/cuDNN pada RTX 4060 Ti maupun fallback CPU `int8` terbukti berfungsi normal.
+  - Endpoint `POST /api/content-projects/{id}/subtitle/transcribe` terverifikasi sukses (HTTP 200) pada instance live `AIStudio.Api` (`127.0.0.1:5002`) terhadap narasi audio nyata (15 segmen SRT bahasa Indonesia, 1571 bytes).
 - [ ] **2.4 I2V Benchmark & Real Workflow (`I2V_HOME_TASK.md`):**
   - Download weights LTX-Video 2B / Wan2.2 TI2V-5B di ComfyUI.
   - Author `i2v_workflow.json` & `i2v_workflow_first_frame.json` sesuai node `GET /object_info`, jalankan benchmark 16 GB VRAM dan rekam bukti sesuai `I2V_BENCHMARK_SPEC.md`.
