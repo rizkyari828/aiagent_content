@@ -101,9 +101,9 @@ Fitur-fitur berikut sudah **selesai dan teruji deterministik di Mac** (`code-onl
   - Venv dibuat di `/home/tama/Developer/Microservices/ai/faster-whisper/.venv` (`faster-whisper 1.2.1`, `ctranslate2 4.9.0`, `av 13.1.0`, `nvidia-cublas-cu12`, `nvidia-cudnn-cu12`).
   - Preload library NVIDIA cuBLAS/cuDNN ditambahkan ke `transcribe.py`; auto-detect CUDA/cuDNN pada RTX 4060 Ti maupun fallback CPU `int8` terbukti berfungsi normal.
   - Endpoint `POST /api/content-projects/{id}/subtitle/transcribe` terverifikasi sukses (HTTP 200) pada instance live `AIStudio.Api` (`127.0.0.1:5002`) terhadap narasi audio nyata (15 segmen SRT bahasa Indonesia, 1571 bytes).
-- [ ] **2.4 I2V Benchmark & Real Workflow (`I2V_HOME_TASK.md`):**
-  - Download weights LTX-Video 2B / Wan2.2 TI2V-5B di ComfyUI.
-  - Author `i2v_workflow.json` & `i2v_workflow_first_frame.json` sesuai node `GET /object_info`, jalankan benchmark 16 GB VRAM dan rekam bukti sesuai `I2V_BENCHMARK_SPEC.md`.
+- [x] **2.4 I2V Benchmark & Real Workflow (`I2V_HOME_TASK.md`):**
+  - Benchmark LTX-Video 0.9.5 2B vs Wan2.2 TI2V-5B pada RTX 4060 Ti 16 GB selesai direkam di `.demo/artifacts/i2v-bench-20261113T150603Z` (768x512 @ 24fps, 97 frames, 4.04s): LTX 2B 35.47s wall time / 15723 MiB peak VRAM; Wan2.2 5B 153.38s wall time / 15465 MiB peak VRAM. Keputusan primer: LTX-Video 2B (D-055).
+  - Workflow JSON riil `Rendering/ComfyUI/i2v_workflow.json` & `i2v_workflow_first_frame.json` telah disusun dengan node ComfyUI 0.36.0 terverifikasi (`CheckpointLoaderSimple`, `CLIPLoader`, `CLIPTextEncode`, `EmptyLTXVLatentVideo`/`LTXVImgToVideo`, `LTXVConditioning`, `ModelSamplingLTXV`, `LTXVScheduler`, `KSamplerSelect`, `SamplerCustom`, `VAEDecode`, `CreateVideo`, `SaveVideo`) dan lolos `ComfyUiWorkflowValidator` (26/26 test pass).
 - [x] **2.5 Real Audio Generation E2E:**
   - Set env `AISTUDIO_VOXCPM_*` / `AISTUDIO_ACESTEP_*` lalu jalankan `AudioGenerationEndToEndTests.RealProviders_SynthesizeNarrationAndMusic_ThenMix` agar status tidak skipped.
 

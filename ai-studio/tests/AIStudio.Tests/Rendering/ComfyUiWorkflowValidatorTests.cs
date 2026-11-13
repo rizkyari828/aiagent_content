@@ -32,6 +32,44 @@ public sealed class ComfyUiWorkflowValidatorTests
     }
 
     [Fact]
+    public void Validate_AcceptsRealI2VWorkflow_TextOnly()
+    {
+        var path = Path.Combine(
+            AppContext.BaseDirectory,
+            "Rendering",
+            "ComfyUI",
+            "i2v_workflow.json");
+        Assert.True(File.Exists(path), $"Workflow file '{path}' does not exist.");
+
+        var json = File.ReadAllText(path);
+        var result = ComfyUiWorkflowValidator.Validate(
+            json,
+            ComfyUiWorkflowMode.TextOnly);
+
+        Assert.True(result.IsValid, result.Summary);
+        Assert.Empty(result.Errors);
+    }
+
+    [Fact]
+    public void Validate_AcceptsRealI2VWorkflow_FirstFrame()
+    {
+        var path = Path.Combine(
+            AppContext.BaseDirectory,
+            "Rendering",
+            "ComfyUI",
+            "i2v_workflow_first_frame.json");
+        Assert.True(File.Exists(path), $"Workflow file '{path}' does not exist.");
+
+        var json = File.ReadAllText(path);
+        var result = ComfyUiWorkflowValidator.Validate(
+            json,
+            ComfyUiWorkflowMode.FirstFrame);
+
+        Assert.True(result.IsValid, result.Summary);
+        Assert.Empty(result.Errors);
+    }
+
+    [Fact]
     public void Validate_RejectsMissingPlaceholder()
     {
         var json = TextTemplate.Replace(

@@ -99,16 +99,16 @@ Each item states owner, deliverable, and how to verify it. Do not check an item 
 - [x] **P1.5 Fake provider + tests.** `FakeVideoGenerationProvider`; tests for request validation,
       duration/fps bounds, disabled behavior, GPU-lease lifecycle, error mapping, no-path leak.
       Verify: full suite green with no GPU and no model.
-- [ ] **P1.6 Workflow template.** Repository-owned JSON under `Rendering/ComfyUI/` for the selected
-      engine — only when node names can be verified from local/ComfyUI documentation. Otherwise a
-      skeleton plus an explicit `TODO(verify on home)`; never invented nodes or model paths.
+- [x] **P1.6 Workflow template.** Repository-owned JSON under `Rendering/ComfyUI/` for the selected
+      engine (LTX-Video 0.9.5 2B): `i2v_workflow.json` (text-only) and `i2v_workflow_first_frame.json` (first-frame
+      with `LoadImage` + `LTXVImgToVideo`), verified passing `ComfyUiWorkflowValidator` and copied to output directory.
 - [x] **P1.7 Benchmark spec.** Defined in [I2V_BENCHMARK_SPEC.md](I2V_BENCHMARK_SPEC.md): one scene (shadow raising a hand, golden light growing), 3–5 s, fixed seed (42), comparing LTX-Video 0.9.x 2B vs Wan2.2 TI2V-5B on face/hand morph, prompt adherence, temporal stability, peak VRAM (16 GB RTX 4060 Ti budget), wall-clock latency, and `IMediaInspector` probe pass, outputting to `.demo/artifacts/i2v-bench-<UTC>/`.
 
 ### P2 — benchmark (Home)
 
-- [ ] **P2.1** Install/verify ComfyUI nodes and models (fp8/GGUF for 16 GB). Record versions.
-- [ ] **P2.2** Run the P1.7 benchmark for both engines; record artifacts and numbers.
-- [ ] **P2.3** GO/NO-GO on the primary engine; record in `DECISIONS.md` and `STATE.md`.
+- [x] **P2.1** Install/verify ComfyUI nodes and models (fp8/GGUF for 16 GB). Record versions (ComfyUI 0.36.0, PyTorch 2.14.0+cu130, RTX 4060 Ti 16 GB).
+- [x] **P2.2** Run the P1.7 benchmark for both engines; record artifacts and numbers (`.demo/artifacts/i2v-bench-20261113T150603Z`: LTX-Video 2B 35.47s wall, 15723 MiB peak VRAM; Wan2.2 TI2V-5B 153.38s wall, 15465 MiB peak VRAM; both 768x512 @ 24fps, 97 frames, 4.04s, valid H.264/MP4).
+- [x] **P2.3** GO/NO-GO on the primary engine; record in `DECISIONS.md` and `STATE.md` (GO: LTX-Video 0.9.5 2B selected as primary local I2V engine, ~4.3x faster, 35.47s <= 90s threshold; Wan2.2 retained as high-detail alternative; recorded in D-055).
 
 ### P3 — implementation
 
