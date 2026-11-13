@@ -167,3 +167,99 @@ Semua kontrak berada di `AIStudio.Application` sebagai immutable record tanpa ke
 4. **Fase R4 — Eksperimen `CliTextGenerator` & Storyboard Override:**
    - Implementasikan `CliAiOptions` + `CliTextGenerator` (`gemini -p --output-format json`, `Enabled = false`, cooldown `429`, concurrency `1`) + unit tests via `FakeProcessRunner`.
    - Tambah `provider` opsional di `GenerateStoryboardJobPayload` agar **Idea → Script → Storyboard** bisa diuji terpisah per job lewat UI.
+
+---
+
+## 8. Peningkatan Kualitas Prompt & Pre-Render QA (Hasil Audit Kode)
+
+Berdasarkan inspeksi langsung pada prompt dan handler di `AIStudio.Application`:
+
+1. **`GenerateIdeaPrompt.cs` — Multi-Variant & Anti-Duplikasi:**
+   - Ubah output agar opsional mampu menghasilkan **3 alternatif angle/hook berbeda** dalam 1 call (*curiosity gap*, *contrarian*, *problem-solution*) sehingga 1 job menghasilkan beberapa pilihan manusia (`A1`) dengan hemat kuota.
+   - Suntikkan **Negative History** (10–15 judul proyek terakhir dari `content_projects`) agar topik/angle tidak berulang.
+   - Ikutkan konteks **Offer Hypothesis & Audience (`PRD §29`)** serta ringkasan `ResearchPackage` bila tersedia.
+
+2. **`GenerateScriptPrompt.cs` — Speaking-Rate Budget & TTS Normalization:**
+   - Tambahkan target **Word Budget per Beat** sesuai ritme bicara narator Indonesia (~130–145 kata/menit ≈ `2.2–2.4` kata/detik), misalnya beat `25s` diarahkan ke `55–65` kata agar pas dengan `VideoClipTiming` dan tidak melebihi batas render.
+   - Batasi `openingHook` pada **1–2 kalimat tajam (`<= 18` kata)** tanpa basa-basi pembuka generik (*3-second retention rule*).
+   - Tambahkan aturan **TTS Normalization**: angka, satuan, mata uang, dan singkatan teknis yang rawan salah lafal ditulis agar mudah dibaca alami oleh `VoxCPM2` / `Gemini TTS`.
+
+3. **`GenerateStoryboardPrompt.cs` & `SceneImagePrompt.cs` — English Visual Prompts + Continuity:**
+   - Saat proyek berbahasa Indonesia, wajibkan `heading` berbahasa proyek, sedangkan field **`visual` ditulis dalam Bahasa Inggris deskriptif** (*subject, action, environment, framing, lighting, camera motion*) agar model `FLUX`, `LTX-Video`, dan `Wan2.2` merender jauh lebih akurat tanpa kehilangan detail.
+   - Sertakan **Visual Continuity Anchor** (palet warna, gaya pencahayaan, dan kostum/properti konsisten) dari `StoryContext` untuk setiap scene yang memakai `PinnedIdentityAsset`.
+
+4. **Packaging Metadata Job (Post-Approved Script):**
+   - Setelah `ScriptReview` berstatus `Approved`, sediakan job/step ringan (`MaxTokens <= 500`) untuk menghasilkan **3 variasi Judul CTR tinggi, Deskripsi SEO, Hashtag, dan Thumbnail Concept (teks 2–4 kata + komposisi gambar)** yang konsisten dengan naskah final.
+
+5. **Pre-Render Deterministic Quality Check (CPU-Only, Rp0 Sebelum GPU):**
+   - Di luar `FinalVideoQaJobHandler` (yang mengecek biner MP4 pasca-render), tambahkan validator deterministik murah sebelum memicu TTS/FLUX/FFmpeg:
+     - **Script Pacing & Leak Lint:** cek deviasi jumlah kata vs durasi target (>±35% warning) serta deteksi kebocoran bracket/markdown/URL (`[SFX]`, `(cut)`, `http://`) di narasi lisan.
+     - **SRT Readability Check (`SubtitleWorkflow`):** selain syntax timecode, cek **CPS (Characters Per Second `<= 20`)**, panjang baris (`<= 42` karakter), dan maksimal `2` baris per cue agar nyaman dibaca di layar mobile Shorts/Reels.
+
+---
+
+## 9. Teknik Lanjutan Memaksimalkan Research Server (Efisien & Aman)
+
+Untuk membuat **Research Server** menghasilkan ide berkualitas tinggi dibanding sekadar "topik berita hari ini":
+
+1. **Outlier Detection (Kualitas Tren > Sekadar Views Besar):**
+   - Channel ber-subscriber jutaan yang mendapat 50rb views adalah normal; channel kecil 5rb subscriber yang mendapat 80rb views adalah **sinyal outlier kuat** (*topik yang dicari audiens melampaui ukuran channel*).
+   - Hitung metrik deterministik di collector C# sebelum dikirim ke LLM:
+     - `ViewsPerHour = ViewCount / max(HoursSincePublished, 1)`
+     - `OutlierRatio = ViewCount / max(ChannelMedianRecentViews, 1000)`
+     - `EngagementRate = (LikeCount + CommentCount) / max(ViewCount, 1)`
+   - LLM hanya menganalisis 10–15 kandidat ber-`OutlierRatio` tertinggi.
+
+2. **Comment Mining / Audience Pain-Point Extraction:**
+   - Untuk top 3–5 video YouTube kandidat terkuat, ambil top 15–30 komentar teratas (`commentThreads.list`, biaya kuota YouTube API sangat murah: 1 unit/call).
+   - Minta `ResearchSynthesizer` mengekstrak:
+     - Pertanyaan audiens yang **belum dijawab** kreator video asli,
+     - Keluhan/keberatan audiens,
+     - Ide lanjutan yang paling banyak di-reply/like.
+   - Konten baru yang menjawab *"celah di kolom komentar video viral"* punya peluang retensi dan konversi jauh lebih tinggi daripada mengulang isi video viral mentah-mentah.
+
+3. **Structured Content Angle Matrix (1 Tren → 6 Sudut Berbeda):**
+   - Setiap topik terpilih dapat dipetakan synthesizer ke 6 pola angle teruji:
+     - `myth_busting` (meluruskan miskonsepsi yang beredar),
+     - `reality_cost_check` (hitungan biaya/waktu nyata di balik klaim populer),
+     - `beginner_mistakes` (kesalahan paling sering pemula),
+     - `step_by_step_playbook` (panduan praktik ringkas),
+     - `comparison_benchmark` (uji banding A vs B berbasis data),
+     - `case_study` (studi kasus nyata + hasil terukur).
+
+4. **Source Hygiene, Deduplication & Freshness Scoring:**
+   - **URL Canonicalization:** hapus parameter tracking (`utm_*`, `fbclid`, `si=`, `feature=share`) agar URL sama tidak diproses dua kali.
+   - **Content Hashing:** SHA-256 pada snippet teks yang sudah dinormalisasi; hindari mengirim sumber duplikat ke prompt.
+   - **Freshness Tiering:** tandai sinyal sebagai `breaking` (`<= 72 jam`), `current` (`<= 30 hari`), atau `evergreen` (`> 30 hari` dengan pertumbuhan konsisten).
+   - **Citation Rule:** Klaim angka/persentase (`verified_stat`) wajib menunjuk `SourceId` ber-URL valid; jika tanpa URL, otomatis diturunkan menjadi `synthesis_hypothesis` (dilarang disajikan sebagai fakta).
+
+5. **Token Diet, Two-Tier Caching & Graceful Degradation:**
+   - **Token Diet:** Collector membuang HTML/boilerplate dan membatasi tiap sumber ke payload ringkas (judul + metrik + snippet <= 1.200–1.500 char + top 15 komentar terpilih), menjaga input `ResearchSynthesizer` tetap ramping (`<= 2.500–3.500` tokens).
+   - **Two-Tier Cache:** Cache hasil mentah Collector di DB/disk (`TrendCache`, TTL `6–12` jam per `(queryHash, regionCode, dateBucket)`), dan simpan `ResearchPackage` secara permanen sehingga operator bisa kembali mempromosikan kandidat ke-2 atau ke-3 tanpa memanggil API/LLM lagi.
+   - **Graceful Fallback:** Jika provider riset cloud/Gemini Pro/CLI sedang rate-limit (`429`) atau mencapai kuota harian (`DailyResearchBudget`), sistem tetap menyimpan `TrendSignal` mentah yang berhasil ditarik Collector agar operator tetap bisa melihat data & komentar nyata atau beralih ke `Ollama` lokal (`AC-11` offline continuity).
+
+---
+
+## 10. Closed-Loop Learning (`PRD §32`: Human Correction & Knowledge)
+
+Agar Research & Script Generator makin pintar seiring jumlah video tanpa membangun kompleksitas ML/RAG berat sebelum waktunya:
+
+1. **Human Correction-Reason Capture (Ringan & Opsional):**
+   - Saat operator merevisi naskah di `ScriptReview` atau mengedit `.srt`, catat opsional 1 kode alasan koreksi PRD:
+     `unsupported_claim` | `hook_too_slow` | `too_verbose` | `tone_too_formal` | `weak_source` | `visual_too_expensive` | `asset_rights_unclear` | `story_flow_weak`.
+   - Statistik sederhana di `Tracking` (`Corrections / Video`, `Most Frequent Correction Reasons`, `Accepted First-Draft Rate`) langsung menunjukkan bagian prompt mana yang perlu diperbaiki.
+
+2. **Application-Owned Knowledge Lifecycle:**
+   - Simpan pelajaran terverifikasi di entity terstruktur (`ChannelGuideline`, `AudienceInsight`, `ContentInsight`, `ProductionLesson`) dengan status eksplisit:
+     `Observation → CandidateLesson → ReviewedHypothesis → SupportedGuideline → Retired`.
+   - **Aturan Emas PRD:** AI hanya boleh mengusulkan `CandidateLesson`; **hanya operator manusia yang mempromosikannya** menjadi `SupportedGuideline`.
+   - Maksimal `3–5` `SupportedGuideline` aktif berdurasi pendek (`<= 300` kata total) disuntikkan ke prompt `GenerateIdea`, `GenerateScript`, dan `ResearchSynthesizer`.
+
+---
+
+## 11. Checklist Eksekusi di Mesin Rumah (Pasca-Merge `Research + Gemini Pro`)
+
+1. `git switch main && git pull --ff-only origin main` untuk menyinkronkan semua update dari Mac + dokumen desain ini.
+2. Push / merge branch `Research` + `Gemini Pro` dari mesin rumah ke `main` lokal dan selesaikan bila ada perbedaan kontrak dengan `IResearchSynthesizer` / `GeminiOptions`.
+3. Jalankan `dotnet test AIStudio.slnx -c Release` penuh dengan PostgreSQL aktif (`ConnectionStrings__DefaultConnection`) untuk memverifikasi seluruh migrasi & persistence suite (termasuk fitur dari Mac: Routing Media, I2V P3.3–P3.6, Render Preview `AC-05`, Faster-Whisper `PRD §35`).
+4. Implementasikan bertahap mengikuti **Section 7 (R1–R4)** serta **Section 8 (Pre-Render Quality & English Visual Prompt)**, lalu lanjut **Section 9 (Outlier Detection, Comment Mining, Cache)** agar Research Server menghasilkan kandidat ide siap produksi dengan biaya token minimal.
