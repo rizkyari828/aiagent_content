@@ -12,7 +12,7 @@ public sealed class ProductionRecipeRegistryTests
         var registry = new ProductionRecipeRegistry(SeedProductionRecipes.All);
 
         Assert.Equal(
-            ["motion-comic", "tech-explainer"],
+            ["motion-comic", "motion-comic", "tech-explainer"],
             registry.Recipes.Select(recipe => recipe.Id.Value));
     }
 

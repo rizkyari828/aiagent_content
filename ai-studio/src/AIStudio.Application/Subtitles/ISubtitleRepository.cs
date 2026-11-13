@@ -10,5 +10,8 @@ public interface ISubtitleRepository
 
     void Add(SubtitleTrack track);
 
+    Task UpdateAsync(SubtitleTrack track, CancellationToken cancellationToken) =>
+        Task.CompletedTask;
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

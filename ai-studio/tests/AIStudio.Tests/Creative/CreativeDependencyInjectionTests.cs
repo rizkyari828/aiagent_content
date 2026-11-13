@@ -27,7 +27,7 @@ public sealed class CreativeDependencyInjectionTests
 
         var context = provider.GetRequiredService<ICreativePlanningContextProvider>().Build();
 
-        Assert.Equal(2, context.Recipes.Count);
+        Assert.Equal(3, context.Recipes.Count);
         Assert.Contains("visual.still", context.AvailableCapabilities);
         Assert.Contains("speech.narration", context.UnavailableCapabilities);
     }

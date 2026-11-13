@@ -44,6 +44,22 @@ public static class SeedProductionRecipes
                 ProductionRecipeRequirement.Required(CapabilityIds.MediaCompose),
                 ProductionRecipeRequirement.Required(CapabilityIds.SubtitleBurned)
             ]
+        },
+        new()
+        {
+            Id = new ProductionRecipeId("motion-comic"),
+            Version = new ProductionRecipeVersion(2),
+            DisplayName = "Motion comic",
+            Requirements =
+            [
+                ProductionRecipeRequirement.Required(CapabilityIds.SpeechNarration),
+                ProductionRecipeRequirement.Required(
+                    CapabilityIds.VisualCharacterAnimation,
+                    CapabilityIds.VisualAiImage),
+                ProductionRecipeRequirement.Required(CapabilityIds.MusicInstrumental),
+                ProductionRecipeRequirement.Required(CapabilityIds.MediaCompose),
+                ProductionRecipeRequirement.Required(CapabilityIds.SubtitleBurned)
+            ]
         }
     ];
 }

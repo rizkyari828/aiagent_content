@@ -111,6 +111,8 @@ public static class VisualEndpoints
                 productionRecipe,
                 request?.ArtDirection,
                 identityReferences,
+                request?.ImageProvider,
+                request?.VideoProvider,
                 cancellationToken);
 
             if (jobId is null)
@@ -183,9 +185,11 @@ public static class VisualEndpoints
 /// <see cref="GenerateSceneVisualsWorkflow"/>.
 /// </summary>
 public sealed record EnqueueVisualsRequest(
-    VisualIdentityReference? IdentityReference,
+    VisualIdentityReference? IdentityReference = null,
     VisualProductionRecipe? ProductionRecipe = null,
-    string? ArtDirection = null);
+    string? ArtDirection = null,
+    string? ImageProvider = null,
+    string? VideoProvider = null);
 
 /// <summary>
 /// Transport selection of a production format: a stable recipe id and a concrete

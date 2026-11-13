@@ -82,7 +82,8 @@ public static class SceneVisualPlanner
         bool enableAnimation,
         bool enableAiImages = false,
         bool enableThreeD = false,
-        SceneVisualRoutingProfile? routingProfile = null)
+        SceneVisualRoutingProfile? routingProfile = null,
+        bool enableVideo = false)
     {
         ArgumentNullException.ThrowIfNull(storyboard);
         var durations = storyboard.Scenes
@@ -94,7 +95,8 @@ public static class SceneVisualPlanner
             enableAnimation,
             enableAiImages,
             enableThreeD,
-            routingProfile: routingProfile);
+            routingProfile: routingProfile,
+            enableVideo: enableVideo);
     }
 
     /// <summary>
@@ -111,7 +113,8 @@ public static class SceneVisualPlanner
         bool enableAiImages = false,
         bool enableThreeD = false,
         IReadOnlyList<SceneNarrationWindow>? narrationWindows = null,
-        SceneVisualRoutingProfile? routingProfile = null)
+        SceneVisualRoutingProfile? routingProfile = null,
+        bool enableVideo = false)
     {
         ArgumentNullException.ThrowIfNull(storyboard);
         ArgumentNullException.ThrowIfNull(durations);
@@ -151,7 +154,8 @@ public static class SceneVisualPlanner
                 direction,
                 enableAnimation,
                 enableAiImages,
-                enableThreeD);
+                enableThreeD,
+                enableVideo);
 
             var animation = route.SelectedEngine == SceneVisualEngine.ManimAnimation
                 ? BuildAnimationParameters(brief, palette, direction)

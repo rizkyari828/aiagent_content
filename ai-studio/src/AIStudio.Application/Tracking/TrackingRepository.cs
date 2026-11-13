@@ -52,6 +52,11 @@ public interface ITrackingRepository
         int take,
         CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<MetricSnapshot>> ListAllSnapshotsAsync(
+        Guid contentProjectId,
+        CancellationToken cancellationToken) =>
+        ListSnapshotsAsync(contentProjectId, TrackingTake.Maximum, cancellationToken);
+
     Task<IReadOnlyList<TimeEntry>> ListTimeEntriesAsync(
         Guid contentProjectId,
         int take,

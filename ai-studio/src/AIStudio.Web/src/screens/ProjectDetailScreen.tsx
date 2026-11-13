@@ -520,7 +520,7 @@ export function ProjectDetailScreen({ projectId, onBack }: ProjectDetailScreenPr
               onChange={(event) => setTitle(event.target.value)}
             />
             {fieldErrors.title ? (
-              <p className="field__error" id="project-edit-title-error">
+              <p className="field__error" id="project-edit-title-error" role="alert">
                 {fieldErrors.title}
               </p>
             ) : (
@@ -547,7 +547,7 @@ export function ProjectDetailScreen({ projectId, onBack }: ProjectDetailScreenPr
               onChange={(event) => setBrief(event.target.value)}
             />
             {fieldErrors.brief ? (
-              <p className="field__error" id="project-edit-brief-error">
+              <p className="field__error" id="project-edit-brief-error" role="alert">
                 {fieldErrors.brief}
               </p>
             ) : (

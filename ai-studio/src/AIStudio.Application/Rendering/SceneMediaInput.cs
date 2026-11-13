@@ -9,4 +9,5 @@ public sealed record SceneMediaInput(
     SceneSoundEffect? SoundEffect = null,
     SceneVisualKind? VisualKind = null,
     double Weight = 1,
-    double? DurationSeconds = null);
+    double? DurationSeconds = null,
+    double? SourceDurationSeconds = null);

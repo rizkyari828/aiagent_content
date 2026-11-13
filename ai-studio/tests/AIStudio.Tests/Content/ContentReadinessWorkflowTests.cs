@@ -365,5 +365,146 @@ public sealed class ContentReadinessWorkflowTests
         Assert.DoesNotContain(readiness.Reasons, reason => reason.Blocking);
     }
 
+    [Fact]
+    public async Task MarkPublished_TransitionsFromReadyToPublish_WhenPublicationExists()
+    {
+        var fixture = new ContentProjectFixture()
+            .SeedSucceededRender()
+            .SeedPassingQa()
+            .SeedApproval()
+            .SeedPublication();
+        fixture.Project.MarkReadyToPublish(Now());
+        fixture.Time.UtcNow = Now().AddMinutes(10);
+
+        var result = await fixture.ReadinessWorkflow.MarkPublishedAsync(
+            fixture.ProjectId,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.True(result.Transitioned);
+        Assert.Equal(ContentStatus.Published, result.Readiness.ProjectStatus);
+        Assert.Equal(ContentStatus.Published, fixture.Project.Status);
+        Assert.Equal(Now().AddMinutes(10), fixture.Project.UpdatedAt);
+        Assert.Equal(1, fixture.Projects.SaveCount);
+    }
+
+    [Fact]
+    public async Task MarkPublished_IsIdempotent()
+    {
+        var fixture = new ContentProjectFixture()
+            .SeedSucceededRender()
+            .SeedPassingQa()
+            .SeedApproval()
+            .SeedPublication();
+        fixture.Project.MarkReadyToPublish(Now());
+        fixture.Time.UtcNow = Now().AddMinutes(10);
+
+        var first = await fixture.ReadinessWorkflow.MarkPublishedAsync(
+            fixture.ProjectId,
+            TestContext.Current.CancellationToken);
+        var second = await fixture.ReadinessWorkflow.MarkPublishedAsync(
+            fixture.ProjectId,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(first);
+        Assert.True(first.Transitioned);
+        Assert.NotNull(second);
+        Assert.False(second.Transitioned);
+        Assert.Equal(ContentStatus.Published, second.Readiness.ProjectStatus);
+        Assert.Equal(1, fixture.Projects.SaveCount);
+    }
+
+    [Fact]
+    public async Task MarkPublished_RejectsWhenPublicationMissing()
+    {
+        var fixture = new ContentProjectFixture()
+            .SeedSucceededRender()
+            .SeedPassingQa()
+            .SeedApproval();
+        fixture.Project.MarkReadyToPublish(Now());
+
+        var exception = await Assert.ThrowsAsync<ContentProjectException>(
+            () => fixture.ReadinessWorkflow.MarkPublishedAsync(
+                fixture.ProjectId,
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("content_project_not_ready", exception.ErrorCode);
+        Assert.Equal(
+            new[] { ContentReadinessCodes.PublicationMissing },
+            exception.ReasonCodes);
+        Assert.Equal(ContentStatus.ReadyToPublish, fixture.Project.Status);
+        Assert.Equal(0, fixture.Projects.SaveCount);
+    }
+
+    [Fact]
+    public async Task MarkPublished_RejectsWhenApprovalAndPublicationMissing()
+    {
+        var fixture = new ContentProjectFixture()
+            .SeedSucceededRender()
+            .SeedPassingQa();
+        fixture.Project.MarkReadyToPublish(Now());
+
+        var exception = await Assert.ThrowsAsync<ContentProjectException>(
+            () => fixture.ReadinessWorkflow.MarkPublishedAsync(
+                fixture.ProjectId,
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("content_project_not_ready", exception.ErrorCode);
+        Assert.Contains(ContentReadinessCodes.FinalApprovalMissing, exception.ReasonCodes);
+        Assert.Contains(ContentReadinessCodes.PublicationMissing, exception.ReasonCodes);
+        Assert.Equal(ContentStatus.ReadyToPublish, fixture.Project.Status);
+        Assert.Equal(0, fixture.Projects.SaveCount);
+    }
+
+    [Fact]
+    public async Task MarkPublished_RejectsArchivedProject()
+    {
+        var fixture = new ContentProjectFixture()
+            .SeedSucceededRender()
+            .SeedPassingQa()
+            .SeedApproval()
+            .SeedPublication();
+        fixture.Project.MarkReadyToPublish(Now());
+        fixture.Project.TransitionTo(ContentStatus.Archived, Now().AddMinutes(1));
+
+        var exception = await Assert.ThrowsAsync<ContentProjectException>(
+            () => fixture.ReadinessWorkflow.MarkPublishedAsync(
+                fixture.ProjectId,
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("content_project_transition_not_allowed", exception.ErrorCode);
+        Assert.Equal(ContentStatus.Archived, fixture.Project.Status);
+    }
+
+    [Fact]
+    public async Task MarkPublished_RejectsDraftProject()
+    {
+        var fixture = new ContentProjectFixture()
+            .SeedSucceededRender()
+            .SeedPassingQa()
+            .SeedApproval()
+            .SeedPublication();
+
+        var exception = await Assert.ThrowsAsync<ContentProjectException>(
+            () => fixture.ReadinessWorkflow.MarkPublishedAsync(
+                fixture.ProjectId,
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("content_project_transition_not_allowed", exception.ErrorCode);
+        Assert.Equal(ContentStatus.Draft, fixture.Project.Status);
+    }
+
+    [Fact]
+    public async Task MarkPublished_ReturnsNullWhenProjectDoesNotExist()
+    {
+        var fixture = new ContentProjectFixture(projectExists: false);
+
+        var result = await fixture.ReadinessWorkflow.MarkPublishedAsync(
+            fixture.ProjectId,
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(result);
+    }
+
     private static DateTimeOffset Now() => ContentProjectFixture.Now;
 }

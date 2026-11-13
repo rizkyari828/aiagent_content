@@ -147,12 +147,15 @@ public static class ContentProjectEndpoints
             return InvalidIdentifier("contentProjectId");
         }
 
-        if (!IsReadyToPublishTarget(request.To))
+        var isReadyToPublish = IsTarget(request.To, "ready_to_publish");
+        var isPublished = IsTarget(request.To, "published");
+
+        if (!isReadyToPublish && !isPublished)
         {
             return Results.ValidationProblem(
                 new Dictionary<string, string[]>
                 {
-                    ["to"] = ["Only the explicit 'ready_to_publish' transition is supported."]
+                    ["to"] = ["Only explicit 'ready_to_publish' and 'published' transitions are supported."]
                 },
                 extensions: new Dictionary<string, object?>
                 {
@@ -162,7 +165,9 @@ public static class ContentProjectEndpoints
 
         try
         {
-            var result = await workflow.MarkReadyToPublishAsync(projectId, cancellationToken);
+            var result = isReadyToPublish
+                ? await workflow.MarkReadyToPublishAsync(projectId, cancellationToken)
+                : await workflow.MarkPublishedAsync(projectId, cancellationToken);
             return result is null
                 ? ContentProjectNotFound(projectId)
                 : Results.Ok(ContentProjectTransitionResponse.From(result));
@@ -224,10 +229,10 @@ public static class ContentProjectEndpoints
                 ["code"] = InvalidRequestCode
             });
 
-    private static bool IsReadyToPublishTarget(string? target) =>
+    private static bool IsTarget(string? target, string expected) =>
         string.Equals(
             target?.Trim(),
-            "ready_to_publish",
+            expected,
             StringComparison.OrdinalIgnoreCase);
 
     private static bool TryParseIdentifier(string value, out Guid id) =>

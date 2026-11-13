@@ -36,7 +36,9 @@ public sealed class GenerateSceneVisualsJobHandler(
     IImageGenerationProvider imageProvider,
     IThreeDRenderingProvider threeDRenderer,
     IMediaInspector mediaInspector,
-    TimeProvider timeProvider) : IJobHandler
+    TimeProvider timeProvider,
+    IVideoGenerationProvider? videoProvider = null,
+    Action<string>? logWarning = null) : IJobHandler
 {
     private const string ImageOverlayLabel = "AI LOKAL · OFFLINE";
 
@@ -88,7 +90,7 @@ public sealed class GenerateSceneVisualsJobHandler(
             cancellationToken);
 
         var routingProfile = ResolveRoutingProfile(payload.ProductionRecipe);
-        var narrativeImage = routingProfile.NarrativeEngine == SceneVisualEngine.AiImage;
+        var narrativeImage = routingProfile.NarrativeEngine is SceneVisualEngine.AiImage or SceneVisualEngine.CharacterAnimation;
 
         var plans = SceneVisualPlanner.PlanAll(
             storyboard,
@@ -97,7 +99,8 @@ public sealed class GenerateSceneVisualsJobHandler(
             imageProvider.IsEnabled,
             threeDRenderer.IsEnabled,
             timing.Windows,
-            routingProfile);
+            routingProfile,
+            enableVideo: videoProvider?.IsEnabled ?? false);
 
         // Concrete pins persisted at materialization. Execution never resolves a
         // latest version and never reads the Bible/registry to pick an asset.
@@ -109,7 +112,13 @@ public sealed class GenerateSceneVisualsJobHandler(
         for (var sceneIndex = 0; sceneIndex < plans.Count; sceneIndex++)
         {
             var plan = plans[sceneIndex];
-            var expectedCreator = SceneVisualFingerprint.Creator(plan);
+            var firstFrame = identityReferences.Count > 0 ? identityReferences[0] : null;
+            var seed = DeriveSeed(payload.StoryboardJobId, sceneIndex);
+            var prompt = SceneImagePrompt.Build(plan.Brief, narrative: true, payload.ArtDirection);
+            var expectedCreator = plan.Engine == SceneVisualEngine.CharacterAnimation
+                ? SceneVisualFingerprint.CharacterAnimationCreator(prompt, seed, firstFrame)
+                : SceneVisualFingerprint.Creator(plan);
+
             var existing = await assets.FindBySceneAsync(
                 job.ContentProjectId,
                 sceneIndex,
@@ -127,16 +136,89 @@ public sealed class GenerateSceneVisualsJobHandler(
                 continue;
             }
 
-            var (relativePath, bytes, assetType) = await GenerateAsync(
-                plan,
-                sceneIndex,
-                job.ContentProjectId,
-                payload.StoryboardJobId,
-                identityReferences,
-                narrativeImage,
-                payload.ArtDirection,
-                cancellationToken);
-            var file = await WriteAsync(relativePath, bytes, cancellationToken);
+            AssetFileInfo file;
+            AssetType assetType;
+            SceneVisualPlan executedPlan = plan;
+            var status = plan.IsFallback ? "fallback" : "generated";
+
+            if (plan.Engine == SceneVisualEngine.CharacterAnimation)
+            {
+                assetType = AssetType.Video;
+                if (videoProvider is not null && videoProvider.IsEnabled)
+                {
+                    try
+                    {
+                        var duration = (int)Math.Max(1, Math.Round(plan.Direction?.DurationSeconds ?? SceneVisualPlanner.AnimationDurationSeconds));
+                        var request = new VideoGenerationRequest(
+                            prompt,
+                            duration,
+                            FramesPerSecond: 24,
+                            Width: 1280,
+                            Height: 720,
+                            Seed: seed,
+                            FirstFrame: firstFrame,
+                            Provider: payload.VideoProvider);
+
+                        var videoResult = await videoProvider.GenerateAsync(request, cancellationToken);
+                        file = new AssetFileInfo(
+                            videoResult.RelativeOutputPath,
+                            string.Empty,
+                            videoResult.ByteSize,
+                            videoResult.ContentHash);
+                    }
+                    catch (VideoGenerationException exception)
+                    {
+                        logWarning?.Invoke(
+                            $"[WARN] Video generation failed for scene {sceneIndex} with error {exception.ErrorCode}: {exception.Message}. Falling back gracefully.");
+
+                        (file, executedPlan, status) = await FallbackFromCharacterAnimationAsync(
+                            plan,
+                            sceneIndex,
+                            job.ContentProjectId,
+                            payload.StoryboardJobId,
+                            identityReferences,
+                            narrativeImage,
+                            payload.ArtDirection,
+                            payload.ImageProvider,
+                            cancellationToken);
+                        expectedCreator = SceneVisualFingerprint.Creator(executedPlan);
+                        assetType = executedPlan.Engine == SceneVisualEngine.SvgStill ? AssetType.Image : AssetType.Video;
+                    }
+                }
+                else
+                {
+                    logWarning?.Invoke(
+                        $"[WARN] Video generation provider is disabled or unavailable for scene {sceneIndex}. Falling back gracefully.");
+
+                    (file, executedPlan, status) = await FallbackFromCharacterAnimationAsync(
+                        plan,
+                        sceneIndex,
+                        job.ContentProjectId,
+                        payload.StoryboardJobId,
+                        identityReferences,
+                        narrativeImage,
+                        payload.ArtDirection,
+                        payload.ImageProvider,
+                        cancellationToken);
+                    expectedCreator = SceneVisualFingerprint.Creator(executedPlan);
+                    assetType = executedPlan.Engine == SceneVisualEngine.SvgStill ? AssetType.Image : AssetType.Video;
+                }
+            }
+            else
+            {
+                var (relativePath, bytes, generatedType) = await GenerateAsync(
+                    plan,
+                    sceneIndex,
+                    job.ContentProjectId,
+                    payload.StoryboardJobId,
+                    identityReferences,
+                    narrativeImage,
+                    payload.ArtDirection,
+                    payload.ImageProvider,
+                    cancellationToken);
+                file = await WriteAsync(relativePath, bytes, cancellationToken);
+                assetType = generatedType;
+            }
 
             if (existing is null)
             {
@@ -170,18 +252,17 @@ public sealed class GenerateSceneVisualsJobHandler(
 
             await assets.SaveChangesAsync(cancellationToken);
 
-            var status = plan.IsFallback ? "fallback" : "generated";
             generated.Add(new GeneratedSceneVisual(
                 sceneIndex,
-                plan.Engine.ToString(),
-                TemplateName(plan),
+                executedPlan.Engine.ToString(),
+                TemplateName(executedPlan),
                 file.RelativePath,
                 file.ByteSize,
                 file.ContentHash,
                 plan.IntendedEngine.ToString(),
                 status,
                 plan.Direction?.Intent.ToString() ?? string.Empty));
-            routing.Add(Route(plan, plan.Engine.ToString(), status));
+            routing.Add(Route(executedPlan, executedPlan.Engine.ToString(), status));
         }
 
         var result = new GenerateSceneVisualsResult(
@@ -310,6 +391,39 @@ public sealed class GenerateSceneVisualsJobHandler(
         }
     }
 
+    private async Task<(AssetFileInfo File, SceneVisualPlan Plan, string Status)> FallbackFromCharacterAnimationAsync(
+        SceneVisualPlan plan,
+        int sceneIndex,
+        Guid contentProjectId,
+        Guid storyboardJobId,
+        IReadOnlyList<PinnedIdentityAsset> identityReferences,
+        bool narrativeImage,
+        string? artDirection,
+        string? imageProviderOverride,
+        CancellationToken cancellationToken)
+    {
+        var fallbackEngine = plan.Direction?.FallbackEngine ?? SceneVisualEngine.AiImage;
+        if (fallbackEngine == SceneVisualEngine.AiImage && !imageProvider.IsEnabled)
+        {
+            fallbackEngine = manimRenderer.IsEnabled ? SceneVisualEngine.ManimAnimation : SceneVisualEngine.AnimatedSvg;
+        }
+
+        var fallbackPlan = plan with { Engine = fallbackEngine, IsFallback = true };
+        var (relativePath, bytes, _) = await GenerateAsync(
+            fallbackPlan,
+            sceneIndex,
+            contentProjectId,
+            storyboardJobId,
+            identityReferences,
+            narrativeImage,
+            artDirection,
+            imageProviderOverride,
+            cancellationToken);
+
+        var file = await WriteAsync(relativePath, bytes, cancellationToken);
+        return (file, fallbackPlan, "fallback");
+    }
+
     private async Task<(string RelativePath, byte[] Bytes, AssetType Type)> GenerateAsync(
         SceneVisualPlan plan,
         int sceneIndex,
@@ -318,6 +432,7 @@ public sealed class GenerateSceneVisualsJobHandler(
         IReadOnlyList<PinnedIdentityAsset> identityReferences,
         bool narrativeImage,
         string? artDirection,
+        string? imageProviderOverride,
         CancellationToken cancellationToken)
     {
         var duration = plan.Direction?.DurationSeconds
@@ -346,6 +461,7 @@ public sealed class GenerateSceneVisualsJobHandler(
                     identityReferences,
                     narrativeImage,
                     artDirection,
+                    imageProviderOverride,
                     cancellationToken),
                 SceneVisualEngine.AnimatedSvg => await svgRenderer.RenderAnimationAsync(
                     plan.Brief,
@@ -406,6 +522,7 @@ public sealed class GenerateSceneVisualsJobHandler(
         IReadOnlyList<PinnedIdentityAsset> identityReferences,
         bool narrativeImage,
         string? artDirection,
+        string? imageProviderOverride,
         CancellationToken cancellationToken)
     {
         ImageGenerationRequest request;
@@ -417,7 +534,8 @@ public sealed class GenerateSceneVisualsJobHandler(
             request = new ImageGenerationRequest(
                 SceneImagePrompt.Build(plan.Brief, narrativeImage, artDirection),
                 DeriveSeed(storyboardJobId, sceneIndex),
-                identityReferences);
+                identityReferences,
+                imageProviderOverride);
         }
         catch (NotSupportedException exception)
         {

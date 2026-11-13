@@ -62,6 +62,27 @@ public sealed class GenerateSceneVisualsWorkflow(
     /// payload then carries only stable values, so execution and retries never
     /// re-resolve and cannot drift. Nothing is inferred from storyboard text.
     /// </summary>
+    public Task<Guid?> EnqueueAsync(
+        Guid contentProjectId,
+        Guid storyboardJobId,
+        bool force,
+        ProductionRecipeReference? productionRecipe,
+        string? artDirection,
+        IReadOnlyList<AssetReference>? identityReferences,
+        CancellationToken cancellationToken) =>
+        EnqueueAsync(contentProjectId, storyboardJobId, force, productionRecipe, artDirection, identityReferences, imageProvider: null, cancellationToken);
+
+    public Task<Guid?> EnqueueAsync(
+        Guid contentProjectId,
+        Guid storyboardJobId,
+        bool force,
+        ProductionRecipeReference? productionRecipe,
+        string? artDirection,
+        IReadOnlyList<AssetReference>? identityReferences,
+        string? imageProvider,
+        CancellationToken cancellationToken) =>
+        EnqueueAsync(contentProjectId, storyboardJobId, force, productionRecipe, artDirection, identityReferences, imageProvider, videoProvider: null, cancellationToken);
+
     public async Task<Guid?> EnqueueAsync(
         Guid contentProjectId,
         Guid storyboardJobId,
@@ -69,6 +90,8 @@ public sealed class GenerateSceneVisualsWorkflow(
         ProductionRecipeReference? productionRecipe,
         string? artDirection,
         IReadOnlyList<AssetReference>? identityReferences,
+        string? imageProvider,
+        string? videoProvider,
         CancellationToken cancellationToken)
     {
         RequireIdentifier(contentProjectId, nameof(contentProjectId));
@@ -97,7 +120,9 @@ public sealed class GenerateSceneVisualsWorkflow(
             {
                 ProductionRecipe = recipe,
                 ArtDirection = normalizedArtDirection,
-                IdentityReferences = identityPins.Count == 0 ? null : identityPins
+                IdentityReferences = identityPins.Count == 0 ? null : identityPins,
+                ImageProvider = string.IsNullOrWhiteSpace(imageProvider) ? null : imageProvider.Trim(),
+                VideoProvider = string.IsNullOrWhiteSpace(videoProvider) ? null : videoProvider.Trim()
             },
             JsonOptions);
 

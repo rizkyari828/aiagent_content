@@ -1,6 +1,7 @@
 using AIStudio.Application.Approvals;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs;
+using AIStudio.Application.Tracking;
 using AIStudio.Domain.Approvals;
 using AIStudio.Domain.Content;
 using AIStudio.Domain.Jobs;
@@ -83,6 +84,18 @@ internal sealed class FakeProjectJobReader : IProjectJobReader
         Jobs.OrderByDescending(job => job.CreatedAt).ThenByDescending(job => job.Id);
 }
 
+internal sealed class FakePublicationReferenceLookup(IPublicationRepository repository)
+    : IPublicationReferenceLookup
+{
+    public async Task<Guid?> FindPublicationRecordIdAsync(
+        Guid contentProjectId,
+        CancellationToken cancellationToken)
+    {
+        var record = await repository.FindByProjectIdAsync(contentProjectId, cancellationToken);
+        return record?.Id;
+    }
+}
+
 internal sealed class ContentProjectFixture
 {
     public ContentProjectFixture(bool projectExists = true)
@@ -98,6 +111,7 @@ internal sealed class ContentProjectFixture
                 : null);
         RenderJobs.Jobs[RenderJobId] = ApprovalTestData.RenderJob(Project.Id, RenderJobId);
 
+        PublicationLookup = new FakePublicationReferenceLookup(Publications);
         ProjectWorkflow = new ContentProjectWorkflow(Projects, JobSummaries, Time);
         ApprovalWorkflow = new FinalApprovalWorkflow(
             Approvals,
@@ -110,7 +124,8 @@ internal sealed class ContentProjectFixture
             JobSummaries,
             ApprovalWorkflow,
             Publications,
-            Time);
+            Time,
+            PublicationLookup);
     }
 
     public static DateTimeOffset Now => ApprovalTestData.Now;
@@ -135,6 +150,8 @@ internal sealed class ContentProjectFixture
     public FakeAssetFileStore Store { get; } = new();
 
     public FakePublicationRepository Publications { get; } = new();
+
+    public FakePublicationReferenceLookup PublicationLookup { get; }
 
     public ProjectReaderStub ProjectReader { get; }
 
@@ -210,6 +227,26 @@ internal sealed class ContentProjectFixture
             destination,
             decision: FinalApprovalDecision.ChangesRequested,
             decisionNote: note);
+        return this;
+    }
+
+    public ContentProjectFixture SeedPublication(
+        string platform = "youtube",
+        string url = "https://youtu.be/dQw4w9WgXcQ",
+        string videoId = "dQw4w9WgXcQ")
+    {
+        var approvalId = Approvals.Approval?.Id ?? Guid.NewGuid();
+        Publications.Record = PublicationRecord.Create(
+            ProjectId,
+            approvalId,
+            finalApprovalRevision: Approvals.Approval?.Revision ?? 1,
+            artifactContentHash: ApprovalTestData.RenderHash,
+            platform: platform,
+            url: url,
+            videoId: videoId,
+            publishedAt: Now.AddHours(-1),
+            notes: null,
+            utcNow: Now);
         return this;
     }
 }

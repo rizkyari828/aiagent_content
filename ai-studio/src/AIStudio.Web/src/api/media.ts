@@ -76,6 +76,14 @@ export interface RegisterSubtitleInput {
   retrievedAt?: string | null;
 }
 
+export interface SubtitleContentResponse {
+  contentProjectId: string;
+  path: string;
+  content: string;
+  byteSize: number;
+  contentHash: string;
+}
+
 export function listProjectAssets(
   projectId: string,
   signal?: AbortSignal,
@@ -152,6 +160,33 @@ export function registerProjectSubtitle(
     {
       method: "POST",
       body: input,
+      signal,
+    },
+  );
+}
+
+export function getSubtitleContent(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<SubtitleContentResponse> {
+  return fetchJson<SubtitleContentResponse>(
+    `/api/content-projects/${projectId}/subtitle/content`,
+    {
+      signal,
+    },
+  );
+}
+
+export function updateSubtitleContent(
+  projectId: string,
+  srtContent: string,
+  signal?: AbortSignal,
+): Promise<SubtitleContentResponse> {
+  return fetchJson<SubtitleContentResponse>(
+    `/api/content-projects/${projectId}/subtitle/content`,
+    {
+      method: "PUT",
+      body: { srtContent },
       signal,
     },
   );

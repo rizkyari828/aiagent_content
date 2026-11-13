@@ -350,7 +350,7 @@ export function ProjectsScreen({ onOpenProject }: ProjectsScreenProps) {
               onChange={(event) => setTitle(event.target.value)}
             />
             {fieldErrors.title ? (
-              <p className="field__error" id="project-title-error">
+              <p className="field__error" id="project-title-error" role="alert">
                 {fieldErrors.title}
               </p>
             ) : (
@@ -378,7 +378,7 @@ export function ProjectsScreen({ onOpenProject }: ProjectsScreenProps) {
               onChange={(event) => setBrief(event.target.value)}
             />
             {fieldErrors.brief ? (
-              <p className="field__error" id="project-brief-error">
+              <p className="field__error" id="project-brief-error" role="alert">
                 {fieldErrors.brief}
               </p>
             ) : (

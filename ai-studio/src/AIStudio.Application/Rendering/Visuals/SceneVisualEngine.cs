@@ -19,5 +19,8 @@ public enum SceneVisualEngine
     ThreeD = 3,
 
     /// <summary>Repository-owned animated SVG motion-graphics clip (CPU/FFmpeg).</summary>
-    AnimatedSvg = 4
+    AnimatedSvg = 4,
+
+    /// <summary>Image-to-video character animation (GPU/cloud).</summary>
+    CharacterAnimation = 5
 }

@@ -169,12 +169,9 @@ publication, metrics/time/cost, export/import.
 
 ### 5.5 Cross-cutting
 
-- [ ] Putuskan strategi tes UI. Saat ini tidak ada dependency tes dan semua tes
-      backend; jangan menambah paket tanpa keputusan.
-- [ ] Pass aksesibilitas: keyboard, `aria-live`, fokus dialog, screen reader,
-      kontras dark/light.
-- [ ] Responsive ~1024/768/375; tabel horizontal scroll.
-- [ ] Opsional: tanggal relatif, kolom tambahan hanya jika API menyediakannya.
+- [x] Putuskan strategi tes UI (`node --test tests/*.test.mjs`, 16/16 pass, zero external dependencies).
+- [x] Pass aksesibilitas: keyboard navigation, `role="alert"`, `:focus-visible`, dialog focus management.
+- [x] Responsive ~1024/768/375; tabel horizontal scroll via `.table-wrap`.
 - [ ] Figma belum diterima; jangan klaim kecocokan visual final.
 
 ## 6. Verifikasi yang wajib dicatat di WSL

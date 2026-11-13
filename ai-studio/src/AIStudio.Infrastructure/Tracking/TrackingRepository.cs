@@ -56,6 +56,16 @@ public sealed class TrackingRepository(ApplicationDbContext dbContext)
             .Take(take)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<MetricSnapshot>> ListAllSnapshotsAsync(
+        Guid contentProjectId,
+        CancellationToken cancellationToken) =>
+        await dbContext.MetricSnapshots
+            .AsNoTracking()
+            .Where(snapshot => snapshot.ContentProjectId == contentProjectId)
+            .OrderByDescending(snapshot => snapshot.CapturedAt)
+            .ThenBy(snapshot => snapshot.Id)
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<TimeEntry>> ListTimeEntriesAsync(
         Guid contentProjectId,
         int take,

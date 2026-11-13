@@ -16,4 +16,5 @@ public sealed record VideoGenerationRequest(
     int Width,
     int Height,
     long Seed,
-    PinnedIdentityAsset? FirstFrame = null);
+    PinnedIdentityAsset? FirstFrame = null,
+    string? Provider = null);

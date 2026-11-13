@@ -5,9 +5,10 @@ namespace AIStudio.Application.Rendering.Visuals;
 /// caller must honour when the provider is available) and degrades safely along the
 /// documented chain when a provider is disabled:
 /// <code>
-/// ThreeD  -> Manim -> Animated SVG
-/// AiImage -> Manim -> Animated SVG
-/// Manim   -> Animated SVG
+/// CharacterAnimation -> AiImage -> Manim -> Animated SVG
+/// ThreeD              -> Manim -> Animated SVG
+/// AiImage             -> Manim -> Animated SVG
+/// Manim               -> Animated SVG
 /// </code>
 /// Animated SVG and SVG still are always available because they are CPU-only
 /// repository-owned renderers, so a production never fails just because an optional
@@ -19,12 +20,18 @@ public static class SceneVisualRouter
         SceneVisualDirection direction,
         bool manimEnabled,
         bool imageEnabled,
-        bool threeDEnabled)
+        bool threeDEnabled,
+        bool videoEnabled = false)
     {
         ArgumentNullException.ThrowIfNull(direction);
 
         return direction.PreferredEngine switch
         {
+            SceneVisualEngine.CharacterAnimation => SelectCharacterAnimation(
+                direction,
+                videoEnabled,
+                imageEnabled,
+                manimEnabled),
             SceneVisualEngine.ThreeD => SelectThreeD(direction, manimEnabled, threeDEnabled),
             SceneVisualEngine.ManimAnimation => SelectManim(direction, manimEnabled),
             SceneVisualEngine.AiImage => SelectAiImage(direction, manimEnabled, imageEnabled),
@@ -34,6 +41,24 @@ public static class SceneVisualRouter
                 fallback: direction.PreferredEngine != SceneVisualEngine.AnimatedSvg,
                 reason: "animated_svg")
         };
+    }
+
+    private static SceneVisualRouteResult SelectCharacterAnimation(
+        SceneVisualDirection direction,
+        bool videoEnabled,
+        bool imageEnabled,
+        bool manimEnabled)
+    {
+        if (videoEnabled)
+        {
+            return Route(
+                direction,
+                SceneVisualEngine.CharacterAnimation,
+                fallback: false,
+                reason: "character_animation_available");
+        }
+
+        return SelectAiImage(direction, manimEnabled, imageEnabled, "video_disabled");
     }
 
     private static SceneVisualRouteResult SelectThreeD(
@@ -77,14 +102,19 @@ public static class SceneVisualRouter
     private static SceneVisualRouteResult SelectAiImage(
         SceneVisualDirection direction,
         bool manimEnabled,
-        bool imageEnabled)
+        bool imageEnabled,
+        string fallbackReason = "aiimage_disabled")
     {
         if (imageEnabled)
         {
-            return Route(direction, SceneVisualEngine.AiImage, fallback: false, reason: "aiimage_available");
+            return Route(
+                direction,
+                SceneVisualEngine.AiImage,
+                fallback: direction.PreferredEngine != SceneVisualEngine.AiImage,
+                reason: direction.PreferredEngine != SceneVisualEngine.AiImage ? fallbackReason : "aiimage_available");
         }
 
-        return SelectManim(direction, manimEnabled, "aiimage_disabled");
+        return SelectManim(direction, manimEnabled, fallbackReason);
     }
 
     private static SceneVisualRouteResult Route(

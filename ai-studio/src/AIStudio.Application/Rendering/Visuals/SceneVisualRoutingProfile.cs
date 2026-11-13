@@ -38,6 +38,11 @@ public sealed record SceneVisualRoutingProfile(SceneVisualEngine NarrativeEngine
                 continue;
             }
 
+            if (capability == CapabilityIds.VisualCharacterAnimation)
+            {
+                return new SceneVisualRoutingProfile(SceneVisualEngine.CharacterAnimation);
+            }
+
             return capability == CapabilityIds.VisualAiImage
                 ? new SceneVisualRoutingProfile(SceneVisualEngine.AiImage)
                 : Default;

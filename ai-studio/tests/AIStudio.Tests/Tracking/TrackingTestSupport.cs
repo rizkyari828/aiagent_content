@@ -60,6 +60,15 @@ internal sealed class FakeTrackingRepository : ITrackingRepository
             .Take(take)
             .ToArray());
 
+    public Task<IReadOnlyList<MetricSnapshot>> ListAllSnapshotsAsync(
+        Guid contentProjectId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<MetricSnapshot>>(Snapshots
+            .Where(snapshot => snapshot.ContentProjectId == contentProjectId)
+            .OrderByDescending(snapshot => snapshot.CapturedAt)
+            .ThenBy(snapshot => snapshot.Id)
+            .ToArray());
+
     public Task<IReadOnlyList<TimeEntry>> ListTimeEntriesAsync(
         Guid contentProjectId,
         int take,

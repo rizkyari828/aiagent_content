@@ -116,6 +116,28 @@ public sealed class ContentProject
         UpdatedAt = NormalizeUpdateTime(utcNow);
     }
 
+    /// <summary>
+    /// Explicit publishing transition. Only a project in <see cref="ContentStatus.ReadyToPublish"/>
+    /// can transition to <see cref="ContentStatus.Published"/>. Re-applying this transition
+    /// to an already-published project is an idempotent no-op that leaves <see cref="UpdatedAt"/> untouched.
+    /// </summary>
+    public void MarkPublished(DateTimeOffset utcNow)
+    {
+        if (Status == ContentStatus.Published)
+        {
+            return;
+        }
+
+        if (Status != ContentStatus.ReadyToPublish)
+        {
+            throw new InvalidOperationException(
+                $"Content project cannot become Published from {Status}.");
+        }
+
+        Status = ContentStatus.Published;
+        UpdatedAt = NormalizeUpdateTime(utcNow);
+    }
+
     private static bool CanTransition(ContentStatus current, ContentStatus next) =>
         (current, next) switch
         {

@@ -20,6 +20,13 @@ public sealed class SubtitleRepository(ApplicationDbContext dbContext) : ISubtit
         dbContext.SubtitleTracks.Add(track);
     }
 
+    public Task UpdateAsync(SubtitleTrack track, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(track);
+        dbContext.SubtitleTracks.Update(track);
+        return Task.CompletedTask;
+    }
+
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken) =>
         dbContext.SaveChangesAsync(cancellationToken);
 }

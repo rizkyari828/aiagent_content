@@ -21,6 +21,13 @@ internal sealed class StubSubtitleRepository(SubtitleTrack? subtitle = null)
 
     public void Add(SubtitleTrack track) => Subtitle = track;
 
+    public Task UpdateAsync(SubtitleTrack track, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Subtitle = track;
+        return Task.CompletedTask;
+    }
+
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();

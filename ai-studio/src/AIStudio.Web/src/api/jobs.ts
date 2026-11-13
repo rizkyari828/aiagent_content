@@ -188,7 +188,17 @@ export interface EnqueueVisualJobOptions {
   productionRecipe?: VisualProductionRecipeReference | null;
   identityReference?: VisualIdentityReference | null;
   artDirection?: string | null;
+  imageProvider?: string;
+  videoProvider?: string;
 }
+
+export type EnqueueGenerateVisualsInput = EnqueueVisualJobOptions;
+
+export interface EnqueueAudioJobOptions {
+  speechProvider?: string;
+}
+
+export type EnqueueGenerateAudioInput = EnqueueAudioJobOptions;
 
 export async function getJob<TResult = unknown>(
   jobId: string,
@@ -267,10 +277,14 @@ export function enqueueVisualJob(
   signal?: AbortSignal,
 ): Promise<EnqueuedJobResponse> {
   const query = options?.force ? "?force=true" : "";
+  const trimmedImageProvider = options?.imageProvider?.trim();
+  const trimmedVideoProvider = options?.videoProvider?.trim();
   const hasBody =
     options?.productionRecipe !== undefined ||
     options?.identityReference !== undefined ||
-    options?.artDirection !== undefined;
+    options?.artDirection !== undefined ||
+    (trimmedImageProvider !== undefined && trimmedImageProvider.length > 0) ||
+    (trimmedVideoProvider !== undefined && trimmedVideoProvider.length > 0);
 
   const body = hasBody
     ? {
@@ -282,6 +296,12 @@ export function enqueueVisualJob(
           : {}),
         ...(options?.artDirection !== undefined
           ? { artDirection: options.artDirection }
+          : {}),
+        ...(trimmedImageProvider && trimmedImageProvider.length > 0
+          ? { imageProvider: trimmedImageProvider }
+          : {}),
+        ...(trimmedVideoProvider && trimmedVideoProvider.length > 0
+          ? { videoProvider: trimmedVideoProvider }
           : {}),
       }
     : undefined;
@@ -299,12 +319,32 @@ export function enqueueVisualJob(
 export function enqueueAudioJob(
   projectId: string,
   storyboardJobId: string,
-  signal?: AbortSignal,
+  optionsOrSignal?: EnqueueAudioJobOptions | AbortSignal,
+  maybeSignal?: AbortSignal,
 ): Promise<EnqueuedJobResponse> {
+  let options: EnqueueAudioJobOptions | undefined;
+  let signal: AbortSignal | undefined;
+
+  if (optionsOrSignal instanceof AbortSignal) {
+    signal = optionsOrSignal;
+  } else {
+    options = optionsOrSignal;
+    signal = maybeSignal;
+  }
+
+  const trimmedSpeechProvider = options?.speechProvider?.trim();
+  const hasBody =
+    trimmedSpeechProvider !== undefined && trimmedSpeechProvider.length > 0;
+
+  const body = hasBody
+    ? { speechProvider: trimmedSpeechProvider }
+    : undefined;
+
   return fetchJson<EnqueuedJobResponse>(
     `/api/content-projects/${projectId}/storyboard-jobs/${storyboardJobId}/audio-jobs`,
     {
       method: "POST",
+      body,
       signal,
     },
   );

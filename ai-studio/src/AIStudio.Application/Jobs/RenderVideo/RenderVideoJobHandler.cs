@@ -27,7 +27,8 @@ public sealed class RenderVideoJobHandler(
     ISubtitleRepository subtitles,
     IAssetFileStore fileStore,
     IVideoRenderer renderer,
-    AudioProductionWorkspace audioWorkspace) : IJobHandler
+    AudioProductionWorkspace audioWorkspace,
+    IMediaInspector? mediaInspector = null) : IJobHandler
 {
     public bool CanHandle(JobType type) => type == JobType.RenderVideo;
 
@@ -212,13 +213,31 @@ public sealed class RenderVideoJobHandler(
                 ? SceneMotionCycles.ForAiImageNarrative(sceneIndex)
                 : (SceneMotion?)null;
 
+            double? sourceDuration = null;
+            if (asset.Type == AssetType.Video && mediaInspector is not null)
+            {
+                try
+                {
+                    var inspection = await mediaInspector.InspectAsync(assetFile.AbsolutePath, cancellationToken);
+                    if (inspection.DurationSeconds > 0)
+                    {
+                        sourceDuration = inspection.DurationSeconds;
+                    }
+                }
+                catch (ProcessExecutionException)
+                {
+                    // Fall back cleanly if probe fails
+                }
+            }
+
             sceneInputs.Add(new SceneMediaInput(
                 assetFile.AbsolutePath,
                 asset.Type,
                 Motion: motion,
                 VisualKind: visualKind,
                 Weight: weight,
-                DurationSeconds: duration));
+                DurationSeconds: duration,
+                SourceDurationSeconds: sourceDuration));
         }
 
         return sceneInputs;

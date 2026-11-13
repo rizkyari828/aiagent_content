@@ -293,9 +293,93 @@ public sealed class ContentProjectApiContractTests
             problem.ProblemDetails.Extensions["code"]);
     }
 
+    [Fact]
+    public async Task Transition_Published_MarksPublishedAndIsIdempotent()
+    {
+        var fixture = new ContentProjectFixture()
+            .SeedSucceededRender()
+            .SeedPassingQa()
+            .SeedApproval()
+            .SeedPublication();
+        fixture.Project.MarkReadyToPublish(ContentProjectFixture.Now);
+
+        var first = await ContentProjectEndpoints.TransitionAsync(
+            fixture.ProjectId.ToString(),
+            new TransitionContentProjectRequest("published"),
+            fixture.ReadinessWorkflow,
+            TestContext.Current.CancellationToken);
+        var second = await ContentProjectEndpoints.TransitionAsync(
+            fixture.ProjectId.ToString(),
+            new TransitionContentProjectRequest("published"),
+            fixture.ReadinessWorkflow,
+            TestContext.Current.CancellationToken);
+
+        var firstOk = Assert.IsType<Ok<ContentProjectTransitionResponse>>(first);
+        Assert.NotNull(firstOk.Value);
+        Assert.True(firstOk.Value.Transitioned);
+        Assert.Equal("published", firstOk.Value.ProjectStatus);
+
+        var secondOk = Assert.IsType<Ok<ContentProjectTransitionResponse>>(second);
+        Assert.NotNull(secondOk.Value);
+        Assert.False(secondOk.Value.Transitioned);
+        Assert.Equal("published", secondOk.Value.ProjectStatus);
+        Assert.Equal(ContentStatus.Published, fixture.Project.Status);
+        Assert.Equal(1, fixture.Projects.SaveCount);
+    }
+
+    [Fact]
+    public async Task Transition_Published_RejectsWithoutPublicationRecord()
+    {
+        var fixture = new ContentProjectFixture()
+            .SeedSucceededRender()
+            .SeedPassingQa()
+            .SeedApproval();
+        fixture.Project.MarkReadyToPublish(ContentProjectFixture.Now);
+
+        var result = await ContentProjectEndpoints.TransitionAsync(
+            fixture.ProjectId.ToString(),
+            new TransitionContentProjectRequest("published"),
+            fixture.ReadinessWorkflow,
+            TestContext.Current.CancellationToken);
+
+        var problem = Assert.IsType<ProblemHttpResult>(result);
+        Assert.Equal(409, problem.StatusCode);
+        Assert.Equal("content_project_not_ready", problem.ProblemDetails.Extensions["code"]);
+        var reasons = Assert.IsAssignableFrom<IReadOnlyList<string>>(
+            problem.ProblemDetails.Extensions["reasons"]);
+        Assert.Equal(new[] { ContentReadinessCodes.PublicationMissing }, reasons);
+        Assert.Equal(ContentStatus.ReadyToPublish, fixture.Project.Status);
+    }
+
+    [Fact]
+    public async Task Transition_Published_RejectsArchivedProject()
+    {
+        var fixture = new ContentProjectFixture()
+            .SeedSucceededRender()
+            .SeedPassingQa()
+            .SeedApproval()
+            .SeedPublication();
+        fixture.Project.MarkReadyToPublish(ContentProjectFixture.Now);
+        fixture.Project.TransitionTo(
+            ContentStatus.Archived,
+            ContentProjectFixture.Now.AddMinutes(1));
+
+        var result = await ContentProjectEndpoints.TransitionAsync(
+            fixture.ProjectId.ToString(),
+            new TransitionContentProjectRequest("published"),
+            fixture.ReadinessWorkflow,
+            TestContext.Current.CancellationToken);
+
+        var problem = Assert.IsType<ProblemHttpResult>(result);
+        Assert.Equal(409, problem.StatusCode);
+        Assert.Equal(
+            "content_project_transition_not_allowed",
+            problem.ProblemDetails.Extensions["code"]);
+    }
+
     [Theory]
-    [InlineData("published")]
     [InlineData("archived")]
+    [InlineData("unknown_stage")]
     [InlineData("")]
     public async Task Transition_RejectsUnsupportedTarget(string target)
     {

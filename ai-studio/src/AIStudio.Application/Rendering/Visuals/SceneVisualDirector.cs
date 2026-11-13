@@ -68,6 +68,13 @@ public static class SceneVisualDirector
         // capability, never a text match; provider availability still governs the
         // final engine, and technical intents keep their specialized routing.
         if (intent == SceneVisualIntent.Generic
+            && routingProfile is { NarrativeEngine: SceneVisualEngine.CharacterAnimation })
+        {
+            preferred = SceneVisualEngine.CharacterAnimation;
+            fallback = SceneVisualEngine.AiImage;
+            motion = "parallax_push";
+        }
+        else if (intent == SceneVisualIntent.Generic
             && routingProfile is { NarrativeEngine: SceneVisualEngine.AiImage })
         {
             preferred = SceneVisualEngine.AiImage;

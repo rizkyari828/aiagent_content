@@ -81,13 +81,26 @@ export interface CurrencyCostSummary {
   refundExceedsActual: boolean;
 }
 
+export type MetricSnapshot = MetricSnapshotResponse;
+
+export interface PublicationRollupItem {
+  publicationRecordId: string | null;
+  snapshotCount: number;
+  latestMetricSnapshot: MetricSnapshot | null;
+}
+
+export type PublicationRollup = PublicationRollupItem;
+
 export interface TrackingSummaryResponse {
   contentProjectId: string;
   latestMetricSnapshot: MetricSnapshotResponse | null;
   humanMinutesTotal: number;
   machineMinutesTotal: number;
   costs: CurrencyCostSummary[];
+  publicationRollups?: PublicationRollupItem[];
 }
+
+export type TrackingSummary = TrackingSummaryResponse;
 
 const MIN_TAKE = 1;
 const MAX_TAKE = 100;

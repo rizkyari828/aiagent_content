@@ -18,6 +18,7 @@ import {
   type CostEntryResponse,
   type CurrencyCostSummary,
   type MetricSnapshotResponse,
+  type PublicationRollupItem,
   type TimeEntryKind,
   type TimeEntryResponse,
   type TrackingSummaryResponse,
@@ -665,6 +666,74 @@ export function MetricsSection({
     },
   ];
 
+  const rollupColumns: readonly TableColumn<PublicationRollupItem>[] = [
+    {
+      key: "publicationRecordId",
+      header: t("project.metrics.rollups.columnPublicationId"),
+      render: (row) =>
+        row.publicationRecordId ? (
+          <span className="mono">{row.publicationRecordId}</span>
+        ) : (
+          "—"
+        ),
+    },
+    {
+      key: "snapshotCount",
+      header: t("project.metrics.rollups.columnSnapshots"),
+      align: "end",
+      render: (row) => number(row.snapshotCount),
+    },
+    {
+      key: "views",
+      header: t("project.metrics.rollups.columnLatestViews"),
+      align: "end",
+      render: (row) =>
+        renderMetricNumber(row.latestMetricSnapshot?.views, number, "—"),
+    },
+    {
+      key: "impressions",
+      header: t("project.metrics.rollups.columnLatestImpressions"),
+      align: "end",
+      render: (row) =>
+        renderMetricNumber(row.latestMetricSnapshot?.impressions, number, "—"),
+    },
+    {
+      key: "clickThroughRate",
+      header: t("project.metrics.rollups.columnLatestCtr"),
+      align: "end",
+      render: (row) =>
+        row.latestMetricSnapshot?.clickThroughRate !== null &&
+        row.latestMetricSnapshot?.clickThroughRate !== undefined
+          ? t("project.metrics.unit.percent", {
+              value: number(row.latestMetricSnapshot.clickThroughRate),
+            })
+          : "—",
+    },
+    {
+      key: "watchTimeMinutes",
+      header: t("project.metrics.rollups.columnLatestWatchTime"),
+      align: "end",
+      render: (row) =>
+        renderMetricNumber(
+          row.latestMetricSnapshot?.watchTimeMinutes,
+          number,
+          "—",
+        ),
+    },
+    {
+      key: "capturedAt",
+      header: t("project.metrics.rollups.columnLatestCaptured"),
+      render: (row) =>
+        row.latestMetricSnapshot?.capturedAt ? (
+          <time dateTime={row.latestMetricSnapshot.capturedAt}>
+            {dateTime(row.latestMetricSnapshot.capturedAt)}
+          </time>
+        ) : (
+          "—"
+        ),
+    },
+  ];
+
   const snapshotColumns: readonly TableColumn<MetricSnapshotResponse>[] = [
     {
       key: "capturedAt",
@@ -999,6 +1068,22 @@ export function MetricsSection({
               )}
             </Card>
           </div>
+
+          {summary?.publicationRollups && summary.publicationRollups.length > 0 ? (
+            <Card
+              title={t("project.metrics.rollups.title")}
+              description={t("project.metrics.rollups.description")}
+            >
+              <Table
+                columns={rollupColumns}
+                rows={summary.publicationRollups}
+                rowKey={(row) =>
+                  row.publicationRecordId ?? `unlinked-${row.snapshotCount}`
+                }
+                caption={t("project.metrics.rollups.tableCaption")}
+              />
+            </Card>
+          ) : null}
 
           {/* Section 2: Metric Snapshots Table */}
           <Card
