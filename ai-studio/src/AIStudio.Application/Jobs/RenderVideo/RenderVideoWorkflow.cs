@@ -164,6 +164,95 @@ public sealed class RenderVideoWorkflow(
         }
     }
 
+    public async Task<RenderPreviewArtifact?> GetPreviewArtifactAsync(
+        Guid contentProjectId,
+        Guid renderJobId,
+        IAssetFileStore assetFileStore,
+        CancellationToken cancellationToken)
+    {
+        RequireIdentifier(contentProjectId, nameof(contentProjectId));
+        RequireIdentifier(renderJobId, nameof(renderJobId));
+        ArgumentNullException.ThrowIfNull(assetFileStore);
+
+        var project = await contentProjects.FindByIdAsync(
+            contentProjectId,
+            cancellationToken);
+        if (project is null)
+        {
+            return null;
+        }
+
+        var job = await jobs.FindByIdAsync(renderJobId, cancellationToken);
+        if (job is null || job.ContentProjectId != contentProjectId)
+        {
+            return null;
+        }
+
+        if (job.Type != JobType.RenderVideo)
+        {
+            throw Error(
+                "render_job_invalid_type",
+                $"Job '{renderJobId}' is not a RenderVideo job.");
+        }
+
+        if (job.Status != JobStatus.Succeeded || string.IsNullOrWhiteSpace(job.Result))
+        {
+            throw Error(
+                "render_preview_not_ready",
+                $"Render job '{renderJobId}' has not completed with a video output.");
+        }
+
+        RenderVideoResult renderResult;
+        try
+        {
+            renderResult = RenderVideoResult.Deserialize(job.Result);
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw Error(
+                "render_result_invalid",
+                "The render job result is not valid.",
+                exception);
+        }
+
+        AssetFileInfo file;
+        try
+        {
+            file = assetFileStore.Register(renderResult.OutputPath);
+        }
+        catch (AssetCollectionException exception)
+            when (exception.ErrorCode == "asset_file_not_found")
+        {
+            throw Error(
+                "render_preview_file_missing",
+                exception.Message,
+                exception);
+        }
+        catch (AssetCollectionException exception)
+        {
+            throw Error(
+                "render_preview_file_invalid",
+                exception.Message,
+                exception);
+        }
+
+        if (!string.Equals(
+                file.ContentHash,
+                renderResult.ContentHash,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw Error(
+                "render_preview_hash_mismatch",
+                "Rendered video file hash does not match the recorded job result.");
+        }
+
+        return new RenderPreviewArtifact(
+            file.AbsolutePath,
+            file.ContentHash,
+            file.ByteSize,
+            $"render-{renderJobId:N}.mp4");
+    }
+
     private static string ComputeInputVersionHash(
         string payload,
         GenerateStoryboardResult storyboard,
@@ -222,3 +311,9 @@ public sealed class RenderVideoWorkflow(
         Exception? innerException = null) =>
         new(errorCode, message, innerException);
 }
+
+public sealed record RenderPreviewArtifact(
+    string AbsolutePath,
+    string ContentHash,
+    long ByteSize,
+    string DownloadFileName);

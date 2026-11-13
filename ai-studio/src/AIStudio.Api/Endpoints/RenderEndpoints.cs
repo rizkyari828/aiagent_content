@@ -1,3 +1,4 @@
+using AIStudio.Application.Assets;
 using AIStudio.Application.Jobs.RenderVideo;
 using AIStudio.Application.Rendering;
 
@@ -15,6 +16,16 @@ public static class RenderEndpoints
                 EnqueueRenderVideoAsync)
             .WithName("EnqueueRenderVideo")
             .Produces<EnqueueJobResponse>(StatusCodes.Status202Accepted)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesValidationProblem();
+
+        api.MapGet(
+                "/content-projects/{contentProjectId}/render-jobs/{renderJobId}/preview",
+                GetRenderPreviewAsync)
+            .WithName("GetRenderPreview")
+            .Produces(StatusCodes.Status200OK, contentType: "video/mp4")
+            .Produces(StatusCodes.Status206PartialContent, contentType: "video/mp4")
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesValidationProblem();
@@ -73,10 +84,64 @@ public static class RenderEndpoints
         }
     }
 
+    internal static async Task<IResult> GetRenderPreviewAsync(
+        string contentProjectId,
+        string renderJobId,
+        RenderVideoWorkflow workflow,
+        IAssetFileStore assetFileStore,
+        CancellationToken cancellationToken)
+    {
+        if (!TryParseIdentifier(contentProjectId, out var parsedProjectId))
+        {
+            return InvalidIdentifier("contentProjectId");
+        }
+
+        if (!TryParseIdentifier(renderJobId, out var parsedRenderJobId))
+        {
+            return InvalidIdentifier("renderJobId");
+        }
+
+        try
+        {
+            var artifact = await workflow.GetPreviewArtifactAsync(
+                parsedProjectId,
+                parsedRenderJobId,
+                assetFileStore,
+                cancellationToken);
+
+            if (artifact is null)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Render preview not found.",
+                    detail: $"Render job '{parsedRenderJobId}' does not exist for content project '{parsedProjectId}'.");
+            }
+
+            return Results.File(
+                artifact.AbsolutePath,
+                contentType: "video/mp4",
+                enableRangeProcessing: true);
+        }
+        catch (RenderVideoException exception)
+        {
+            return RenderProblem(exception);
+        }
+        catch (ArgumentException exception)
+        {
+            return Results.ValidationProblem(
+                new Dictionary<string, string[]>
+                {
+                    [exception.ParamName ?? "request"] = [exception.Message]
+                });
+        }
+    }
+
     private static IResult RenderProblem(RenderVideoException exception) =>
         exception.ErrorCode switch
         {
-            "render_storyboard_not_found" or "render_narration_not_found" =>
+            "render_storyboard_not_found"
+                or "render_narration_not_found"
+                or "render_preview_file_missing" =>
                 Results.Problem(
                     statusCode: StatusCodes.Status404NotFound,
                     title: "Render input not found.",

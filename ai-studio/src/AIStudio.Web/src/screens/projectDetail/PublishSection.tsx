@@ -6,6 +6,7 @@ import {
   type FormEvent,
 } from "react";
 import { isApiRequestError, type ApiError } from "../../api/client";
+import { getRenderPreviewUrl } from "../../api/media";
 import {
   createProjectExport,
   getFinalApproval,
@@ -230,6 +231,16 @@ export function PublishSection({
   const [publicationFieldErrors, setPublicationFieldErrors] =
     useState<PublicationFormErrors>({});
   const platformInputRef = useRef<HTMLInputElement>(null);
+  const [previewError, setPreviewError] = useState(false);
+
+  const previewRenderJobId =
+    lastJob?.type === "RenderVideo" && lastJob.status === "Succeeded"
+      ? lastJob.id
+      : approvalStatus?.approval?.sourceRenderJobId || null;
+
+  useEffect(() => {
+    setPreviewError(false);
+  }, [previewRenderJobId]);
 
   // Initial and refreshed data loading
   useEffect(() => {
@@ -601,6 +612,48 @@ export function PublishSection({
 
       {loadState === "ready" ? (
         <div className="detail-grid">
+          {/* Card 0: Rendered Video Preview (AC-05) */}
+          <Card
+            title={t("project.publish.preview.title")}
+            description={t("project.publish.preview.description")}
+          >
+            {previewRenderJobId ? (
+              <div className="stack-sm">
+                <p className="inline-note mono">
+                  {t("project.publish.preview.renderJobLabel", {
+                    jobId: previewRenderJobId,
+                  })}
+                </p>
+                {previewError ? (
+                  <InlineError
+                    title={t("project.publish.preview.errorTitle")}
+                    detail={t("project.publish.preview.errorDetail")}
+                    onAction={() => setPreviewError(false)}
+                  />
+                ) : (
+                  <video
+                    key={previewRenderJobId}
+                    controls
+                    preload="metadata"
+                    src={getRenderPreviewUrl(projectId, previewRenderJobId)}
+                    onError={() => setPreviewError(true)}
+                    style={{
+                      width: "100%",
+                      maxHeight: "420px",
+                      borderRadius: "var(--radius-md, 8px)",
+                      backgroundColor: "#000",
+                    }}
+                  />
+                )}
+              </div>
+            ) : (
+              <EmptyState
+                title={t("project.publish.preview.emptyTitle")}
+                description={t("project.publish.preview.emptyDescription")}
+              />
+            )}
+          </Card>
+
           {/* Card 1: Final Approval (A3) */}
           <Card
             title={t("project.publish.approval.title")}

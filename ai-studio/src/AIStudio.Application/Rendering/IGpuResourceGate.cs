@@ -30,4 +30,6 @@ public static class GpuWorkloads
     public const string SpeechSynthesis = "speech";
 
     public const string MusicGeneration = "music";
+
+    public const string Transcription = "transcription";
 }

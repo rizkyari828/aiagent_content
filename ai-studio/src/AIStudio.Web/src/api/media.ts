@@ -1,4 +1,4 @@
-import { fetchJson } from "./client";
+import { API_BASE_URL, fetchJson } from "./client";
 
 export interface SceneAssetItem {
   id: string;
@@ -190,4 +190,11 @@ export function updateSubtitleContent(
       signal,
     },
   );
+}
+
+export function getRenderPreviewUrl(
+  projectId: string,
+  renderJobId: string,
+): string {
+  return `${API_BASE_URL}/api/content-projects/${encodeURIComponent(projectId)}/render-jobs/${encodeURIComponent(renderJobId)}/preview`;
 }
