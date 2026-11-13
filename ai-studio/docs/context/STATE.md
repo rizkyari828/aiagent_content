@@ -4,6 +4,11 @@ Updated: 2026-11-13.
 
 ## Current milestone
 
+PASS (home real, 2026-11-13) - P1 Gates `AC-10` (Cross-DB Restore) & `AC-11` (Offline-Safe Production):
+- `AC-10` Cross-DB Restore: Exported `0bdba51c-58a9-4fc0-9a68-6f3e130dadba` ("Anime Identity Proof #1") via `POST /api/content-projects/{id}/exports` -> `HTTP 201` (`19,906,375` bytes, SHA-256 `58563f8d1e6d5c636a8898e2fe34f28f2499bdd6e0d4fcecd8e20cd2f885d5e5`). Created clean PostgreSQL database `aistudio_restore_test`, applied all 8 EF migrations, booted `AIStudio.Api` (`127.0.0.1:5012`) against clean `Assets:RootPath`, imported `.zip` via `POST /api/projects/imports` (`file` field) -> `HTTP 201` (`files: 8`, `reviewedScripts: 1`, `sourceJobs: 14`, `sceneAssets: 5`). Verified `200 OK` on `GET` project, `readiness`, `assets`, `tracking-summary`, and `render-jobs/.../preview` (`AC-05`), then dropped temp DB and cleaned temp files.
+- `AC-11` Offline-Safe Production: Verified all `cloud_api` providers (`Gemini`, `DeepSeek`, `OpenAi`) disabled by default (`Capability*` 79/79 pass) and local CPU rendering/QA pipeline (`Rendering*`/`FinalVideoQa*` 657/658 pass, 1 skipped real-audio E2E; full non-persistence suite 1872/1873 pass).
+- Real Audio Generation E2E (`WSL_HOME_TODO.md §2.5`): **PASSED** (`AudioGenerationEndToEndTests.RealProviders_SynthesizeNarrationAndMusic_ThenMix` **1/1 passed, 0 skipped, 1m 41s** on RTX 4060 Ti using `/home/tama/Developer/Microservices/ai/voxcpm2` & `/home/tama/Developer/Microservices/ai/ACE-Step-1.5`).
+
 PASS (home real, 2026-11-13) - WSL Full DB Suite (`Persistence` + Non-Persistence), Live Proxy Smoke, & Render Preview (`AC-05`) Streaming:
 - `dotnet build AIStudio.slnx -c Release` -> 0 warnings / 0 errors; `dotnet test AIStudio.slnx -c Release --no-build` with PostgreSQL 18.6 (`aistudio-dev-postgres-1`, `127.0.0.1:5432`) -> **1914 total (1913 succeeded, 0 failed, 1 skipped** `AudioGenerationEndToEndTests.RealProviders_SynthesizeNarrationAndMusic_ThenMix`); `dotnet format AIStudio.slnx --no-restore --verify-no-changes` & `git diff --check` -> clean.
 - Live Vite dev proxy (`127.0.0.1:5173` -> `127.0.0.1:5002`): `GET /api/content-projects?take=5` -> `200 OK`, `GET /api/capabilities` -> `200 OK`, `/health/ready` (`5002`) -> `200 OK`.

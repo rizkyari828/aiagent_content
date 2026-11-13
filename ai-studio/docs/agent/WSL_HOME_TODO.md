@@ -104,7 +104,7 @@ Fitur-fitur berikut sudah **selesai dan teruji deterministik di Mac** (`code-onl
 - [ ] **2.4 I2V Benchmark & Real Workflow (`I2V_HOME_TASK.md`):**
   - Download weights LTX-Video 2B / Wan2.2 TI2V-5B di ComfyUI.
   - Author `i2v_workflow.json` & `i2v_workflow_first_frame.json` sesuai node `GET /object_info`, jalankan benchmark 16 GB VRAM dan rekam bukti sesuai `I2V_BENCHMARK_SPEC.md`.
-- [ ] **2.5 Real Audio Generation E2E:**
+- [x] **2.5 Real Audio Generation E2E:**
   - Set env `AISTUDIO_VOXCPM_*` / `AISTUDIO_ACESTEP_*` lalu jalankan `AudioGenerationEndToEndTests.RealProviders_SynthesizeNarrationAndMusic_ThenMix` agar status tidak skipped.
 
 ---
