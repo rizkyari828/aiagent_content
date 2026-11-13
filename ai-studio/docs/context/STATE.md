@@ -4,6 +4,13 @@ Updated: 2026-11-13.
 
 ## Current milestone
 
+PASS (office code-only, 2026-11-13) - UI Polish & Code-Splitting (`WSL_HOME_TODO.md §3C`):
+- Frontend (`AIStudio.Web`): `npx tsc --noEmit` -> exit 0; `npx vite build` -> exit 0 (54 modules, 0 chunk warnings; `dist/assets/index-CTfLfKcw.js` 338.54 kB / gzip 98.01 kB, `dist/assets/ProjectDetailScreen-B5t2ja8E.js` 142.18 kB / gzip 23.03 kB, `dist/assets/SettingsScreen-CQTBRVpC.js` 14.56 kB / gzip 3.90 kB, `dist/assets/RunsScreen-Dv5-bTb4.js` 8.96 kB / gzip 2.76 kB, CSS 26.40 kB / gzip 5.40 kB); `npm test` (`node --test tests/*.test.mjs`) -> **17/17 pass**; `git diff --check` -> clean; 0 hardcoded UI strings.
+- Added:
+  1. `transcribeSubtitleFromNarration` in `src/api/media.ts` (`POST /api/content-projects/{id}/subtitle/transcribe`).
+  2. "Buat Subtitle dari Narasi" / "Generate Subtitle from Narration" action button in `AssetsAudioSection.tsx` with narration presence gating, busy indicator, `InlineError` handling (404/409/503), subtitle metadata & SRT content auto-reload, and `onMutated` notification. 100% key parity in `id.json`/`en.json`.
+  3. Route code-splitting in `src/App.tsx` via `React.lazy` + `Suspense` (`ScreenFallback` skeleton) for `ProjectDetailScreen`, `RunsScreen`, and `SettingsScreen`, dropping the primary bundle from `501.28 kB` to `338.54 kB` and eliminating the `> 500 kB` chunk warning.
+
 PASS (office code-only, 2026-11-13) - Render Video Preview (`AC-05`) & Faster-Whisper Transcription Adapter (`PRD §35`):
 - `dotnet build AIStudio.slnx -c Release` -> 0 warnings / 0 errors; `dotnet test AIStudio.slnx -c Release --no-build --filter "FullyQualifiedName!~Persistence"` -> **1873 total (1872 passed, 0 failed, 1 skipped real-audio E2E)**; `dotnet format AIStudio.slnx --no-restore --verify-no-changes` -> clean; `git diff --check` -> clean. Note: PostgreSQL `Persistence` tests and real GPU/Faster-Whisper runs remain unexecuted on this MacBook (`office code-only`) and await Home WSL2 + RTX 4060 Ti verification.
 - Frontend (`AIStudio.Web`): `npx tsc --noEmit` -> exit 0; `npx vite build` -> exit 0 (53 modules, `dist/assets/index-Da8clkzG.js` 501.28 kB / gzip 123.57 kB, `dist/assets/index-BspOqGSq.css` 26.40 kB / gzip 5.40 kB); `npm test` (`node --test tests/*.test.mjs`) -> **16/16 pass**; 0 hardcoded UI strings.

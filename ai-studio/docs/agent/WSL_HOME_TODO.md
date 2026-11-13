@@ -137,8 +137,8 @@ Fitur-fitur berikut sudah **selesai dan teruji deterministik di Mac** (`code-onl
 - [ ] **Closed-Loop Learning (`PRD §32`):** Tangkap optional `CorrectionReason` saat revisi + ringkasan `SupportedGuideline` (dipromosikan manual oleh operator).
 
 ### 3C. UI Polish & Kelulusan Operasional P1 (`P1_READINESS.md`)
-- [ ] Tambah tombol *"Buat Subtitle dari Narasi"* (`POST .../subtitle/transcribe`) di `AssetsAudioSection.tsx` + `api/media.ts`.
-- [ ] Code-splitting `AIStudio.Web` untuk menurunkan chunk JS (`501.28 kB` -> `< 500 kB`) + visual Figma audit (`UI-01`).
+- [x] Tambah tombol *"Buat Subtitle dari Narasi"* (`POST .../subtitle/transcribe`) di `AssetsAudioSection.tsx` + `api/media.ts`.
+- [x] Code-splitting `AIStudio.Web` untuk menurunkan chunk JS (`501.28 kB` -> `< 500 kB`, max chunk sekarang `index-CTfLfKcw.js` 338.54 kB / `ProjectDetailScreen-B5t2ja8E.js` 142.18 kB) + visual Figma audit (`UI-01`).
 - [ ] Sisa skema P1 lainnya bila dibutuhkan (`AC-04` Asset Rights/Eligibility status, `AC-09` Revenue/Income tracking).
 - [ ] **P1 Gates (`AC-08`, `AC-10`, `AC-11`):**
   - [ ] Produksi & publikasi 1 video nyata ke YouTube -> catat real `videoId` di `PublicationRecord` (`AC-08`).

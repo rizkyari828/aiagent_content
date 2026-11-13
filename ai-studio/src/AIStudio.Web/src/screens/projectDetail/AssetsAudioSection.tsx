@@ -13,6 +13,7 @@ import {
   registerProjectNarration,
   registerProjectSubtitle,
   registerSceneAsset,
+  transcribeSubtitleFromNarration,
   updateSubtitleContent,
   type NarrationTrackResponse,
   type SceneAssetItem,
@@ -31,6 +32,7 @@ import { useI18n, type Translate } from "../../i18n/i18n";
 export interface AssetsAudioSectionProps {
   projectId: string;
   onProjectChanged: () => void;
+  onMutated?: () => void;
 }
 
 type LoadState = "loading" | "ready" | "error";
@@ -92,6 +94,7 @@ function errorCode(error: ApiError): string | undefined {
 export function AssetsAudioSection({
   projectId,
   onProjectChanged,
+  onMutated,
 }: AssetsAudioSectionProps) {
   const { t } = useI18n();
   const { dateTime, number } = useFormatters();
@@ -145,7 +148,9 @@ export function AssetsAudioSection({
   const [subtitleApiError, setSubtitleApiError] = useState<ApiError | null>(null);
   const [submittingSubtitle, setSubmittingSubtitle] = useState(false);
 
-  // Subtitle Editor State
+  // Subtitle Transcription & Editor State
+  const [transcribingSubtitle, setTranscribingSubtitle] = useState(false);
+  const [transcribeError, setTranscribeError] = useState<ApiError | null>(null);
   const [subtitleContent, setSubtitleContent] = useState("");
   const [subtitleLoaded, setSubtitleLoaded] = useState(false);
   const [loadingSubtitleContent, setLoadingSubtitleContent] = useState(false);
@@ -161,6 +166,7 @@ export function AssetsAudioSection({
 
     setLoadState("loading");
     setLoadError(null);
+    setTranscribeError(null);
     setSubtitleLoaded(false);
     setSubtitleContent("");
     setSubtitleEditorError(null);
@@ -498,11 +504,39 @@ export function AssetsAudioSection({
       await updateSubtitleContent(projectId, subtitleContent);
       showToast(t("project.assets.toast.subtitleContentSaved"), "success");
       refresh();
+      onMutated?.();
       onProjectChanged();
     } catch (err: unknown) {
       setSubtitleEditorError(toApiError(err));
     } finally {
       setSavingSubtitleContent(false);
+    }
+  };
+
+  const handleTranscribeSubtitle = async () => {
+    if (transcribingSubtitle) {
+      return;
+    }
+    setTranscribingSubtitle(true);
+    setTranscribeError(null);
+    try {
+      const updatedTrack = await transcribeSubtitleFromNarration(projectId);
+      setSubtitle(updatedTrack);
+      try {
+        const contentRes = await getSubtitleContent(projectId);
+        setSubtitleContent(contentRes.content);
+        setSubtitleLoaded(true);
+      } catch {
+        // Content fetch is best-effort immediately following transcription
+      }
+      showToast(t("project.assets.toast.subtitleTranscribed"), "success");
+      refresh();
+      onMutated?.();
+      onProjectChanged();
+    } catch (err: unknown) {
+      setTranscribeError(toApiError(err));
+    } finally {
+      setTranscribingSubtitle(false);
     }
   };
 
@@ -662,13 +696,46 @@ export function AssetsAudioSection({
               title={t("project.assets.subtitle.title")}
               description={t("project.assets.subtitle.description")}
               actions={
-                <Button variant="secondary" onClick={openSubtitleDialog}>
-                  {subtitle
-                    ? t("project.assets.subtitle.action.replace")
-                    : t("project.assets.subtitle.action.register")}
-                </Button>
+                <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
+                  <Button
+                    variant="primary"
+                    onClick={handleTranscribeSubtitle}
+                    loading={transcribingSubtitle}
+                    loadingLabel={t("project.assets.subtitle.transcribing")}
+                    disabled={transcribingSubtitle || !narration}
+                    title={
+                      !narration
+                        ? t("project.assets.subtitle.action.transcribeNoNarrationHint")
+                        : undefined
+                    }
+                  >
+                    {t("project.assets.subtitle.action.transcribe")}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={openSubtitleDialog}
+                    disabled={transcribingSubtitle}
+                  >
+                    {subtitle
+                      ? t("project.assets.subtitle.action.replace")
+                      : t("project.assets.subtitle.action.register")}
+                  </Button>
+                </div>
               }
             >
+              {transcribeError ? (
+                <div style={{ marginBottom: "var(--space-3)" }}>
+                  <InlineError
+                    title={t("project.assets.subtitle.transcribeErrorTitle")}
+                    detail={
+                      transcribeError.detail ?? transcribeError.title
+                    }
+                    code={errorCode(transcribeError)}
+                    actionLabel={t("action.retry")}
+                    onAction={handleTranscribeSubtitle}
+                  />
+                </div>
+              ) : null}
               {subtitle ? (
                 <>
                   <dl className="definition-list">
@@ -776,14 +843,14 @@ export function AssetsAudioSection({
                             onChange={(e) => setSubtitleContent(e.target.value)}
                           />
                         </div>
-                        <div style={{ display: "flex", gap: "var(--space-2)" }}>
+                        <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
                           <Button
                             type="submit"
                             variant="primary"
                             size="sm"
                             loading={savingSubtitleContent}
                             loadingLabel={t("project.assets.subtitle.saving")}
-                            disabled={savingSubtitleContent}
+                            disabled={savingSubtitleContent || transcribingSubtitle}
                           >
                             {t("project.assets.subtitle.saveContent")}
                           </Button>
@@ -794,9 +861,25 @@ export function AssetsAudioSection({
                             onClick={handleLoadSubtitleContent}
                             loading={loadingSubtitleContent}
                             loadingLabel={t("project.assets.subtitle.loadingContent")}
-                            disabled={savingSubtitleContent}
+                            disabled={savingSubtitleContent || transcribingSubtitle}
                           >
                             {t("project.assets.subtitle.reloadContent")}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleTranscribeSubtitle}
+                            loading={transcribingSubtitle}
+                            loadingLabel={t("project.assets.subtitle.transcribing")}
+                            disabled={transcribingSubtitle || savingSubtitleContent || !narration}
+                            title={
+                              !narration
+                                ? t("project.assets.subtitle.action.transcribeNoNarrationHint")
+                                : undefined
+                            }
+                          >
+                            {t("project.assets.subtitle.action.transcribe")}
                           </Button>
                         </div>
                       </form>
@@ -805,7 +888,18 @@ export function AssetsAudioSection({
                 </details>
               </>
             ) : (
-              <p className="inline-note">{t("project.assets.subtitle.empty")}</p>
+              <div className="stack-sm">
+                <p className="inline-note">{t("project.assets.subtitle.empty")}</p>
+                {narration ? (
+                  <p className="inline-note" style={{ color: "var(--text-muted)" }}>
+                    {t("project.assets.subtitle.transcribeAvailableHint")}
+                  </p>
+                ) : (
+                  <p className="inline-note" style={{ color: "var(--text-muted)" }}>
+                    {t("project.assets.subtitle.action.transcribeNoNarrationHint")}
+                  </p>
+                )}
+              </div>
             )}
             </Card>
           </div>

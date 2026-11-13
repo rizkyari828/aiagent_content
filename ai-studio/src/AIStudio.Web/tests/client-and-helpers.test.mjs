@@ -296,3 +296,25 @@ test("buildAudioBody: preserves body-less request when options are unset/empty, 
     speechProvider: "gemini-tts",
   });
 });
+
+test("transcribeSubtitleFromNarration: correctly builds endpoint url and payload with language or null", () => {
+  function buildTranscribeUrl(projectId) {
+    return `/api/content-projects/${encodeURIComponent(projectId)}/subtitle/transcribe`;
+  }
+  function buildTranscribeBody(language) {
+    return { language: language ?? null };
+  }
+
+  assert.strictEqual(
+    buildTranscribeUrl("01b7f0ef-1111-2222-3333-444455556666"),
+    "/api/content-projects/01b7f0ef-1111-2222-3333-444455556666/subtitle/transcribe",
+  );
+  assert.strictEqual(
+    buildTranscribeUrl("id/with/special chars"),
+    "/api/content-projects/id%2Fwith%2Fspecial%20chars/subtitle/transcribe",
+  );
+  assert.deepStrictEqual(buildTranscribeBody(), { language: null });
+  assert.deepStrictEqual(buildTranscribeBody(undefined), { language: null });
+  assert.deepStrictEqual(buildTranscribeBody("id"), { language: "id" });
+  assert.deepStrictEqual(buildTranscribeBody("en"), { language: "en" });
+});

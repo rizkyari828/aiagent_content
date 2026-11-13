@@ -67,6 +67,8 @@ export interface SubtitleTrackResponse {
   createdAt: string;
 }
 
+export type SubtitleTrack = SubtitleTrackResponse;
+
 export interface RegisterSubtitleInput {
   path: string;
   origin: string;
@@ -197,4 +199,19 @@ export function getRenderPreviewUrl(
   renderJobId: string,
 ): string {
   return `${API_BASE_URL}/api/content-projects/${encodeURIComponent(projectId)}/render-jobs/${encodeURIComponent(renderJobId)}/preview`;
+}
+
+export function transcribeSubtitleFromNarration(
+  projectId: string,
+  language?: string,
+  signal?: AbortSignal,
+): Promise<SubtitleTrack> {
+  return fetchJson<SubtitleTrack>(
+    `/api/content-projects/${encodeURIComponent(projectId)}/subtitle/transcribe`,
+    {
+      method: "POST",
+      body: { language: language ?? null },
+      signal,
+    },
+  );
 }
