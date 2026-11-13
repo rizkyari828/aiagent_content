@@ -1,5 +1,6 @@
 using AIStudio.Application.Jobs.GenerateAudio;
 using AIStudio.Application.Rendering.AudioProduction;
+using Microsoft.AspNetCore.Mvc;
 
 namespace AIStudio.Api.Endpoints;
 
@@ -22,9 +23,10 @@ public static class AudioEndpoints
         return endpoints;
     }
 
-    private static async Task<IResult> EnqueueAudioAsync(
+    internal static async Task<IResult> EnqueueAudioAsync(
         string contentProjectId,
         string storyboardJobId,
+        [FromBody] EnqueueAudioRequest? request,
         GenerateAudioWorkflow workflow,
         CancellationToken cancellationToken)
     {
@@ -43,6 +45,7 @@ public static class AudioEndpoints
             var jobId = await workflow.EnqueueAsync(
                 parsedProjectId,
                 parsedStoryboardJobId,
+                request?.SpeechProvider,
                 cancellationToken);
 
             if (jobId is null)
@@ -91,3 +94,9 @@ public static class AudioEndpoints
                 [fieldName] = ["A non-empty GUID is required."]
             });
 }
+
+/// <summary>
+/// Optional audio-enqueue body. Exposes an optional selected speech synthesis provider;
+/// keeping body-less requests 100% valid.
+/// </summary>
+public sealed record EnqueueAudioRequest(string? SpeechProvider = null);

@@ -17,6 +17,14 @@ public sealed record GenerateAudioJobPayload(
     public const int MaxVoiceProfileLength = 64;
     public const int MaxLocaleLength = 32;
 
+    /// <summary>
+    /// Optional caller-supplied speech synthesis provider (e.g. "voxcpm2", "gemini-tts").
+    /// Omitted entirely when not supplied, preserving existing default fallback.
+    /// </summary>
+    [JsonPropertyName("speechProvider")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SpeechProvider { get; init; }
+
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web)
         {

@@ -217,6 +217,6 @@ public sealed class ProductionRecipeResolverTests
         Assert.All(resolution.Requirements, requirement => Assert.NotNull(requirement.Capability.Provider));
     }
 
-    private static ProductionRecipe SeedRecipe(string id) =>
-        SeedProductionRecipes.All.Single(recipe => recipe.Id.Value == id);
+    private static ProductionRecipe SeedRecipe(string id, int version = 1) =>
+        SeedProductionRecipes.All.Single(recipe => recipe.Id.Value == id && recipe.Version.Value == version);
 }

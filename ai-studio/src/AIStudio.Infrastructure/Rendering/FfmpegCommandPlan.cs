@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using AIStudio.Application.Rendering;
+using AIStudio.Application.Rendering.Visuals;
 using AIStudio.Domain.Assets;
 
 namespace AIStudio.Infrastructure.Rendering;
@@ -104,6 +105,15 @@ public static class FfmpegCommandPlan
             {
                 arguments.Add("-loop");
                 arguments.Add("1");
+            }
+            else if (scene.Type == AssetType.Video && scene.SourceDurationSeconds is > 0)
+            {
+                var timing = VideoClipTiming.Fit(scene.SourceDurationSeconds.Value, sceneDurations[index]);
+                if (timing.RepeatCount > 0)
+                {
+                    arguments.Add("-stream_loop");
+                    arguments.Add(timing.RepeatCount.ToString(CultureInfo.InvariantCulture));
+                }
             }
 
             arguments.Add("-t");

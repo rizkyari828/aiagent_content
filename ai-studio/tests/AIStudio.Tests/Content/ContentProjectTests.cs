@@ -129,4 +129,44 @@ public sealed class ContentProjectTests
         Assert.Throws<InvalidOperationException>(
             () => project.MarkReadyToPublish(Now.AddMinutes(3)));
     }
+
+    [Fact]
+    public void MarkPublished_SetsStatusAndTimestampFromReadyToPublish()
+    {
+        var project = ContentProject.Create("Local AI pilot", null, Now);
+        project.MarkReadyToPublish(Now.AddMinutes(1));
+
+        project.MarkPublished(Now.AddMinutes(2));
+
+        Assert.Equal(ContentStatus.Published, project.Status);
+        Assert.Equal(Now.AddMinutes(2), project.UpdatedAt);
+    }
+
+    [Fact]
+    public void MarkPublished_IsIdempotent()
+    {
+        var project = ContentProject.Create("Local AI pilot", null, Now);
+        project.MarkReadyToPublish(Now.AddMinutes(1));
+        project.MarkPublished(Now.AddMinutes(2));
+
+        project.MarkPublished(Now.AddMinutes(3));
+
+        Assert.Equal(ContentStatus.Published, project.Status);
+        Assert.Equal(Now.AddMinutes(2), project.UpdatedAt);
+    }
+
+    [Theory]
+    [InlineData(ContentStatus.Draft)]
+    [InlineData(ContentStatus.Archived)]
+    public void MarkPublished_RejectsInvalidStatuses(ContentStatus invalid)
+    {
+        var project = ContentProject.Create("Local AI pilot", null, Now);
+        if (invalid == ContentStatus.Archived)
+        {
+            project.TransitionTo(ContentStatus.Archived, Now.AddMinutes(1));
+        }
+
+        Assert.Throws<InvalidOperationException>(
+            () => project.MarkPublished(Now.AddMinutes(2)));
+    }
 }

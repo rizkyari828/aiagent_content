@@ -8,10 +8,12 @@ import { isApiRequestError, type ApiError } from "../../api/client";
 import {
   getProjectNarration,
   getProjectSubtitle,
+  getSubtitleContent,
   listProjectAssets,
   registerProjectNarration,
   registerProjectSubtitle,
   registerSceneAsset,
+  updateSubtitleContent,
   type NarrationTrackResponse,
   type SceneAssetItem,
   type SubtitleTrackResponse,
@@ -143,6 +145,13 @@ export function AssetsAudioSection({
   const [subtitleApiError, setSubtitleApiError] = useState<ApiError | null>(null);
   const [submittingSubtitle, setSubmittingSubtitle] = useState(false);
 
+  // Subtitle Editor State
+  const [subtitleContent, setSubtitleContent] = useState("");
+  const [subtitleLoaded, setSubtitleLoaded] = useState(false);
+  const [loadingSubtitleContent, setLoadingSubtitleContent] = useState(false);
+  const [savingSubtitleContent, setSavingSubtitleContent] = useState(false);
+  const [subtitleEditorError, setSubtitleEditorError] = useState<ApiError | null>(null);
+
   const refresh = useCallback(() => {
     setReloadToken((token) => token + 1);
   }, []);
@@ -152,6 +161,9 @@ export function AssetsAudioSection({
 
     setLoadState("loading");
     setLoadError(null);
+    setSubtitleLoaded(false);
+    setSubtitleContent("");
+    setSubtitleEditorError(null);
 
     Promise.all([
       listProjectAssets(projectId, controller.signal),
@@ -464,6 +476,36 @@ export function AssetsAudioSection({
     }
   };
 
+  const handleLoadSubtitleContent = async () => {
+    setLoadingSubtitleContent(true);
+    setSubtitleEditorError(null);
+    try {
+      const res = await getSubtitleContent(projectId);
+      setSubtitleContent(res.content);
+      setSubtitleLoaded(true);
+    } catch (err: unknown) {
+      setSubtitleEditorError(toApiError(err));
+    } finally {
+      setLoadingSubtitleContent(false);
+    }
+  };
+
+  const handleSaveSubtitleContent = async (event: FormEvent) => {
+    event.preventDefault();
+    setSavingSubtitleContent(true);
+    setSubtitleEditorError(null);
+    try {
+      await updateSubtitleContent(projectId, subtitleContent);
+      showToast(t("project.assets.toast.subtitleContentSaved"), "success");
+      refresh();
+      onProjectChanged();
+    } catch (err: unknown) {
+      setSubtitleEditorError(toApiError(err));
+    } finally {
+      setSavingSubtitleContent(false);
+    }
+  };
+
   return (
     <div className="stack">
       {loadState === "loading" ? <AssetsSkeleton /> : null}
@@ -628,7 +670,8 @@ export function AssetsAudioSection({
               }
             >
               {subtitle ? (
-                <dl className="definition-list">
+                <>
+                  <dl className="definition-list">
                   <div>
                     <dt>{t("project.assets.track.path")}</dt>
                     <dd className="mono">{subtitle.path}</dd>
@@ -682,9 +725,88 @@ export function AssetsAudioSection({
                     </div>
                   ) : null}
                 </dl>
-              ) : (
-                <p className="inline-note">{t("project.assets.subtitle.empty")}</p>
-              )}
+                <details
+                  className="subtitle-editor"
+                  style={{
+                    marginTop: "var(--space-4)",
+                    paddingTop: "var(--space-3)",
+                    borderTop: "1px solid var(--border-color, rgba(255, 255, 255, 0.1))",
+                  }}
+                >
+                  <summary style={{ cursor: "pointer", fontWeight: 500 }}>
+                    {t("project.assets.subtitle.editorToggle")}
+                  </summary>
+                  <div className="stack-sm" style={{ marginTop: "var(--space-3)" }}>
+                    {subtitleEditorError ? (
+                      <InlineError
+                        title={t("project.assets.subtitle.editorErrorTitle")}
+                        detail={
+                          subtitleEditorError.detail ?? subtitleEditorError.title
+                        }
+                        code={errorCode(subtitleEditorError)}
+                      />
+                    ) : null}
+                    {!subtitleLoaded ? (
+                      <div>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={handleLoadSubtitleContent}
+                          loading={loadingSubtitleContent}
+                          loadingLabel={t("project.assets.subtitle.loadingContent")}
+                        >
+                          {t("project.assets.subtitle.loadContent")}
+                        </Button>
+                      </div>
+                    ) : (
+                      <form onSubmit={handleSaveSubtitleContent} className="stack-sm">
+                        <div className="field">
+                          <label
+                            className="field__label"
+                            htmlFor="subtitle-content-editor"
+                          >
+                            {t("project.assets.subtitle.contentLabel")}
+                          </label>
+                          <textarea
+                            id="subtitle-content-editor"
+                            className="field__textarea mono"
+                            rows={10}
+                            value={subtitleContent}
+                            onChange={(e) => setSubtitleContent(e.target.value)}
+                          />
+                        </div>
+                        <div style={{ display: "flex", gap: "var(--space-2)" }}>
+                          <Button
+                            type="submit"
+                            variant="primary"
+                            size="sm"
+                            loading={savingSubtitleContent}
+                            loadingLabel={t("project.assets.subtitle.saving")}
+                            disabled={savingSubtitleContent}
+                          >
+                            {t("project.assets.subtitle.saveContent")}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleLoadSubtitleContent}
+                            loading={loadingSubtitleContent}
+                            loadingLabel={t("project.assets.subtitle.loadingContent")}
+                            disabled={savingSubtitleContent}
+                          >
+                            {t("project.assets.subtitle.reloadContent")}
+                          </Button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                </details>
+              </>
+            ) : (
+              <p className="inline-note">{t("project.assets.subtitle.empty")}</p>
+            )}
             </Card>
           </div>
         </>

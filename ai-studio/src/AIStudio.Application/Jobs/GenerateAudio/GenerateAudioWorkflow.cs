@@ -23,9 +23,16 @@ public sealed class GenerateAudioWorkflow(
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
 
+    public Task<Guid?> EnqueueAsync(
+        Guid contentProjectId,
+        Guid storyboardJobId,
+        CancellationToken cancellationToken) =>
+        EnqueueAsync(contentProjectId, storyboardJobId, speechProvider: null, cancellationToken);
+
     public async Task<Guid?> EnqueueAsync(
         Guid contentProjectId,
         Guid storyboardJobId,
+        string? speechProvider,
         CancellationToken cancellationToken)
     {
         RequireIdentifier(contentProjectId, nameof(contentProjectId));
@@ -46,7 +53,10 @@ public sealed class GenerateAudioWorkflow(
             cancellationToken);
 
         var payload = JsonSerializer.Serialize(
-            new GenerateAudioJobPayload(contentProjectId, storyboardJobId),
+            new GenerateAudioJobPayload(contentProjectId, storyboardJobId)
+            {
+                SpeechProvider = string.IsNullOrWhiteSpace(speechProvider) ? null : speechProvider.Trim()
+            },
             JsonOptions);
 
         var job = Job.Create(

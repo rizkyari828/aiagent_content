@@ -360,7 +360,8 @@ public sealed class GenerateAudioJobHandler(
                     narration.Text,
                     voice,
                     relativePath,
-                    payload.Locale),
+                    payload.Locale,
+                    payload.SpeechProvider),
                 cancellationToken);
 
             return await workspace.DescribeAsync(output.RelativePath, cancellationToken);

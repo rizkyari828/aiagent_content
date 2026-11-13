@@ -27,6 +27,23 @@ public static class SubtitleEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesValidationProblem();
 
+        api.MapGet(
+                "/content-projects/{contentProjectId}/subtitle/content",
+                GetSubtitleContentAsync)
+            .WithName("GetSubtitleContent")
+            .Produces<SubtitleContentResponse>()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesValidationProblem();
+
+        api.MapPut(
+                "/content-projects/{contentProjectId}/subtitle/content",
+                UpdateSubtitleContentAsync)
+            .WithName("UpdateSubtitleContent")
+            .Produces<SubtitleContentResponse>()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesValidationProblem();
+
         return endpoints;
     }
 
@@ -107,8 +124,104 @@ public static class SubtitleEndpoints
             ? Results.Problem(
                 statusCode: StatusCodes.Status404NotFound,
                 title: "Subtitle not found.",
-                detail: $"Content project '{parsedProjectId}' does not have a subtitle track.")
+                detail: $"Content project '{parsedProjectId}' does not have a subtitle track.",
+                extensions: new Dictionary<string, object?> { ["code"] = "subtitle_not_found" })
             : Results.Ok(SubtitleResponse.From(subtitle));
+    }
+
+    internal static async Task<IResult> GetSubtitleContentAsync(
+        string contentProjectId,
+        SubtitleWorkflow workflow,
+        CancellationToken cancellationToken)
+    {
+        if (!TryParseIdentifier(contentProjectId, out var parsedProjectId))
+        {
+            return InvalidIdentifier("contentProjectId");
+        }
+
+        try
+        {
+            var content = await workflow.GetContentAsync(parsedProjectId, cancellationToken);
+            if (content is null)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Content project not found.",
+                    detail: $"Content project '{parsedProjectId}' does not exist.",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["code"] = "content_project_not_found"
+                    });
+            }
+
+            var subtitle = await workflow.FindAsync(parsedProjectId, cancellationToken);
+            return Results.Ok(new SubtitleContentResponse(
+                parsedProjectId,
+                subtitle?.Path ?? string.Empty,
+                content,
+                subtitle?.ByteSize ?? 0,
+                subtitle?.ContentHash ?? string.Empty));
+        }
+        catch (SubtitleException exception)
+        {
+            return SubtitleProblem(exception);
+        }
+    }
+
+    internal static async Task<IResult> UpdateSubtitleContentAsync(
+        string contentProjectId,
+        UpdateSubtitleContentRequest request,
+        SubtitleWorkflow workflow,
+        CancellationToken cancellationToken)
+    {
+        if (!TryParseIdentifier(contentProjectId, out var parsedProjectId))
+        {
+            return InvalidIdentifier("contentProjectId");
+        }
+
+        try
+        {
+            var srt = request.Content ?? request.SrtContent ?? string.Empty;
+            var updated = await workflow.UpdateContentAsync(
+                parsedProjectId,
+                srt,
+                cancellationToken);
+
+            if (updated is null)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Content project not found.",
+                    detail: $"Content project '{parsedProjectId}' does not exist.",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["code"] = "content_project_not_found"
+                    });
+            }
+
+            return Results.Ok(new SubtitleContentResponse(
+                updated.ContentProjectId,
+                updated.Path,
+                srt,
+                updated.ByteSize,
+                updated.ContentHash));
+        }
+        catch (SubtitleException exception)
+        {
+            return SubtitleProblem(exception);
+        }
+        catch (ArgumentException exception)
+        {
+            return Results.ValidationProblem(
+                new Dictionary<string, string[]>
+                {
+                    [exception.ParamName ?? "content"] = [exception.Message]
+                },
+                extensions: new Dictionary<string, object?>
+                {
+                    ["code"] = "subtitle_content_invalid"
+                });
+        }
     }
 
     private static IResult SubtitleProblem(SubtitleException exception) =>
@@ -117,28 +230,44 @@ public static class SubtitleEndpoints
             "subtitle_storyboard_not_found" => Results.Problem(
                 statusCode: StatusCodes.Status404NotFound,
                 title: "Storyboard job not found.",
-                detail: exception.Message),
+                detail: exception.Message,
+                extensions: new Dictionary<string, object?> { ["code"] = exception.ErrorCode }),
+            "subtitle_not_found" => Results.Problem(
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Subtitle not found.",
+                detail: exception.Message,
+                extensions: new Dictionary<string, object?> { ["code"] = exception.ErrorCode }),
+            "subtitle_content_invalid" => Results.ValidationProblem(
+                new Dictionary<string, string[]>
+                {
+                    ["content"] = [exception.Message]
+                },
+                extensions: new Dictionary<string, object?> { ["code"] = exception.ErrorCode }),
             "subtitle_provenance_required" => Results.ValidationProblem(
                 new Dictionary<string, string[]>
                 {
                     ["license"] = [exception.Message]
-                }),
+                },
+                extensions: new Dictionary<string, object?> { ["code"] = exception.ErrorCode }),
             "subtitle_format_unsupported" => Results.ValidationProblem(
                 new Dictionary<string, string[]>
                 {
                     ["path"] = [exception.Message]
-                }),
+                },
+                extensions: new Dictionary<string, object?> { ["code"] = exception.ErrorCode }),
             "asset_path_invalid" or "asset_file_not_found"
                 or "asset_file_unreadable" or "asset_file_invalid" =>
                 Results.ValidationProblem(
                     new Dictionary<string, string[]>
                     {
                         ["path"] = [exception.Message]
-                    }),
+                    },
+                    extensions: new Dictionary<string, object?> { ["code"] = exception.ErrorCode }),
             _ => Results.Problem(
                 statusCode: StatusCodes.Status409Conflict,
                 title: "Subtitle conflict.",
-                detail: exception.Message)
+                detail: exception.Message,
+                extensions: new Dictionary<string, object?> { ["code"] = exception.ErrorCode })
         };
 
     private static bool TryParseIdentifier(string value, out Guid id) =>
@@ -201,3 +330,14 @@ public sealed record SubtitleResponse(
             subtitle.RetrievedAt,
             subtitle.CreatedAt);
 }
+
+public sealed record UpdateSubtitleContentRequest(
+    string? Content = null,
+    string? SrtContent = null);
+
+public sealed record SubtitleContentResponse(
+    Guid ContentProjectId,
+    string Path,
+    string Content,
+    long ByteSize,
+    string ContentHash);

@@ -1,12 +1,13 @@
 using AIStudio.Application.Approvals;
 using AIStudio.Application.Jobs;
+using AIStudio.Application.Tracking;
 using AIStudio.Domain.Content;
 using AIStudio.Domain.Jobs;
 
 namespace AIStudio.Application.Content;
 
 /// <summary>
-/// Computed readiness plus the single guarded publishing transition.
+/// Computed readiness plus explicit guarded publishing transitions.
 ///
 /// Readiness reuses the A3 workflow for both QA evidence and approval validity; it
 /// never re-implements the QA pass rules or the approval invalidation rules. The
@@ -18,7 +19,8 @@ public sealed class ContentReadinessWorkflow(
     IProjectJobReader jobs,
     FinalApprovalWorkflow approvals,
     IPublicationRepository publications,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    IPublicationReferenceLookup? publicationLookup = null)
 {
     /// <summary>Returns <c>null</c> when the content project does not exist.</summary>
     public async Task<ContentReadiness?> EvaluateAsync(
@@ -135,14 +137,14 @@ public sealed class ContentReadinessWorkflow(
                         blocking: true));
         }
 
-        var publication = await publications.FindByProjectIdAsync(
+        var hasPublication = await HasPublicationRecordAsync(
             contentProjectId,
             cancellationToken);
 
         return Project(
             project,
             ContentReadinessStatus.ReadyToPublish,
-            publication is null
+            !hasPublication
                 ? Reason(
                     ContentReadinessCodes.PublicationMissing,
                     "No manual publication record exists yet; publishing remains an operator step.",
@@ -201,6 +203,94 @@ public sealed class ContentReadinessWorkflow(
         return updated is null
             ? null
             : new ContentProjectTransitionResult(true, updated);
+    }
+
+    /// <summary>
+    /// Explicit, evidence-gated transition to <see cref="ContentStatus.Published"/>.
+    /// Repeating it is idempotent (<c>Transitioned = false</c>); a project that is not
+    /// ready throws <see cref="ContentProjectException"/> with
+    /// <c>content_project_not_ready</c> plus the blocking reason codes.
+    /// An archived project throws <c>content_project_transition_not_allowed</c>.
+    /// </summary>
+    public async Task<ContentProjectTransitionResult?> MarkPublishedAsync(
+        Guid contentProjectId,
+        CancellationToken cancellationToken)
+    {
+        RequireIdentifier(contentProjectId, nameof(contentProjectId));
+
+        var readiness = await EvaluateAsync(contentProjectId, cancellationToken);
+        if (readiness is null)
+        {
+            return null;
+        }
+
+        if (readiness.ProjectStatus == ContentStatus.Published)
+        {
+            return new ContentProjectTransitionResult(false, readiness);
+        }
+
+        if (readiness.ProjectStatus == ContentStatus.Archived)
+        {
+            throw new ContentProjectException(
+                "content_project_transition_not_allowed",
+                $"Content project cannot become Published from {readiness.ProjectStatus}.");
+        }
+
+        var hasPublication = await HasPublicationRecordAsync(
+            contentProjectId,
+            cancellationToken);
+        var blockingReasons = new List<string>(readiness.BlockingReasonCodes);
+        if (!hasPublication && !blockingReasons.Contains(ContentReadinessCodes.PublicationMissing))
+        {
+            blockingReasons.Add(ContentReadinessCodes.PublicationMissing);
+        }
+
+        if (blockingReasons.Count > 0)
+        {
+            throw new ContentProjectException(
+                "content_project_not_ready",
+                "The content project is not ready to publish: a valid A3 final approval and a publication record are required.",
+                blockingReasons);
+        }
+
+        if (readiness.ProjectStatus != ContentStatus.ReadyToPublish)
+        {
+            throw new ContentProjectException(
+                "content_project_transition_not_allowed",
+                $"Content project cannot become Published from {readiness.ProjectStatus}.");
+        }
+
+        var project = await projects.FindByIdAsync(contentProjectId, cancellationToken);
+        if (project is null)
+        {
+            return null;
+        }
+
+        project.MarkPublished(timeProvider.GetUtcNow());
+        await projects.SaveChangesAsync(cancellationToken);
+
+        var updated = await EvaluateAsync(contentProjectId, cancellationToken);
+        return updated is null
+            ? null
+            : new ContentProjectTransitionResult(true, updated);
+    }
+
+    private async Task<bool> HasPublicationRecordAsync(
+        Guid contentProjectId,
+        CancellationToken cancellationToken)
+    {
+        if (publicationLookup is not null)
+        {
+            var publicationId = await publicationLookup.FindPublicationRecordIdAsync(
+                contentProjectId,
+                cancellationToken);
+            return publicationId is not null;
+        }
+
+        var publication = await publications.FindByProjectIdAsync(
+            contentProjectId,
+            cancellationToken);
+        return publication is not null;
     }
 
     private static ContentReadiness Project(

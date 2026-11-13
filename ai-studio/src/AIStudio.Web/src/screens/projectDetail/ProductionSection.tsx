@@ -1,13 +1,16 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
 } from "react";
 import {
+  getCapabilities,
   loadPreferredProviders,
   savePreferredProvider,
+  type CapabilityView,
   type FeatureCapabilityKey,
   type PreferredProvidersMap,
 } from "../../api/capabilities";
@@ -107,6 +110,25 @@ function isJobActive(status: string): boolean {
   );
 }
 
+const PROVIDER_I18N_KEYS: Record<string, string> = {
+  ollama: "project.production.provider.ollama",
+  "gemini-text": "project.production.provider.geminiText",
+  deepseek: "project.production.provider.deepseek",
+  openai: "project.production.provider.openai",
+  "comfyui-flux": "project.production.provider.comfyuiFlux",
+  "gemini-nanobanana": "project.production.provider.geminiNanobanana",
+  "comfyui-i2v": "project.production.provider.comfyuiI2v",
+  "gemini-veo": "project.production.provider.geminiVeo",
+  voxcpm2: "project.production.provider.voxcpm2",
+  "gemini-tts": "project.production.provider.geminiTts",
+  "ace-step": "project.production.provider.aceStep",
+};
+
+function getProviderLabel(providerId: string, t: Translate): string {
+  const key = PROVIDER_I18N_KEYS[providerId];
+  return key ? t(key) : providerId;
+}
+
 export function ProductionSection({
   projectId,
   lastJob,
@@ -119,6 +141,53 @@ export function ProductionSection({
   // Preferred Providers from Settings
   const [preferredProviders, setPreferredProviders] =
     useState<PreferredProvidersMap>(() => loadPreferredProviders());
+
+  // Capabilities from API
+  const [capabilities, setCapabilities] = useState<CapabilityView[]>([]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getCapabilities(controller.signal)
+      .then((res) => {
+        setCapabilities(res.capabilities);
+      })
+      .catch(() => {
+        // Fallback to static lists when API is unavailable
+      });
+    return () => controller.abort();
+  }, []);
+
+  const visualImageProviders = useMemo(() => {
+    const cap = capabilities.find((c) => c.id === "visual.ai_image");
+    if (cap && cap.providers.length > 0) {
+      return cap.providers.map((p) => p.providerId);
+    }
+    return ["comfyui-flux", "gemini-nanobanana"];
+  }, [capabilities]);
+
+  const visualVideoProviders = useMemo(() => {
+    const cap = capabilities.find((c) => c.id === "visual.character_animation");
+    if (cap && cap.providers.length > 0) {
+      return cap.providers.map((p) => p.providerId);
+    }
+    return ["comfyui-i2v", "gemini-veo"];
+  }, [capabilities]);
+
+  const audioSpeechProviders = useMemo(() => {
+    const cap = capabilities.find((c) => c.id === "speech.narration");
+    if (cap && cap.providers.length > 0) {
+      return cap.providers.map((p) => p.providerId);
+    }
+    return ["voxcpm2", "gemini-tts"];
+  }, [capabilities]);
+
+  const textGenerationProviders = useMemo(() => {
+    const cap = capabilities.find((c) => c.id === "text.generation");
+    if (cap && cap.providers.length > 0) {
+      return cap.providers.map((p) => p.providerId);
+    }
+    return ["ollama", "gemini-text", "deepseek", "openai"];
+  }, [capabilities]);
 
   // Job Inspector State
   const [jobIdInput, setJobIdInput] = useState(() => lastJob?.id ?? "");
@@ -176,6 +245,7 @@ export function ProductionSection({
     () => preferredProviders["visual.character_animation"] ?? "auto",
   );
   const [visualsStoryboardJobId, setVisualsStoryboardJobId] = useState("");
+  const [visualsRecipe, setVisualsRecipe] = useState<string>("auto");
   const [visualsForce, setVisualsForce] = useState(false);
   const [visualsArtDirection, setVisualsArtDirection] = useState("");
 
@@ -452,12 +522,27 @@ export function ProductionSection({
         );
         resultJobId = response.jobId;
       } else if (selectedJobType === "GenerateSceneVisuals") {
+        const recipeParts =
+          visualsRecipe !== "auto" ? visualsRecipe.split(":") : null;
+        const productionRecipe =
+          recipeParts && recipeParts.length === 2
+            ? {
+                id: recipeParts[0],
+                version: Number.parseInt(recipeParts[1], 10),
+              }
+            : undefined;
+
         const response = await enqueueVisualJob(
           projectId,
           visualsStoryboardJobId.trim(),
           {
             force: visualsForce,
             artDirection: visualsArtDirection.trim() || null,
+            imageProvider:
+              visualsImageProvider === "auto" ? undefined : visualsImageProvider,
+            videoProvider:
+              visualsVideoProvider === "auto" ? undefined : visualsVideoProvider,
+            productionRecipe,
           },
         );
         resultJobId = response.jobId;
@@ -465,6 +550,10 @@ export function ProductionSection({
         const response = await enqueueAudioJob(
           projectId,
           audioStoryboardJobId.trim(),
+          {
+            speechProvider:
+              audioSpeechProvider === "auto" ? undefined : audioSpeechProvider,
+          },
         );
         resultJobId = response.jobId;
       } else if (selectedJobType === "RenderVideo") {
@@ -752,18 +841,11 @@ export function ProductionSection({
                     <option value="auto">
                       {t("project.production.provider.auto")}
                     </option>
-                    <option value="ollama">
-                      {t("project.production.provider.ollama")}
-                    </option>
-                    <option value="gemini-text">
-                      {t("project.production.provider.geminiText")}
-                    </option>
-                    <option value="deepseek">
-                      {t("project.production.provider.deepseek")}
-                    </option>
-                    <option value="openai">
-                      {t("project.production.provider.openai")}
-                    </option>
+                    {textGenerationProviders.map((pid) => (
+                      <option key={pid} value={pid}>
+                        {getProviderLabel(pid, t)}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="field">
@@ -804,7 +886,7 @@ export function ProductionSection({
                     onChange={(e) => setIdeaTopic(e.target.value)}
                   />
                   {enqueueFormErrors.ideaTopic ? (
-                    <p className="field__error" id="idea-topic-error">
+                    <p className="field__error" id="idea-topic-error" role="alert">
                       {enqueueFormErrors.ideaTopic}
                     </p>
                   ) : null}
@@ -867,18 +949,11 @@ export function ProductionSection({
                     <option value="auto">
                       {t("project.production.provider.auto")}
                     </option>
-                    <option value="ollama">
-                      {t("project.production.provider.ollama")}
-                    </option>
-                    <option value="gemini-text">
-                      {t("project.production.provider.geminiText")}
-                    </option>
-                    <option value="deepseek">
-                      {t("project.production.provider.deepseek")}
-                    </option>
-                    <option value="openai">
-                      {t("project.production.provider.openai")}
-                    </option>
+                    {textGenerationProviders.map((pid) => (
+                      <option key={pid} value={pid}>
+                        {getProviderLabel(pid, t)}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="field">
@@ -919,7 +994,7 @@ export function ProductionSection({
                     onChange={(e) => setScriptTitle(e.target.value)}
                   />
                   {enqueueFormErrors.scriptTitle ? (
-                    <p className="field__error" id="script-title-error">
+                    <p className="field__error" id="script-title-error" role="alert">
                       {enqueueFormErrors.scriptTitle}
                     </p>
                   ) : null}
@@ -944,7 +1019,7 @@ export function ProductionSection({
                     onChange={(e) => setScriptHook(e.target.value)}
                   />
                   {enqueueFormErrors.scriptHook ? (
-                    <p className="field__error" id="script-hook-error">
+                    <p className="field__error" id="script-hook-error" role="alert">
                       {enqueueFormErrors.scriptHook}
                     </p>
                   ) : null}
@@ -969,7 +1044,7 @@ export function ProductionSection({
                     onChange={(e) => setScriptSummary(e.target.value)}
                   />
                   {enqueueFormErrors.scriptSummary ? (
-                    <p className="field__error" id="script-summary-error">
+                    <p className="field__error" id="script-summary-error" role="alert">
                       {enqueueFormErrors.scriptSummary}
                     </p>
                   ) : null}
@@ -994,7 +1069,7 @@ export function ProductionSection({
                     onChange={(e) => setScriptAngle(e.target.value)}
                   />
                   {enqueueFormErrors.scriptAngle ? (
-                    <p className="field__error" id="script-angle-error">
+                    <p className="field__error" id="script-angle-error" role="alert">
                       {enqueueFormErrors.scriptAngle}
                     </p>
                   ) : null}
@@ -1019,7 +1094,7 @@ export function ProductionSection({
                     onChange={(e) => setScriptAudience(e.target.value)}
                   />
                   {enqueueFormErrors.scriptAudience ? (
-                    <p className="field__error" id="script-audience-error">
+                    <p className="field__error" id="script-audience-error" role="alert">
                       {enqueueFormErrors.scriptAudience}
                     </p>
                   ) : null}
@@ -1044,7 +1119,7 @@ export function ProductionSection({
                     onChange={(e) => setScriptFormat(e.target.value)}
                   />
                   {enqueueFormErrors.scriptFormat ? (
-                    <p className="field__error" id="script-format-error">
+                    <p className="field__error" id="script-format-error" role="alert">
                       {enqueueFormErrors.scriptFormat}
                     </p>
                   ) : null}
@@ -1095,18 +1170,11 @@ export function ProductionSection({
                     <option value="auto">
                       {t("project.production.provider.auto")}
                     </option>
-                    <option value="ollama">
-                      {t("project.production.provider.ollama")}
-                    </option>
-                    <option value="gemini-text">
-                      {t("project.production.provider.geminiText")}
-                    </option>
-                    <option value="deepseek">
-                      {t("project.production.provider.deepseek")}
-                    </option>
-                    <option value="openai">
-                      {t("project.production.provider.openai")}
-                    </option>
+                    {textGenerationProviders.map((pid) => (
+                      <option key={pid} value={pid}>
+                        {getProviderLabel(pid, t)}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="field">
@@ -1160,6 +1228,33 @@ export function ProductionSection({
                 <div className="field">
                   <label
                     className="field__label"
+                    htmlFor="visuals-production-recipe"
+                  >
+                    {t("project.production.field.productionRecipe")}
+                  </label>
+                  <select
+                    id="visuals-production-recipe"
+                    className="select"
+                    value={visualsRecipe}
+                    onChange={(e) => setVisualsRecipe(e.target.value)}
+                  >
+                    <option value="auto">
+                      {t("project.production.recipe.auto")}
+                    </option>
+                    <option value="tech-explainer:1">
+                      {t("project.production.recipe.techExplainerV1")}
+                    </option>
+                    <option value="motion-comic:1">
+                      {t("project.production.recipe.motionComicV1")}
+                    </option>
+                    <option value="motion-comic:2">
+                      {t("project.production.recipe.motionComicV2")}
+                    </option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label
+                    className="field__label"
                     htmlFor="visuals-image-provider"
                   >
                     {t("project.production.field.preferredImageProvider")}
@@ -1179,12 +1274,11 @@ export function ProductionSection({
                     <option value="auto">
                       {t("project.production.provider.auto")}
                     </option>
-                    <option value="comfyui-flux">
-                      {t("project.production.provider.comfyuiFlux")}
-                    </option>
-                    <option value="gemini-nanobanana">
-                      {t("project.production.provider.geminiNanobanana")}
-                    </option>
+                    {visualImageProviders.map((pid) => (
+                      <option key={pid} value={pid}>
+                        {getProviderLabel(pid, t)}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="field">
@@ -1209,12 +1303,11 @@ export function ProductionSection({
                     <option value="auto">
                       {t("project.production.provider.auto")}
                     </option>
-                    <option value="comfyui-i2v">
-                      {t("project.production.provider.comfyuiI2v")}
-                    </option>
-                    <option value="gemini-veo">
-                      {t("project.production.provider.geminiVeo")}
-                    </option>
+                    {visualVideoProviders.map((pid) => (
+                      <option key={pid} value={pid}>
+                        {getProviderLabel(pid, t)}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="field">
@@ -1244,7 +1337,7 @@ export function ProductionSection({
                     }
                   />
                   {enqueueFormErrors.visualsStoryboardJobId ? (
-                    <p className="field__error" id="visuals-job-id-error">
+                    <p className="field__error" id="visuals-job-id-error" role="alert">
                       {enqueueFormErrors.visualsStoryboardJobId}
                     </p>
                   ) : null}
@@ -1313,12 +1406,11 @@ export function ProductionSection({
                     <option value="auto">
                       {t("project.production.provider.auto")}
                     </option>
-                    <option value="voxcpm2">
-                      {t("project.production.provider.voxcpm2")}
-                    </option>
-                    <option value="gemini-tts">
-                      {t("project.production.provider.geminiTts")}
-                    </option>
+                    {audioSpeechProviders.map((pid) => (
+                      <option key={pid} value={pid}>
+                        {getProviderLabel(pid, t)}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="field">
@@ -1371,7 +1463,7 @@ export function ProductionSection({
                     onChange={(e) => setAudioStoryboardJobId(e.target.value)}
                   />
                   {enqueueFormErrors.audioStoryboardJobId ? (
-                    <p className="field__error" id="audio-job-id-error">
+                    <p className="field__error" id="audio-job-id-error" role="alert">
                       {enqueueFormErrors.audioStoryboardJobId}
                     </p>
                   ) : null}
@@ -1409,7 +1501,7 @@ export function ProductionSection({
                     }
                   />
                   {enqueueFormErrors.renderStoryboardJobId ? (
-                    <p className="field__error" id="render-job-id-error">
+                    <p className="field__error" id="render-job-id-error" role="alert">
                       {enqueueFormErrors.renderStoryboardJobId}
                     </p>
                   ) : null}
@@ -1457,7 +1549,7 @@ export function ProductionSection({
                   onChange={(e) => setQaRenderJobId(e.target.value)}
                 />
                 {enqueueFormErrors.qaRenderJobId ? (
-                  <p className="field__error" id="qa-job-id-error">
+                  <p className="field__error" id="qa-job-id-error" role="alert">
                     {enqueueFormErrors.qaRenderJobId}
                   </p>
                 ) : null}

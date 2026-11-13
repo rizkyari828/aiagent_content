@@ -38,7 +38,7 @@ public sealed class SeedProductionRecipesTests
     [Fact]
     public void MotionComicDeclaresItsCapabilitiesAsData()
     {
-        var recipe = SeedProductionRecipes.All.Single(r => r.Id.Value == "motion-comic");
+        var recipe = SeedProductionRecipes.All.Single(r => r.Id.Value == "motion-comic" && r.Version.Value == 1);
 
         var image = recipe.Requirements
             .Single(requirement => requirement.Capability.CapabilityId.Equals(CapabilityIds.VisualAiImage));
@@ -48,11 +48,22 @@ public sealed class SeedProductionRecipesTests
     }
 
     [Fact]
+    public void MotionComicV2DeclaresCharacterAnimationWithFallbackToAiImage()
+    {
+        var recipe = SeedProductionRecipes.All.Single(r => r.Id.Value == "motion-comic" && r.Version.Value == 2);
+
+        var visual = recipe.Requirements
+            .Single(requirement => requirement.Capability.CapabilityId.Equals(CapabilityIds.VisualCharacterAnimation));
+
+        Assert.Equal([CapabilityIds.VisualAiImage], visual.Capability.FallbackCapabilityIds);
+        Assert.True(visual.IsRequired);
+    }
+
+    [Fact]
     public void SeedCatalogStaysSmallAndDataDriven()
     {
-        // Two seed recipes are enough to prove the architecture; more formats are
-        // expected as data later, not as new C# types here.
-        Assert.Equal(2, SeedProductionRecipes.All.Count);
+        // Seed recipes prove the architecture; more formats are expected as data later.
+        Assert.Equal(3, SeedProductionRecipes.All.Count);
         Assert.All(SeedProductionRecipes.All, recipe =>
         {
             Assert.True(ProductionRecipeId.IsValid(recipe.Id.Value));

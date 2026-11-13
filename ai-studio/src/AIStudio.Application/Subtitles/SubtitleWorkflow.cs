@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using AIStudio.Application.Assets;
 using AIStudio.Application.Content;
 using AIStudio.Application.Jobs;
@@ -103,6 +105,166 @@ public sealed class SubtitleWorkflow(
             contentProjectId,
             cancellationToken);
         return track is null ? null : ToSnapshot(track);
+    }
+
+    public async Task<string?> GetContentAsync(
+        Guid contentProjectId,
+        CancellationToken cancellationToken)
+    {
+        RequireIdentifier(contentProjectId, nameof(contentProjectId));
+
+        var project = await contentProjects.FindByIdAsync(contentProjectId, cancellationToken);
+        if (project is null)
+        {
+            return null;
+        }
+
+        var track = await subtitles.FindByProjectIdAsync(contentProjectId, cancellationToken);
+        if (track is null)
+        {
+            throw Error(
+                "subtitle_not_found",
+                $"Content project '{contentProjectId}' does not have a subtitle track.");
+        }
+
+        AssetFileInfo file;
+        try
+        {
+            file = fileStore.Register(track.Path);
+        }
+        catch (AssetCollectionException exception)
+        {
+            throw Error(exception.ErrorCode, exception.Message, exception);
+        }
+
+        try
+        {
+            return await File.ReadAllTextAsync(file.AbsolutePath, cancellationToken);
+        }
+        catch (Exception exception)
+            when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw Error(
+                "asset_file_unreadable",
+                "The subtitle file could not be read.",
+                exception);
+        }
+    }
+
+    public async Task<SubtitleSnapshot?> UpdateContentAsync(
+        Guid contentProjectId,
+        string srtContent,
+        CancellationToken cancellationToken)
+    {
+        RequireIdentifier(contentProjectId, nameof(contentProjectId));
+        ValidateSrtContent(srtContent);
+
+        var project = await contentProjects.FindByIdAsync(contentProjectId, cancellationToken);
+        if (project is null)
+        {
+            return null;
+        }
+
+        var track = await subtitles.FindByProjectIdAsync(contentProjectId, cancellationToken);
+        if (track is null)
+        {
+            throw Error(
+                "subtitle_not_found",
+                $"Content project '{contentProjectId}' does not have a subtitle track.");
+        }
+
+        var bytes = Encoding.UTF8.GetBytes(srtContent);
+        AssetFileInfo file;
+        try
+        {
+            file = await fileStore.WriteAsync(track.Path, bytes, cancellationToken);
+        }
+        catch (AssetCollectionException exception)
+        {
+            throw Error(exception.ErrorCode, exception.Message, exception);
+        }
+
+        track.UpdateContentMetadata(file.ByteSize, file.ContentHash, timeProvider.GetUtcNow());
+        await subtitles.UpdateAsync(track, cancellationToken);
+        await subtitles.SaveChangesAsync(cancellationToken);
+        return ToSnapshot(track);
+    }
+
+    public static void ValidateSrtContent(string srtContent)
+    {
+        if (string.IsNullOrWhiteSpace(srtContent))
+        {
+            throw Error(
+                "subtitle_content_invalid",
+                "Subtitle content cannot be empty.");
+        }
+
+        var blocks = new List<List<string>>();
+        var currentBlock = new List<string>();
+
+        foreach (var raw in srtContent
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Split('\n'))
+        {
+            var trimmed = raw.Trim();
+            if (trimmed.Length == 0)
+            {
+                if (currentBlock.Count > 0)
+                {
+                    blocks.Add(currentBlock);
+                    currentBlock = [];
+                }
+                continue;
+            }
+
+            currentBlock.Add(trimmed);
+        }
+
+        if (currentBlock.Count > 0)
+        {
+            blocks.Add(currentBlock);
+        }
+
+        if (blocks.Count == 0)
+        {
+            throw Error(
+                "subtitle_content_invalid",
+                "Subtitle content does not contain any subtitle cues.");
+        }
+
+        for (var i = 0; i < blocks.Count; i++)
+        {
+            var block = blocks[i];
+            if (block.Count < 3)
+            {
+                throw Error(
+                    "subtitle_content_invalid",
+                    $"Subtitle cue {i + 1} must contain an index, a timecode, and text.");
+            }
+
+            if (!int.TryParse(block[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+            {
+                throw Error(
+                    "subtitle_content_invalid",
+                    $"Subtitle cue {i + 1} has an invalid sequence number: '{block[0]}'.");
+            }
+
+            var timecode = block[1];
+            if (!timecode.Contains("-->", StringComparison.Ordinal))
+            {
+                throw Error(
+                    "subtitle_content_invalid",
+                    $"Subtitle cue {i + 1} has an invalid timecode format: '{timecode}'.");
+            }
+
+            var parts = timecode.Split(["-->"], StringSplitOptions.TrimEntries);
+            if (parts.Length != 2 || string.IsNullOrWhiteSpace(parts[0]) || string.IsNullOrWhiteSpace(parts[1]))
+            {
+                throw Error(
+                    "subtitle_content_invalid",
+                    $"Subtitle cue {i + 1} has an invalid timecode format: '{timecode}'.");
+            }
+        }
     }
 
     private async Task RequireStoryboardAsync(

@@ -499,14 +499,9 @@ public static class DependencyInjection
                 client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
             });
 
+        services.AddTransient<RoutingImageGenerationProvider>();
         services.AddTransient<IImageGenerationProvider>(serviceProvider =>
-        {
-            var comfy = serviceProvider.GetRequiredService<IOptions<ComfyUiOptions>>().Value;
-            var gemini = serviceProvider.GetRequiredService<IOptions<GeminiImageOptions>>().Value;
-            return !comfy.Enabled && gemini.Enabled && !string.IsNullOrWhiteSpace(gemini.ApiKey)
-                ? serviceProvider.GetRequiredService<GeminiImageGenerationProvider>()
-                : serviceProvider.GetRequiredService<ComfyUiImageGenerationProvider>();
-        });
+            serviceProvider.GetRequiredService<RoutingImageGenerationProvider>());
 
         services
             .AddOptions<ComfyUiVideoOptions>()
@@ -595,14 +590,9 @@ public static class DependencyInjection
                 client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
             });
 
+        services.AddTransient<RoutingVideoGenerationProvider>();
         services.AddTransient<IVideoGenerationProvider>(serviceProvider =>
-        {
-            var comfy = serviceProvider.GetRequiredService<IOptions<ComfyUiVideoOptions>>().Value;
-            var gemini = serviceProvider.GetRequiredService<IOptions<GeminiVideoOptions>>().Value;
-            return !comfy.Enabled && gemini.Enabled && !string.IsNullOrWhiteSpace(gemini.ApiKey)
-                ? serviceProvider.GetRequiredService<GeminiVideoGenerationProvider>()
-                : serviceProvider.GetRequiredService<ComfyUiVideoGenerationProvider>();
-        });
+            serviceProvider.GetRequiredService<RoutingVideoGenerationProvider>());
     }
 
     private static void AddAudioGeneration(
@@ -687,14 +677,9 @@ public static class DependencyInjection
                     UriKind.Absolute);
                 client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
             });
+        services.AddTransient<RoutingSpeechSynthesisProvider>();
         services.AddTransient<ISpeechSynthesisProvider>(serviceProvider =>
-        {
-            var localSpeech = serviceProvider.GetRequiredService<IOptions<SpeechSynthesisOptions>>().Value;
-            var geminiSpeech = serviceProvider.GetRequiredService<IOptions<GeminiSpeechOptions>>().Value;
-            return !localSpeech.Enabled && geminiSpeech.Enabled && !string.IsNullOrWhiteSpace(geminiSpeech.ApiKey)
-                ? serviceProvider.GetRequiredService<GeminiSpeechSynthesisProvider>()
-                : serviceProvider.GetRequiredService<VoxCpmSpeechSynthesisProvider>();
-        });
+            serviceProvider.GetRequiredService<RoutingSpeechSynthesisProvider>());
         services.AddSingleton<IMusicGenerationProvider, AceStepMusicGenerationProvider>();
     }
 

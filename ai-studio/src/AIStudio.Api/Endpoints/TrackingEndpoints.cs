@@ -453,13 +453,44 @@ public sealed record CostEntryResponse(
             entry.CreatedAt);
 }
 
+public sealed record PublicationRollupResponse(
+    Guid? PublicationRecordId,
+    MetricSnapshotResponse? LatestMetricSnapshot,
+    int SnapshotCount)
+{
+    public static PublicationRollupResponse From(PublicationTrackingRollup rollup) =>
+        new(
+            rollup.PublicationRecordId,
+            rollup.LatestMetricSnapshot is null
+                ? null
+                : MetricSnapshotResponse.From(rollup.LatestMetricSnapshot),
+            rollup.SnapshotCount);
+}
+
 public sealed record TrackingSummaryResponse(
     Guid ContentProjectId,
     MetricSnapshotResponse? LatestMetricSnapshot,
     decimal HumanMinutesTotal,
     decimal MachineMinutesTotal,
-    CostTotalsResponse[] Costs)
+    CostTotalsResponse[] Costs,
+    PublicationRollupResponse[] PublicationRollups)
 {
+    public TrackingSummaryResponse(
+        Guid contentProjectId,
+        MetricSnapshotResponse? latestMetricSnapshot,
+        decimal humanMinutesTotal,
+        decimal machineMinutesTotal,
+        CostTotalsResponse[] costs)
+        : this(
+            contentProjectId,
+            latestMetricSnapshot,
+            humanMinutesTotal,
+            machineMinutesTotal,
+            costs,
+            Array.Empty<PublicationRollupResponse>())
+    {
+    }
+
     public static TrackingSummaryResponse From(TrackingSummary summary) =>
         new(
             summary.ContentProjectId,
@@ -468,7 +499,8 @@ public sealed record TrackingSummaryResponse(
                 : MetricSnapshotResponse.From(summary.LatestMetricSnapshot),
             summary.HumanMinutesTotal,
             summary.MachineMinutesTotal,
-            summary.Costs.Select(CostTotalsResponse.From).ToArray());
+            summary.Costs.Select(CostTotalsResponse.From).ToArray(),
+            summary.PublicationRollups.Select(PublicationRollupResponse.From).ToArray());
 }
 
 public sealed record CostTotalsResponse(

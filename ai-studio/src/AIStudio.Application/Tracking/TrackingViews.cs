@@ -119,6 +119,18 @@ public sealed record CostTotals(
     bool RefundExceedsActual);
 
 /// <summary>
+/// Per-publication rollup of metric observations. For each publication record (or null
+/// for unbound observations), the latest snapshot and total count are preserved.
+/// </summary>
+public sealed record PublicationTrackingRollup(
+    Guid? PublicationRecordId,
+    MetricSnapshotView? LatestMetricSnapshot,
+    int SnapshotCount)
+{
+    public bool IsBound => PublicationRecordId.HasValue;
+}
+
+/// <summary>
 /// Project tracking summary. The metric part is the LATEST snapshot — never a sum of
 /// snapshots — and human/machine minutes stay separate.
 /// </summary>
@@ -127,4 +139,22 @@ public sealed record TrackingSummary(
     MetricSnapshotView? LatestMetricSnapshot,
     decimal HumanMinutesTotal,
     decimal MachineMinutesTotal,
-    IReadOnlyList<CostTotals> Costs);
+    IReadOnlyList<CostTotals> Costs,
+    IReadOnlyList<PublicationTrackingRollup> PublicationRollups)
+{
+    public TrackingSummary(
+        Guid contentProjectId,
+        MetricSnapshotView? latestMetricSnapshot,
+        decimal humanMinutesTotal,
+        decimal machineMinutesTotal,
+        IReadOnlyList<CostTotals> costs)
+        : this(
+            contentProjectId,
+            latestMetricSnapshot,
+            humanMinutesTotal,
+            machineMinutesTotal,
+            costs,
+            Array.Empty<PublicationTrackingRollup>())
+    {
+    }
+}

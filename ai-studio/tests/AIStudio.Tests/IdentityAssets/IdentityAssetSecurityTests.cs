@@ -68,7 +68,7 @@ public sealed class IdentityAssetSecurityTests
     public void ProviderRequestContractsExposeOnlyPinnedIdentity()
     {
         Assert.Equal(
-            ["Prompt", "Seed", "IdentityReferences"],
+            ["Prompt", "Seed", "IdentityReferences", "Provider"],
             typeof(ImageGenerationRequest).GetProperties().Select(property => property.Name));
         Assert.Equal(
             ["AssetId", "Version"],

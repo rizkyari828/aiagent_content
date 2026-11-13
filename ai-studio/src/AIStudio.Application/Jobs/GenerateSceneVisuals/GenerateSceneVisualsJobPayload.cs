@@ -41,10 +41,28 @@ public sealed record GenerateSceneVisualsJobPayload(
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ArtDirection { get; init; }
 
+    /// <summary>
+    /// Optional caller-supplied image generation provider (e.g. "comfyui-flux", "gemini-nanobanana").
+    /// Omitted entirely when not supplied, preserving existing default fallback.
+    /// </summary>
+    [JsonPropertyName("imageProvider")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ImageProvider { get; init; }
+
+    /// <summary>
+    /// Optional caller-supplied video generation provider (e.g. "comfyui-i2v", "gemini-veo").
+    /// Omitted entirely when not supplied, preserving existing default fallback.
+    /// </summary>
+    [JsonPropertyName("videoProvider")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? VideoProvider { get; init; }
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
     };
+
+    public string Serialize() => JsonSerializer.Serialize(this, JsonOptions);
 
     public static GenerateSceneVisualsJobPayload Deserialize(string json)
     {

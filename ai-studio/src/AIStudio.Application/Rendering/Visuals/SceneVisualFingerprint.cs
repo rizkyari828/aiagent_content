@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using AIStudio.Application.IdentityAssets;
 
 namespace AIStudio.Application.Rendering.Visuals;
 
@@ -15,6 +16,25 @@ public static class SceneVisualFingerprint
 {
     public static string Creator(SceneVisualPlan plan) =>
         $"{plan.Engine}+{Compute(plan)[..12]}";
+
+    /// <summary>
+    /// Creator fingerprint for image-to-video character animation clips, incorporating
+    /// the engine, animation prompt, stable scene seed, and first-frame identity pin.
+    /// </summary>
+    public static string CharacterAnimationCreator(
+        string prompt,
+        long seed,
+        PinnedIdentityAsset? firstFrame)
+    {
+        var identity = firstFrame is not null
+            ? $"{firstFrame.AssetId.Value}:{firstFrame.Version.Value}"
+            : "none";
+        var raw = $"{SceneVisualEngine.CharacterAnimation}|{prompt}|{seed}|{identity}";
+        var hash = Convert
+            .ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(raw)))
+            .ToLowerInvariant();
+        return $"{SceneVisualEngine.CharacterAnimation}+{hash[..12]}";
+    }
 
     public static string EngineFromCreator(string? creator) =>
         string.IsNullOrWhiteSpace(creator)

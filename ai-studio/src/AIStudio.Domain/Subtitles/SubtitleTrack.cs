@@ -151,6 +151,20 @@ public sealed class SubtitleTrack
             createdAt);
     }
 
+    public void UpdateContentMetadata(long byteSize, string contentHash) =>
+        UpdateContentMetadata(byteSize, contentHash, DateTimeOffset.UtcNow);
+
+    public void UpdateContentMetadata(long byteSize, string contentHash, DateTimeOffset updatedAt)
+    {
+        if (byteSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(byteSize), "Byte size must be greater than zero.");
+        }
+
+        ByteSize = byteSize;
+        ContentHash = RequireHash(contentHash);
+    }
+
     private static string RequireHash(string value)
     {
         if (string.IsNullOrWhiteSpace(value)

@@ -31,9 +31,12 @@ public sealed class TrackingSummaryWorkflow(
             return null;
         }
 
-        var latestSnapshot = await tracking.FindLatestSnapshotAsync(
+        var snapshots = await tracking.ListAllSnapshotsAsync(
             contentProjectId,
             cancellationToken);
+        var latestSnapshot = snapshots.Count > 0
+            ? snapshots.OrderByDescending(s => s.CapturedAt).ThenBy(s => s.Id).First()
+            : await tracking.FindLatestSnapshotAsync(contentProjectId, cancellationToken);
         var timeTotals = await tracking.GetTimeTotalsAsync(
             contentProjectId,
             cancellationToken);
@@ -46,7 +49,37 @@ public sealed class TrackingSummaryWorkflow(
             latestSnapshot is null ? null : MetricSnapshotView.From(latestSnapshot),
             timeTotals.HumanMinutes,
             timeTotals.MachineMinutes,
-            Summarize(costTotals));
+            Summarize(costTotals),
+            RollupByPublication(snapshots));
+    }
+
+    /// <summary>
+    /// Groups metric snapshots by PublicationRecordId (including null for unbound observations)
+    /// and extracts the latest cumulative observation and snapshot count per group.
+    /// Bound publications are sorted deterministically before unbound observations.
+    /// </summary>
+    public static IReadOnlyList<PublicationTrackingRollup> RollupByPublication(
+        IEnumerable<MetricSnapshot> snapshots)
+    {
+        ArgumentNullException.ThrowIfNull(snapshots);
+
+        return snapshots
+            .GroupBy(snapshot => snapshot.PublicationRecordId)
+            .Select(group =>
+            {
+                var latest = group
+                    .OrderByDescending(s => s.CapturedAt)
+                    .ThenBy(s => s.Id)
+                    .First();
+
+                return new PublicationTrackingRollup(
+                    group.Key,
+                    MetricSnapshotView.From(latest),
+                    group.Count());
+            })
+            .OrderBy(rollup => rollup.PublicationRecordId.HasValue ? 0 : 1)
+            .ThenBy(rollup => rollup.PublicationRecordId)
+            .ToArray();
     }
 
     /// <summary>

@@ -102,10 +102,7 @@ Each item states owner, deliverable, and how to verify it. Do not check an item 
 - [ ] **P1.6 Workflow template.** Repository-owned JSON under `Rendering/ComfyUI/` for the selected
       engine — only when node names can be verified from local/ComfyUI documentation. Otherwise a
       skeleton plus an explicit `TODO(verify on home)`; never invented nodes or model paths.
-- [ ] **P1.7 Benchmark spec.** One scene (shadow raising a hand, golden light growing), 3–5 s,
-      fixed seed. Compare LTX-Video 0.9.x 2B vs Wan2.2 TI2V-5B on: face/hand morph, prompt
-      adherence, temporal stability, peak VRAM, wall time. Artifacts:
-      `.demo/artifacts/i2v-bench-<UTC>/`.
+- [x] **P1.7 Benchmark spec.** Defined in [I2V_BENCHMARK_SPEC.md](I2V_BENCHMARK_SPEC.md): one scene (shadow raising a hand, golden light growing), 3–5 s, fixed seed (42), comparing LTX-Video 0.9.x 2B vs Wan2.2 TI2V-5B on face/hand morph, prompt adherence, temporal stability, peak VRAM (16 GB RTX 4060 Ti budget), wall-clock latency, and `IMediaInspector` probe pass, outputting to `.demo/artifacts/i2v-bench-<UTC>/`.
 
 ### P2 — benchmark (Home)
 
@@ -124,13 +121,13 @@ Each item states owner, deliverable, and how to verify it. Do not check an item 
 - [x] **P3.2** `IGpuResourceGate` held across submit → poll → download; released before CPU work.
       Verified in code on the office Mac 2026-11-03: the lease closes before persist and the
       `IMediaInspector` probe, asserted by fake-probe and recording-gate tests.
-- [ ] **P3.3** Durable wiring: hero scenes become video clips, others keep Ken Burns; `SceneAsset.Type=Video`;
-      `Creator` fingerprint includes engine + prompt + seed + first-frame identity.
-- [ ] **P3.4** Render fit: clip trimmed/looped to the `SceneTiming` scene duration; audio, subtitles,
-      transitions unchanged.
-- [ ] **P3.5** Failure policy: disabled/timeout/OOM ⇒ Ken Burns fallback, stable codes, render not failed.
-- [ ] **P3.6** Recipe: `motion-comic` v2 (or a new recipe) with `visual.character_animation` and
-      fallback to `visual.ai_image`; v1 stays immutable.
+- [x] **P3.3** Durable wiring: hero scenes become video clips, others keep Ken Burns; `SceneAsset.Type=Video`;
+      `Creator` fingerprint includes engine + prompt + seed + first-frame identity. (office code-only 2026-11-13; verified via FakeVideoGenerationProvider + FfmpegCommandPlan tests; real GPU/ComfyUI/Veo E2E pending on Home)
+- [x] **P3.4** Render fit: clip trimmed/looped to the `SceneTiming` scene duration; audio, subtitles,
+      transitions unchanged. (office code-only 2026-11-13; verified via FakeVideoGenerationProvider + FfmpegCommandPlan tests; real GPU/ComfyUI/Veo E2E pending on Home)
+- [x] **P3.5** Failure policy: disabled/timeout/OOM ⇒ Ken Burns fallback, stable codes, render not failed. (office code-only 2026-11-13; verified via FakeVideoGenerationProvider + FfmpegCommandPlan tests; real GPU/ComfyUI/Veo E2E pending on Home)
+- [x] **P3.6** Recipe: `motion-comic` v2 (or a new recipe) with `visual.character_animation` and
+      fallback to `visual.ai_image`; v1 stays immutable. (office code-only 2026-11-13; verified via FakeVideoGenerationProvider + FfmpegCommandPlan tests; real GPU/ComfyUI/Veo E2E pending on Home)
 
 ### P4 — validation and delivery (Home)
 

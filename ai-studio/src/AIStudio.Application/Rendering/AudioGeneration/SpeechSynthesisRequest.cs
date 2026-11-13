@@ -10,4 +10,5 @@ public sealed record SpeechSynthesisRequest(
     string Text,
     SpeechVoiceProfile Voice,
     string RelativeOutputPath,
-    string? Locale = null);
+    string? Locale = null,
+    string? Provider = null);

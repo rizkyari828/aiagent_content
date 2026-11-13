@@ -13,7 +13,8 @@ public sealed record ImageGenerationRequest
     public ImageGenerationRequest(
         string prompt,
         long seed,
-        IEnumerable<PinnedIdentityAsset>? identityReferences = null)
+        IEnumerable<PinnedIdentityAsset>? identityReferences = null,
+        string? provider = null)
     {
         var references = (identityReferences ?? []).ToArray();
         if (references.Length > 1)
@@ -32,6 +33,7 @@ public sealed record ImageGenerationRequest
         Prompt = prompt;
         Seed = seed;
         IdentityReferences = new ReadOnlyCollection<PinnedIdentityAsset>(references);
+        Provider = provider;
     }
 
     public string Prompt { get; }
@@ -39,4 +41,6 @@ public sealed record ImageGenerationRequest
     public long Seed { get; }
 
     public IReadOnlyList<PinnedIdentityAsset> IdentityReferences { get; }
+
+    public string? Provider { get; }
 }

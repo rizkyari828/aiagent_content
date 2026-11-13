@@ -1,8 +1,17 @@
 # Work state
 
-Updated: 2026-11-12.
+Updated: 2026-11-13.
 
 ## Current milestone
+
+PASS (office code-only, 2026-11-13) - Dynamic Media Provider Routing, I2V P3.3–P3.6 Pipeline Wiring, P1 Code-Only Gaps, UI Testing/A11y/Responsive:
+- `dotnet build AIStudio.slnx -c Release` -> 0 warnings / 0 errors; `dotnet test AIStudio.slnx -c Release --no-build --filter "FullyQualifiedName!~Persistence"` -> **1845 total (1844 passed, 0 failed, 1 skipped real-audio E2E)**; `dotnet format AIStudio.slnx --no-restore --verify-no-changes` -> clean; `git diff --check` -> clean. Note: PostgreSQL `Persistence` tests and real GPU/ComfyUI/Veo/Ollama runs remain unexecuted on this MacBook (`office code-only`) and await Home WSL2 + RTX 4060 Ti verification.
+- Frontend (`AIStudio.Web`): `npx tsc --noEmit` -> exit 0; `npx vite build` -> exit 0 (53 modules, `dist/assets/index-vFsiI-Md.js` 491.00 kB / gzip 121.06 kB, `dist/assets/index-BspOqGSq.css` 26.40 kB / gzip 5.40 kB); `npm test` (`node --test tests/*.test.mjs`) -> **16/16 pass**; 0 hardcoded UI strings.
+- Completed Tracks:
+  1. Dynamic Media Provider Routing (`RoutingImageGenerationProvider`, `RoutingVideoGenerationProvider`, `RoutingSpeechSynthesisProvider`).
+  2. I2V Pipeline Wiring (`P3.3`–`P3.6`).
+  3. UI Provider Selectors, Component Tests, A11y (`role="alert"`, `:focus-visible`), and Responsive layouts (`~1024/768/375` + `.table-wrap` horizontal scroll).
+  4. P1 Code-Only Gaps (AC-04 editable subtitles `GET`/`PUT .../subtitle/content`, AC-09 `PublicationRollups` in `TrackingSummary`) plus P1/Runbook docs sync.
 
 PASS (home real, 2026-11-12) - Dynamic AI Text Generation Routing & OpenAI-Compatible Cloud Adapters (DeepSeek & OpenAI/ChatGPT) + UI Integration:
 - `dotnet build AIStudio.slnx -c Release` -> 0 warnings / 0 errors; `dotnet format AIStudio.slnx --verify-no-changes` -> clean; `git diff --check` -> clean.

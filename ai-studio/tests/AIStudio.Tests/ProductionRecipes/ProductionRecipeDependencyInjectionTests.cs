@@ -18,7 +18,7 @@ public sealed class ProductionRecipeDependencyInjectionTests
 
         Assert.IsType<ProductionRecipeRegistry>(first);
         Assert.Same(first, second);
-        Assert.Equal(2, first.Recipes.Count);
+        Assert.Equal(3, first.Recipes.Count);
     }
 
     [Fact]
