@@ -57,24 +57,24 @@ git log -n 3 --oneline
 
 Pastikan PostgreSQL WSL aktif (`pg_isready -h 127.0.0.1 -p 5432`) dan jalankan dari `ai-studio/`:
 
-- [ ] **1.1 Build Release & Apply Migrasi (jika ada migrasi baru dari branch `Research`):**
+- [x] **1.1 Build Release & Apply Migrasi (jika ada migrasi baru dari branch `Research`):**
   ```bash
   cd ai-studio
   dotnet build AIStudio.slnx -c Release
   # Jika branch Research menambah migrasi EF:
   dotnet ef database update --project src/AIStudio.Infrastructure --startup-project src/AIStudio.Api
   ```
-- [ ] **1.2 Full Test Suite WITH PostgreSQL (`Persistence` + Non-Persistence):**
+- [x] **1.2 Full Test Suite WITH PostgreSQL (`Persistence` + Non-Persistence):**
   ```bash
   ConnectionStrings__DefaultConnection="Host=127.0.0.1;Port=5432;Database=aistudio;Username=postgres;Password=<PASSWORD>" \
     dotnet test AIStudio.slnx -c Release --no-build
   ```
-- [ ] **1.3 Format & Diff Hygiene:**
+- [x] **1.3 Format & Diff Hygiene:**
   ```bash
   dotnet format AIStudio.slnx --no-restore --verify-no-changes
   git diff --check
   ```
-- [ ] **1.4 Frontend Rebuild (Wajib `npm ci` di WSL untuk native `@rolldown/binding` Linux):**
+- [x] **1.4 Frontend Rebuild (Wajib `npm ci` di WSL untuk native `@rolldown/binding` Linux):**
   ```bash
   cd src/AIStudio.Web
   npm ci
@@ -82,7 +82,7 @@ Pastikan PostgreSQL WSL aktif (`pg_isready -h 127.0.0.1 -p 5432`) dan jalankan d
   npx vite build
   npm test
   ```
-- [ ] **1.5 Live API + Vite Smoke (`127.0.0.1:5173 -> 127.0.0.1:5002`):**
+- [x] **1.5 Live API + Vite Smoke (`127.0.0.1:5173 -> 127.0.0.1:5002`):**
   - Terminal 1: `cd ai-studio && dotnet run --project src/AIStudio.Api`
   - Terminal 2: `cd ai-studio/src/AIStudio.Web && npm run dev`
   - Cek `/health/ready`, halaman Projects, Project Detail, dan Settings capabilities.
@@ -95,7 +95,7 @@ Fitur-fitur berikut sudah **selesai dan teruji deterministik di Mac** (`code-onl
 
 - [ ] **2.1 Dynamic Media Routing (`RoutingImageGenerationProvider`, `RoutingVideoGenerationProvider`, `RoutingSpeechSynthesisProvider`):**
   - Uji selector UI di `ProductionSection.tsx` dengan `comfyui-flux` vs `gemini-nanobanana`, `voxcpm2` vs `gemini-tts`.
-- [ ] **2.2 Real Video Preview Player (`AC-05`):**
+- [x] **2.2 Real Video Preview Player (`AC-05`):**
   - Jalankan `RenderVideo` pada 1 proyek nyata -> buka tab **Publish** di `AIStudio.Web` -> pastikan `<video controls>` streaming HTTP 200/206 dari `GET /api/content-projects/{id}/render-jobs/{jobId}/preview` berfungsi mulus (seek/scrub lancar).
 - [ ] **2.3 Faster-Whisper Transcription Adapter (`PRD §35`):**
   - Pastikan environment Python memiliki `faster-whisper` (`pip install faster-whisper`).
