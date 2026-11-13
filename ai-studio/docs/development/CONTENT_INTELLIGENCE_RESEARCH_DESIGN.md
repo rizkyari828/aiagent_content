@@ -263,3 +263,41 @@ Agar Research & Script Generator makin pintar seiring jumlah video tanpa membang
 2. Push / merge branch `Research` + `Gemini Pro` dari mesin rumah ke `main` lokal dan selesaikan bila ada perbedaan kontrak dengan `IResearchSynthesizer` / `GeminiOptions`.
 3. Jalankan `dotnet test AIStudio.slnx -c Release` penuh dengan PostgreSQL aktif (`ConnectionStrings__DefaultConnection`) untuk memverifikasi seluruh migrasi & persistence suite (termasuk fitur dari Mac: Routing Media, I2V P3.3–P3.6, Render Preview `AC-05`, Faster-Whisper `PRD §35`).
 4. Implementasikan bertahap mengikuti **Section 7 (R1–R4)** serta **Section 8 (Pre-Render Quality & English Visual Prompt)**, lalu lanjut **Section 9 (Outlier Detection, Comment Mining, Cache)** agar Research Server menghasilkan kandidat ide siap produksi dengan biaya token minimal.
+
+---
+
+## 12. Ide Ekstensi High-ROI untuk Memaksimalkan Research Server
+
+Tujuh fitur ringan berikut dapat dipasang bertahap di atas service **Research** tanpa mengubah arsitektur inti (*monolith modular + PostgreSQL*):
+
+1. **Transcript & Pacing Deconstructor (Belajar Ritme Video Nyata):**
+   - Untuk 2–3 video YouTube *outlier* teratas, tarik caption/transkrip publiknya (metadata/subtitles saja tanpa unduh video), lalu minta `ResearchSynthesizer` memetakan **Pacing Blueprint** (*detik 0–5 pola hook, titik transisi/pattern interrupt, bukti/demo, cara CTA*).
+   - Hasil dipakai sebagai referensi struktur ke `GenerateScript`, bukan menyalin kata-kata kompetitor.
+
+2. **Watchlist Channel & Changelog Radar (RSS Gratis, 0 Kuota API):**
+   - Simpan 10–20 sumber resmi & kompetitor niche (YouTube channel Atom RSS, blog rilis teknis/AI, GitHub Releases, Google Alerts RSS).
+   - Collector mengecek RSS berkala/harian (gratis tanpa kuota YouTube API), lalu menyaring 2–3 update teratas yang relevan dengan *Audience + Offer* channel.
+
+3. **Visual Proof Suggester (`Research` → Engine Visual):**
+   - Setiap klaim di `ResearchPackage` mencantumkan rekomendasi jenis bukti visual paling meyakinkan (*tabel angka / perbandingan* → `visual.diagram` Manim; *halaman rujukan resmi* → tangkapan layar/referensi; *narasi suasana* → `visual.ai_image` FLUX/I2V).
+   - Menghindari video AI yang terasa generik karena visual tempelan.
+
+4. **Saturation & Novelty Check (Deteksi Topik Pasaran):**
+   - Bandingkan kandidat ide melawan: (a) riwayat proyek lama di `content_projects`, dan (b) 20 judul video teratas minggu ini.
+   - Beri skor diferensiasi + saran sudut kontras jika terlalu banyak video identik di pasar.
+
+5. **Pre-Production Fact, Freshness & Policy Screener:**
+   - Cek otomatis sebelum masuk `ScriptReview`:
+     - **Freshness Check:** peringatan jika sumber lebih tua dari ambang batas niche.
+     - **Claim Without Source:** tandai kalimat berangka/persentase tanpa `ResearchSource` (`unsupported_claim`).
+     - **Platform Policy Flag:** peringatan dini untuk topik sensitif/klaim berlebihan yang butuh disclaimer.
+
+6. **Multi-Format Atomizer (1 Riset → Banyak Aset):**
+   - Satu `ResearchPackage` langsung menghasilkan: **1 ide Long-Form** + **2–3 ide Short-Form (Shorts/Reels/TikTok)** + **2 konsep A/B Title & Thumbnail** untuk diuji CTR-nya di `Tracking`.
+
+7. **Traffic Magnet vs Offer Bridge Tag (`PRD §29–30`):**
+   - Tandai setiap `IdeaCandidate` apakah fokusnya **Traffic Magnet** (memperbesar jangkauan audiens baru dari tren luas) atau **Trust / Offer Bridge** (tutorial terfokus yang mengarah langsung ke checklist/template/layanan/offer operator).
+
+---
+
+Lihat checklist eksekusi lengkap untuk mesin rumah (WSL2 + RTX 4060 Ti + PostgreSQL) pada `docs/agent/WSL_HOME_TODO.md`.
